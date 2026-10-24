@@ -34,7 +34,7 @@
 	// ---- Autosave ----
 	function autosave() {
 		var snap = snapshot();
-		if (snap === lastSaved || submitting) { return Promise.resolve(); }
+		if (snap === lastSaved || submitting || uploading()) { return Promise.resolve(); }
 		var fd = new FormData();
 		fd.append('post_id', postId);
 		fd.append('post_type', postType);
@@ -59,6 +59,17 @@
 	}
 	setInterval(autosave, 60000);
 
+	// Uploads are attached to the post: a new post is saved as a draft
+	// first.
+	window.gopress = window.gopress || {};
+	window.gopress.currentPost = {
+		ensure: function () {
+			if (postId !== '0') { return Promise.resolve(postId); }
+			lastSaved = null;
+			return autosave().then(function () { return postId; });
+		}
+	};
+
 	// ---- Preview ----
 	var previewBtn = document.getElementById('post-preview');
 	if (previewBtn) {
@@ -77,7 +88,16 @@
 	window.addEventListener('beforeunload', function (ev) {
 		if (!submitting && isDirty()) { ev.preventDefault(); ev.returnValue = ''; }
 	});
-	form.addEventListener('submit', function () {
+	var uploading = function () {
+		var ge = window.gopress && window.gopress.editor;
+		return !!(ge && ge.pendingUploads && ge.pendingUploads() > 0);
+	};
+	form.addEventListener('submit', function (ev) {
+		if (uploading()) {
+			ev.preventDefault();
+			alert('Please wait until the uploads are finished.');
+			return;
+		}
 		submitting = true;
 		var spinner = form.querySelector('#publishing-action .spinner');
 		if (spinner) { spinner.classList.add('is-active'); }

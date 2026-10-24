@@ -1,0 +1,56 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-media" data-accept="{{.Accept}}" data-max="{{.MaxSize}}">
+	<h1 class="wp-heading-inline">Media Library</h1>
+	<button type="button" class="page-title-action" data-upload>Add Media File</button>
+	<hr class="wp-header-end">
+	<p class="gp-media-hint">Drop files anywhere on this page to upload them (up to {{.MaxSize}} each). Location data and other metadata are removed from photos.</p>
+
+	<div class="gp-media-toolbar wp-filter">
+		<div class="gp-media-views" role="group" aria-label="View">
+			<button type="button" class="button gp-view" data-view="grid" aria-pressed="true" title="Grid view"><span class="dashicons dashicons-grid-view" aria-hidden="true"></span><span class="screen-reader-text">Grid view</span></button>
+			<button type="button" class="button gp-view" data-view="list" aria-pressed="false" title="List view"><span class="dashicons dashicons-list-view" aria-hidden="true"></span><span class="screen-reader-text">List view</span></button>
+		</div>
+		<label class="screen-reader-text" for="media-type">Filter by type</label>
+		<select id="media-type" data-filter="type">
+			<option value="">All media items</option><option value="image">Images</option><option value="audio">Audio</option>
+			<option value="video">Video</option><option value="document">Documents &amp; archives</option>
+		</select>
+		<label class="screen-reader-text" for="media-month">Filter by date</label>
+		<select id="media-month" data-filter="m"><option value="">All dates</option>{{range .Months}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+		<label><input type="checkbox" data-filter="unattached" value="1"> Unattached</label>
+		<button type="button" class="button gp-select-mode" data-select-mode aria-pressed="false">Bulk select</button>
+		<button type="button" class="button button-link-delete" data-delete-selected hidden>Delete permanently</button>
+		<div class="gp-media-search"><label class="screen-reader-text" for="media-search">Search media</label><input type="search" id="media-search" placeholder="Search media…" data-filter="s"></div>
+	</div>
+
+	<ul class="gp-upload-queue" aria-live="polite"></ul>
+	<div class="gp-media-grid" role="list"></div>
+	<table class="wp-list-table widefat fixed striped gp-media-list" hidden>
+		<thead><tr><td class="check-column"></td><th scope="col" class="column-title">File</th><th scope="col">Author</th><th scope="col">Uploaded to</th><th scope="col">Date</th></tr></thead>
+		<tbody></tbody>
+	</table>
+	<p class="gp-media-empty" hidden>No media files found.</p>
+	<p class="gp-media-more" aria-hidden="true"><span class="spinner is-active"></span></p>
+	<input type="file" multiple hidden data-file-input accept="{{.Accept}}">
+	<div class="gp-drop-overlay" hidden><p>Drop files to upload</p></div>
+
+	<dialog class="gp-media-details" aria-labelledby="gp-details-title">
+		<form method="dialog" class="gp-details-close"><button class="button-link" aria-label="Close"><span class="dashicons dashicons-no-alt" aria-hidden="true"></span></button></form>
+		<div class="gp-details-body">
+			<div class="gp-details-preview"></div>
+			<div class="gp-details-info">
+				<h2 id="gp-details-title" class="screen-reader-text">Attachment details</h2>
+				<dl class="gp-details-meta"></dl>
+				<label>Alternative text<textarea name="alt" rows="2" data-field="alt"></textarea></label>
+				<p class="description gp-alt-hint">Describe the purpose of the image. Leave empty if it is purely decorative.</p>
+				<label>Title<input type="text" name="title" data-field="title"></label>
+				<label>Caption<textarea name="caption" rows="2" data-field="caption"></textarea></label>
+				<label>Description<textarea name="description" rows="3" data-field="description"></textarea></label>
+				<label>File URL<span class="gp-url-row"><input type="text" readonly data-url data-select-all><button type="button" class="button" data-copy-url>Copy</button></span></label>
+				<p class="gp-details-status" role="status"></p>
+				<p class="gp-details-actions"><a class="button" data-view-file target="_blank" rel="noopener">View file</a> <button type="button" class="button button-link-delete" data-delete>Delete permanently</button></p>
+			</div>
+		</div>
+	</dialog>
+</div>
+{{template "admin-bottom" .}}{{end}}

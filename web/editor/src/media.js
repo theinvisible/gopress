@@ -3,7 +3,32 @@
 // featured image box and plugins (window.gopress.media.pick).
 import { h, icon, escapeAttr, escapeHTML, debounce } from './dom.js';
 
-const SIZE_LABELS = { thumbnail: 'Thumbnail', medium: 'Medium', medium_large: 'Medium Large', large: 'Large', full: 'Full Size' };
+const SIZE_LABELS = { thumbnail: 'Thumbnail', medium: 'Medium', medium_large: 'Medium Large', large: 'Large',
+	'post-thumbnail': 'Post Thumbnail', full: 'Full Size' };
+
+// sizeOptions lists the sizes of an item, smallest first (full last).
+function sizeOptions(it) {
+	return Object.keys(it.sizes).filter((s) => s !== 'full').sort((a, b) => it.sizes[a].width - it.sizes[b].width).concat(['full'])
+		.map((s) => [s, (SIZE_LABELS[s] || s) + ' – ' + it.sizes[s].width + ' × ' + it.sizes[s].height]);
+}
+
+// currentPost returns the id of the edited post, saving a new post as a
+// draft first (uploads are attached to it). 0 if there is none.
+export async function currentPost() {
+	const cp = window.gopress && window.gopress.currentPost;
+	if (!cp) return 0;
+	try { return Number(await cp.ensure()) || 0; } catch (e) { return 0; }
+}
+
+// saveDetails stores changed alt texts and captions of picked items.
+function saveDetails(items) {
+	const csrf = document.body.getAttribute('data-csrf');
+	for (const it of items) {
+		if (!it.can_edit || !it._orig || (it.alt === it._orig.alt && it.caption === it._orig.caption)) continue;
+		const body = new URLSearchParams({ alt: it.alt || '', caption: it.caption || '' });
+		fetch('/admin/api/media/' + it.id, { method: 'POST', body, credentials: 'same-origin', headers: { 'X-CSRF-Token': csrf, Accept: 'application/json' } });
+	}
+}
 
 // pick({multiple, title, button, mode}) resolves with
 // {items: [...], settings: {align, size, link, columns, caption}} or null.
@@ -20,12 +45,17 @@ export function pick({ url, multiple = false, title = 'Add Media', button = 'Ins
 		const more = h('button', { type: 'button', class: 'button gp-media-more', hidden: true, onclick: () => load(page + 1) }, 'Load more');
 		const status = h('p', { class: 'gp-media-status', 'aria-live': 'polite' });
 		const search = h('input', { type: 'search', class: 'gp-media-search', placeholder: 'Search media…', 'aria-label': 'Search media' });
+		const fileInput = h('input', { type: 'file', multiple: true, hidden: true });
+		const uploadBtn = h('button', { type: 'button', class: 'button gp-media-upload' }, icon('upload'), ' Upload files');
+		uploadBtn.addEventListener('click', () => fileInput.click());
+		fileInput.addEventListener('change', () => { uploadFiles(fileInput.files); fileInput.value = ''; });
 		const side = h('aside', { class: 'gp-media-side' });
 		const insertBtn = h('button', { type: 'button', class: 'button button-primary', disabled: true }, button);
 		const dlg = h('dialog', { class: 'gp-dialog gp-media-dialog' },
 			h('div', { class: 'gp-media-frame' },
-				h('header', {}, h('h2', { text: title }), search,
+				h('header', {}, h('h2', { text: title }), uploadBtn, fileInput, search,
 					h('button', { type: 'button', class: 'gp-dialog-close', 'aria-label': 'Close', onclick: () => close(null) }, icon('no-alt'))),
+				h('p', { class: 'gp-media-drop-hint' }, 'Drop files here to upload them.'),
 				h('div', { class: 'gp-media-main' }, h('div', { class: 'gp-media-browser' }, grid, status, more), side),
 				h('footer', {}, h('span', { class: 'gp-media-count' }), insertBtn)));
 
@@ -53,8 +83,38 @@ export function pick({ url, multiple = false, title = 'Add Media', button = 'Ins
 				.catch(() => { status.textContent = 'The media library could not be loaded.'; });
 		}
 
+		// Uploads from the picker: button and drag and drop onto the dialog.
+		async function uploadFiles(files) {
+			const gp = window.gopress;
+			if (!files || !files.length || !gp.uploadQueue) return;
+			const post = await currentPost();
+			let done = 0;
+			const total = files.length;
+			status.textContent = 'Uploading 1 of ' + total + '…';
+			await gp.uploadQueue(files, { post }, {
+				done: (_, it) => {
+					done++;
+					status.textContent = done < total ? 'Uploading ' + (done + 1) + ' of ' + total + '…' : '';
+					if (imagesOnly && !it.mime.startsWith('image/')) return;
+					const li = tile(it);
+					grid.prepend(li);
+					if (multiple || done === 1) li.click();
+				},
+				failed: (_, err) => { done++; status.textContent = err.message; },
+			});
+		}
+		dlg.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); dlg.classList.add('is-dropping'); } });
+		dlg.addEventListener('dragleave', (e) => { if (e.target === dlg) dlg.classList.remove('is-dropping'); });
+		dlg.addEventListener('drop', (e) => {
+			if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+			e.preventDefault();
+			dlg.classList.remove('is-dropping');
+			uploadFiles(e.dataTransfer.files);
+		});
+
 		function tile(it) {
 			const isImage = it.mime.startsWith('image/');
+			if (!it._orig) it._orig = { alt: it.alt || '', caption: it.caption || '' };
 			const li = h('li', { role: 'option', tabindex: '0', 'aria-selected': 'false', 'aria-label': it.title || it.url },
 				isImage ? h('img', { src: it.thumb, alt: '', loading: 'lazy', width: 150, height: 150 })
 					: h('div', { class: 'gp-media-file' }, icon('media-default'), h('span', { text: it.url.split('/').pop() })),
@@ -115,8 +175,7 @@ export function pick({ url, multiple = false, title = 'Add Media', button = 'Ins
 				if (it.mime.startsWith('image/')) {
 					side.append(field('Alignment', sel('align', [['left', 'Left'], ['center', 'Center'], ['right', 'Right'], ['none', 'None']])),
 						field('Link To', sel('link', [['none', 'None'], ['file', 'Media File'], ['post', 'Attachment Page']])),
-						field('Size', sel('size', Object.keys(SIZE_LABELS).filter((s) => it.sizes[s])
-							.map((s) => [s, SIZE_LABELS[s] + ' – ' + it.sizes[s].width + ' × ' + it.sizes[s].height]))));
+						field('Size', sel('size', sizeOptions(it))));
 					if (!it.sizes[settings.size]) settings.size = 'full';
 				}
 			} else {
@@ -134,6 +193,7 @@ export function pick({ url, multiple = false, title = 'Add Media', button = 'Ins
 
 		function finish() {
 			if (!selected.size) return;
+			saveDetails([...selected.values()]);
 			close({ items: [...selected.values()], settings });
 		}
 		insertBtn.addEventListener('click', finish);

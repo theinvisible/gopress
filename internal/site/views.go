@@ -386,6 +386,13 @@ func (rq *request) entry(p *db.Post, terms []db.Term, mode entryMode) *theme.Pos
 		e.CommentsLink = template.HTML(rq.commentsPopupLink(p, url))
 	}
 	rq.env.Post = p
+	// Twenty Twelve shows the featured image unless the post is password
+	// protected (content.php) or the page uses the front page template.
+	if p.FeaturedMediaID != 0 && p.Password == "" && p.Type != db.TypeAttachment && p.Template != "page-templates/front-page.php" {
+		if m, err := db.GetMedia(rq.ctx, rq.site.db.R, p.FeaturedMediaID); err == nil && m != nil {
+			e.Thumbnail = template.HTML(render.PostThumbnail(rq.env, m))
+		}
+	}
 	switch {
 	case p.Password != "":
 		e.Content = template.HTML(rq.passwordForm(p))

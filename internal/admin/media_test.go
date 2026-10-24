@@ -121,3 +121,26 @@ func TestMediaUpload(t *testing.T) {
 		t.Errorf("temp files left: %v", left)
 	}
 }
+
+func TestFeaturedImageOnSite(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	admin := e.session(auth.RoleAdministrator, db.SessionFull)
+	rec := e.upload(admin, "header.png", testPNG(1200, 700), 10, true)
+	var it mediaItem
+	json.Unmarshal(rec.Body.Bytes(), &it)
+	if rec.Code != http.StatusCreated || it.Sizes["post-thumbnail"].Width != 624 {
+		t.Fatalf("upload: %d %+v", rec.Code, it.Sizes)
+	}
+	e.d.W.ExecContext(ctx, `UPDATE posts SET featured_media_id = ? WHERE id = 10`, it.ID)
+	e.pub.Invalidate()
+	body := e.do("GET", "/hello/", nil, nil, nil).Body.String()
+	want := `<img width="624" height="364" src="https://example.org/wp-content/uploads/` + it.Date[:7] + `/header-624x364.png" class="attachment-post-thumbnail size-post-thumbnail wp-post-image" alt="" decoding="async" fetchpriority="high" srcset="`
+	if !strings.Contains(body, want) {
+		i := strings.Index(body, "wp-post-image")
+		t.Errorf("featured image markup missing; around: %q", body[max(0, i-300):min(len(body), i+300)])
+	}
+	if !strings.Contains(body, `sizes="(max-width: 624px) 100vw, 624px"`) || !strings.Contains(body, "has-post-thumbnail") {
+		t.Error("sizes or post class missing")
+	}
+}

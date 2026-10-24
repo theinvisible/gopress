@@ -213,7 +213,7 @@ func (a *Admin) mediaLibrary(w http.ResponseWriter, r *http.Request, c *reqCtx) 
 	ctx := r.Context()
 	d := &mediaLibraryData{basePage: a.base(ctx, c, "Media Library", "media-library"), Accept: media.Accept(),
 		MaxSize: strconv.FormatInt(c.settings.UploadMaxBytes>>20, 10) + " MB"}
-	d.Scripts = []string{"media.js"}
+	d.Scripts = []string{"upload.js", "media.js"}
 	months, err := db.PostMonths(ctx, a.db.R, db.TypeAttachment)
 	if err != nil {
 		return err

@@ -276,3 +276,43 @@ func atoiDefault(s string, def int) int {
 	}
 	return n
 }
+
+// PostThumbnail is the_post_thumbnail( 'post-thumbnail' ): the featured
+// image with WordPress' attribute order and loading optimization (the
+// first large image of a page gets fetchpriority="high", later ones load
+// lazily).
+func PostThumbnail(env *Env, m *db.Media) string {
+	if m == nil || !strings.HasPrefix(m.Mime, "image/") {
+		return ""
+	}
+	const size = "post-thumbnail"
+	file, w, h := attachmentImageSrc(env, m, size)
+	if file == "" {
+		return ""
+	}
+	src := env.uploadURL(file)
+	var b strings.Builder
+	fmt.Fprintf(&b, `<img width="%d" height="%d" src="%s" class="attachment-%s size-%s wp-post-image" alt="%s" decoding="async"`,
+		w, h, html.EscapeString(src), size, size, html.EscapeString(m.Alt))
+	lazy := false
+	if !env.IsFeed {
+		env.contentImages++
+		switch {
+		case env.contentImages > lazyThreshold:
+			b.WriteString(` loading="lazy"`)
+			lazy = true
+		case !env.fetchPriority && w*h >= 50000:
+			b.WriteString(` fetchpriority="high"`)
+			env.fetchPriority = true
+		}
+	}
+	if srcset := calculateSrcset(env, w, h, src, m); srcset != "" {
+		sizes := fmt.Sprintf("(max-width: %dpx) 100vw, %dpx", w, w)
+		if lazy {
+			sizes = "auto, " + sizes
+		}
+		fmt.Fprintf(&b, ` srcset="%s" sizes="%s"`, srcset, sizes)
+	}
+	b.WriteString(" />")
+	return b.String()
+}

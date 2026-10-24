@@ -219,3 +219,11 @@ body.gp-focus-mode .gp-toolbar { top: 0; }
 body.gp-focus-mode { background: #fff; }
 body.gp-focus-mode .gp-editor { border-color: transparent; }
 body.gp-focus-mode .gp-focus-toggle { background: #1d2327; color: #fff; }
+/* Uploads */
+.gp-content img.gp-uploading { opacity: .5; outline: 2px dashed #72aee6; outline-offset: 2px; animation: gp-pulse 1.2s ease-in-out infinite; }
+@keyframes gp-pulse { 50% { opacity: .3; } }
+.gp-media-upload { margin-right: 8px; }
+.gp-media-upload .dashicons { vertical-align: text-bottom; }
+.gp-media-drop-hint { display: none; }
+.gp-media-dialog.is-dropping .gp-media-drop-hint { display: flex; position: absolute; inset: 0; z-index: 10; align-items: center; justify-content: center;
+	background: rgba(34,113,177,.85); color: #fff; font-size: 22px; margin: 0; pointer-events: none; }

@@ -8,7 +8,7 @@ import Suggestion from '@tiptap/suggestion';
 import { extensions } from './schema.js';
 import { importHTML, exportHTML, canonical, debugParse } from './content.js';
 import { h, icon, dialog, debounce } from './dom.js';
-import { pick, imageHTML, captionShortcode, galleryShortcode } from './media.js';
+import { pick, imageHTML, captionShortcode, galleryShortcode, currentPost } from './media.js';
 import './editor.css';
 
 const gopress = (window.gopress = window.gopress || {});
@@ -243,6 +243,89 @@ async function insertMedia(api, { gallery = false } = {}) {
 	} else {
 		ed.insertContent(html).run();
 	}
+}
+
+// ---- Uploads by paste and drop ----
+
+let pendingUploads = 0;
+
+// attrsOf returns the attributes of the first element of an HTML string
+// (built by imageHTML from server data).
+function attrsOf(html) {
+	const t = document.createElement('template');
+	t.innerHTML = html;
+	const el = t.content.firstElementChild;
+	const out = {};
+	for (const a of el.attributes) out[a.name] = a.value;
+	return out;
+}
+
+// findUpload returns the position of the placeholder image of an upload.
+function findUpload(editor, marker) {
+	let found = -1;
+	editor.state.doc.descendants((node, pos) => {
+		if (found < 0 && node.type.name === 'image' && node.attrs.attrs['data-gp-upload'] === marker) found = pos;
+		return found < 0;
+	});
+	return found;
+}
+
+// uploadInto uploads files and inserts them at pos (or the cursor):
+// images show a placeholder with the local preview until the upload is
+// done, other files become links.
+async function uploadInto(api, files, pos) {
+	const gp = window.gopress;
+	if (!gp || !gp.upload || !api.config.media) return;
+	const editor = api.editor;
+	const post = await currentPost();
+	for (const file of files) {
+		const marker = 'u' + Math.random().toString(36).slice(2);
+		const isImage = /^image\//.test(file.type);
+		const blob = isImage ? URL.createObjectURL(file) : null;
+		if (isImage) {
+			const node = editor.schema.nodes.image.create({ attrs: { src: blob, alt: '', class: 'gp-uploading', 'data-gp-upload': marker } });
+			const at = pos != null ? pos : editor.state.selection.from;
+			editor.view.dispatch(editor.state.tr.insert(at, node));
+			if (pos != null) pos += node.nodeSize;
+		}
+		pendingUploads++;
+		editor.emit('gp-uploads', pendingUploads);
+		gp.upload(file, { post }).then((it) => {
+			if (!isImage || !it.mime.startsWith('image/')) {
+				const at = findUpload(editor, marker);
+				if (at >= 0) editor.view.dispatch(editor.state.tr.delete(at, at + 1));
+				editor.chain().focus().insertContent('<a href="' + it.url.replace(/"/g, '&quot;') + '">' +
+					(it.title || it.filename).replace(/</g, '&lt;') + '</a> ').run();
+				return;
+			}
+			const at = findUpload(editor, marker);
+			if (at < 0) return; // removed meanwhile
+			const size = it.sizes.large ? 'large' : 'full';
+			editor.view.dispatch(editor.state.tr.setNodeMarkup(at, null, { attrs: attrsOf(imageHTML(it, { size, align: 'none', link: 'none' })) }));
+		}).catch((err) => {
+			const at = findUpload(editor, marker);
+			if (at >= 0) editor.view.dispatch(editor.state.tr.delete(at, at + 1));
+			alert(file.name + ': ' + err.message);
+		}).finally(() => {
+			if (blob) URL.revokeObjectURL(blob);
+			pendingUploads--;
+			editor.emit('gp-uploads', pendingUploads);
+		});
+	}
+}
+
+// pastedFiles returns the files of a paste that should be uploaded: image
+// files, unless the clipboard also has text (a mixed selection from a web
+// page keeps its HTML; remote images are never fetched by the server).
+function pastedFiles(data) {
+	if (!data || !data.files || !data.files.length) return [];
+	const html = data.getData('text/html');
+	if (html) {
+		const t = document.createElement('template');
+		t.innerHTML = html;
+		if (t.content.textContent.trim()) return [];
+	}
+	return [...data.files].filter((f) => /^image\//.test(f.type));
 }
 
 async function insertHTMLBlock(editor) {
@@ -483,6 +566,23 @@ function mount(root) {
 			attributes: { class: 'gp-content entry-content', 'aria-label': 'Content', role: 'textbox', 'aria-multiline': 'true' },
 			// Office/Docs pastes: drop their inline styles and classes.
 			transformPastedHTML: (html) => html.replace(/ (style|class|lang|dir)="[^"]*"/gi, '').replace(/<\/?(span|font|o:p)[^>]*>/gi, ''),
+			// Screenshots and copied images (Ctrl+V) and dropped files are
+			// uploaded to the media library and inserted.
+			handlePaste: (view, event) => {
+				const files = pastedFiles(event.clipboardData);
+				if (!files.length || !api.config.media) return false;
+				event.preventDefault();
+				uploadInto(api, files, null);
+				return true;
+			},
+			handleDrop: (view, event, slice, moved) => {
+				const files = event.dataTransfer && [...event.dataTransfer.files];
+				if (moved || !files || !files.length || !api.config.media) return false;
+				event.preventDefault();
+				const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+				uploadInto(api, files, at ? at.pos : null);
+				return true;
+			},
 		},
 		content: '',
 	});
@@ -619,6 +719,8 @@ function showHelp() {
 
 gopress.editor = Object.assign(gopress.editor || {}, {
 	shortcodeViews: {},
+	// pendingUploads is the number of uploads still running (saving waits).
+	pendingUploads: () => pendingUploads,
 	// registerInsert({id, label, icon, keywords, button, onClick(api)}):
 	// adds an entry to the slash menu (and a button next to "Add Media"
 	// if button is true). api.editor is the TipTap editor; use

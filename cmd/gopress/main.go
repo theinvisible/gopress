@@ -40,6 +40,7 @@ commands:
   backup       create a backup of the data directory (M5)
   user         manage users and reset passwords or two-factor authentication
   mail         show the mail queue and send a test email
+  media        regenerate image sizes, remove metadata from old uploads
   plugin-pack  build a plugin .zip (M3)
   version      print version information
 `
@@ -66,6 +67,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdUser(rest, os.Stdin, stdout, stderr)
 	case "mail":
 		return cmdMail(rest, stdout, stderr)
+	case "media":
+		return cmdMedia(rest, stdout, stderr)
 	case "backup", "plugin-pack":
 		fmt.Fprintf(stderr, "gopress %s: not implemented yet\n", cmd)
 		return 2
