@@ -73,6 +73,18 @@ func TestAuthTables(t *testing.T) {
 	if n, err := IncSessionAttempts(ctx, d.W, []byte{1}); err != nil || n != 1 {
 		t.Errorf("IncSessionAttempts = %d, %v", n, err)
 	}
+	// Ending all sessions (keep nil) and all but one.
+	for _, h := range [][]byte{{7}, {8}} {
+		InsertSession(ctx, d.W, &Session{IDHash: h, UserID: u.ID, State: SessionFull, Expires: 9999, LastSeen: 960, IdleSecs: 100})
+	}
+	DeleteUserSessions(ctx, d.W, u.ID, []byte{7})
+	if ss, _ := UserSessions(ctx, d.R, u.ID); len(ss) != 1 || ss[0].IDHash[0] != 7 {
+		t.Errorf("sessions after ending all but one = %+v", ss)
+	}
+	DeleteUserSessions(ctx, d.W, u.ID, nil)
+	if ss, _ := UserSessions(ctx, d.R, u.ID); len(ss) != 0 {
+		t.Errorf("sessions after ending all = %d", len(ss))
+	}
 }
 
 func TestCommentStatusRestore(t *testing.T) {

@@ -167,6 +167,11 @@ func DeleteSession(ctx context.Context, q Querier, idHash []byte) error {
 
 // DeleteUserSessions removes all sessions of a user except keep (may be nil).
 func DeleteUserSessions(ctx context.Context, q Querier, userID int64, keep []byte) error {
+	if keep == nil {
+		// "id_hash != NULL" would match nothing.
+		_, err := q.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
+		return err
+	}
 	_, err := q.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND id_hash != ?`, userID, keep)
 	return err
 }
