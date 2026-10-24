@@ -1,0 +1,102 @@
+[
+    {
+        "password": "password",
+        "scheme": "wp",
+        "hash": "$wp$2y$10$x9961j8Ytbmw9wzymZZPEui6ll65QrU6a.7PnsyfSLaK.n9KMOque"
+    },
+    {
+        "password": "password",
+        "scheme": "phpass",
+        "hash": "$P$ByQNeR4cG7SwSdg38tjNtW0OOl5zDL."
+    },
+    {
+        "password": "password",
+        "scheme": "bcrypt",
+        "hash": "$2y$10$.CBS2lfVewYkEkmamz9jFeMYctX9uU7ooUd80GrHpTMnycKMds4dy"
+    },
+    {
+        "password": "password",
+        "scheme": "md5",
+        "hash": "5f4dcc3b5aa765d61d8327deb882cf99"
+    },
+    {
+        "password": "correct horse battery staple",
+        "scheme": "wp",
+        "hash": "$wp$2y$10$uGhXpDyqefAS8vecvpj4L.g.FatTJiMXA89Hbxh68bUCcAPPFlXcK"
+    },
+    {
+        "password": "correct horse battery staple",
+        "scheme": "phpass",
+        "hash": "$P$BkVluS/5ofgPyUcYS67pJitIjv1NCU1"
+    },
+    {
+        "password": "correct horse battery staple",
+        "scheme": "bcrypt",
+        "hash": "$2y$10$AMbBS7fj.ePKgyx4hxGrZ.qMAjKxVHkXk3qsO23KfIouGLTymgoCO"
+    },
+    {
+        "password": "correct horse battery staple",
+        "scheme": "md5",
+        "hash": "9cc2ae8a1ba7a93da39b46fc1019c481"
+    },
+    {
+        "password": "spaces around",
+        "scheme": "wp",
+        "hash": "$wp$2y$10$nmS3MiM6dv6sc06uc3X0Sujn1MJsO1t63sfpnLXjAG6H6.gmorqBe"
+    },
+    {
+        "password": "  spaces around  ",
+        "scheme": "phpass",
+        "hash": "$P$BhUHIBQYa0z.jukmsuAt6QnpMCOlai/"
+    },
+    {
+        "password": "  spaces around  ",
+        "scheme": "bcrypt",
+        "hash": "$2y$10$swGsAuGrYQ4UTG.VO4IPuOoqMzOflD2LNqlSY2oK/QWXRCAtSdca2"
+    },
+    {
+        "password": "  spaces around  ",
+        "scheme": "md5",
+        "hash": "588a472329af4ae34867f94cf90bac37"
+    },
+    {
+        "password": "Ünïcödé-🔑",
+        "scheme": "wp",
+        "hash": "$wp$2y$10$I/uNlmlw0.G6fsok1Z.U/.KN0fpUGXrr2kkULR92/z6jllLcZtq9e"
+    },
+    {
+        "password": "Ünïcödé-🔑",
+        "scheme": "phpass",
+        "hash": "$P$BhDvEtxIiH.lwn/4rFpUFs4W1aS.Iq/"
+    },
+    {
+        "password": "Ünïcödé-🔑",
+        "scheme": "bcrypt",
+        "hash": "$2y$10$JgAkIJWFLDWs9tgqVdBciOB8Trpy2HDpBvxaBUZfd/ExjMX6iSwYS"
+    },
+    {
+        "password": "Ünïcödé-🔑",
+        "scheme": "md5",
+        "hash": "fa3635bac8865a41c6882d210afc7d96"
+    },
+    {
+        "password": "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong",
+        "scheme": "wp",
+        "hash": "$wp$2y$10$6/5YXOjflolGPON4AeTwCuKFE.6PpSp7nKaCtqtc1BiI/o1k4zz1W"
+    },
+    {
+        "password": "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong",
+        "scheme": "phpass",
+        "hash": "$P$BL8cZwiNX7RyucYyubf8VSisPATGFO1"
+    },
+    {
+        "password": "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong",
+        "scheme": "bcrypt",
+        "hash": "$2y$10$mEEsoPudJPHI7rg7/bIPkuueMVbeiG/OrcrSJKAzbq530dt5TFGoG"
+    },
+    {
+        "password": "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong",
+        "scheme": "md5",
+        "hash": "66cd533b12104bd6010dd7909726c1e8"
+    }
+]

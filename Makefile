@@ -56,6 +56,7 @@ wpref-down:
 golden: wpref-up
 	$(COMPOSE) exec -T wpref php /golden/gen.php edge > internal/render/testdata/golden.json
 	$(COMPOSE) exec -T wpref php /golden/gen.php site > local/golden-site.json
+	$(COMPOSE) exec -T wpref php /golden/auth.php > internal/auth/testdata/wphash.json
 
 # Import the dev database into ./local/data (replaces it).
 import: build
