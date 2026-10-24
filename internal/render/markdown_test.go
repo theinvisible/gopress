@@ -25,3 +25,30 @@ func TestMarkdownToHTML(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitizePluginURLs(t *testing.T) {
+	in := `<video poster="javascript:alert(1)" src="/v.mp4"></video><img src="/a.png" srcset="javascript:x 1x, /b.png 2x">` +
+		`<img src="/c.png" srcset="/c.png 1x, https://cdn.example/c2.png 2x"><input type="image" src="javascript:x">` +
+		`<source src="data:text/html,x"><form action="/\evil.example/x"></form><form action="//evil.example"></form><form action="/donate"></form>`
+	out := SanitizePluginHTML(in)
+	for _, bad := range []string{"javascript:", "data:text/html", `\evil`, "//evil"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("%q survived: %s", bad, out)
+		}
+	}
+	for _, want := range []string{`src="/v.mp4"`, `srcset="/c.png 1x, https://cdn.example/c2.png 2x"`, `action="/donate"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q: %s", want, out)
+		}
+	}
+	admin := SanitizePluginAdminHTML(`<div data-comment-actions data-id="../../posts/5" class="x" id="y"><button data-moderate="delete">Stats</button>` +
+		`<form action="/admin/x"><input name="a"></form><p style="color:red">ok <a href="/admin/">link</a></p></div>`)
+	for _, bad := range []string{"data-", "class=", "id=", "<button", "<form", "<input", "style="} {
+		if strings.Contains(admin, bad) {
+			t.Errorf("admin policy kept %q: %s", bad, admin)
+		}
+	}
+	if !strings.Contains(admin, `<a href="/admin/">link</a>`) {
+		t.Errorf("admin policy: %s", admin)
+	}
+}

@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"io"
 	"net/http"
-	"net/url"
 	"path"
 	"slices"
 	"strconv"
@@ -224,10 +223,13 @@ func (a *Admin) pluginActivate(w http.ResponseWriter, r *http.Request, c *reqCtx
 		return errNotFound
 	}
 	// The approval is for exactly the package that was reviewed.
-	if r.PostFormValue("sha256") != inf.Package.SHA256 {
+	sha := r.PostFormValue("sha256")
+	if sha == "" || sha != inf.Package.SHA256 {
 		return badRequest("The plugin changed since you reviewed it. Please review it again.")
 	}
-	if err := a.plugins.Activate(ctx, name); err != nil {
+	if err := a.plugins.Activate(ctx, name, sha); errors.Is(err, plugins.ErrChanged) {
+		return badRequest("The plugin changed since you reviewed it. Please review it again.")
+	} else if err != nil {
 		return err
 	}
 	a.auth.Audit(ctx, r, c.user.ID, "plugin_activated", "plugin", 0, map[string]any{"name": name,
@@ -345,11 +347,13 @@ func (a *Admin) renderPluginPage(w http.ResponseWriter, r *http.Request, c *reqC
 	ctx := r.Context()
 	d := &pluginPageData{basePage: a.base(ctx, c, pg.Title, "plugin-"+name+"-"+pg.ID), Plugin: name, Page: pg,
 		Action: pluginPageURL(name, pg.ID), Error: errMsg}
-	switch q := r.URL.Query().Get("msg"); {
-	case q == "saved":
+	if r.URL.Query().Get("msg") == "saved" {
 		d.Notice = &notice{"success", "Settings saved."}
-	case strings.HasPrefix(q, "n:"):
-		d.Notice = &notice{"success", strings.TrimPrefix(q, "n:")}
+	}
+	// A table action's notice comes from the plugin: kept server-side for
+	// this session, never taken from the URL.
+	if v, ok := a.flash.take(a.flashKey(c, "plugin")); ok {
+		d.Notice = &notice{"success", v.(string)}
 	}
 	switch pg.Kind {
 	case "settings":
@@ -457,7 +461,10 @@ func (a *Admin) pluginPageSubmit(w http.ResponseWriter, r *http.Request, c *reqC
 		}
 		a.auth.Audit(ctx, r, c.user.ID, "plugin_action", "plugin", 0, map[string]any{"name": name, "page": pg.ID,
 			"action": action, "count": len(ids)})
-		return seeOther(w, r, pluginPageURL(name, pg.ID)+"?msg="+url.QueryEscape("n:"+n))
+		if n != "" {
+			a.flash.put(a.flashKey(c, "plugin"), n)
+		}
+		return seeOther(w, r, pluginPageURL(name, pg.ID))
 	}
 	return errNotFound
 }
@@ -510,7 +517,7 @@ var uiTypes = map[string]string{".html": "text/html; charset=utf-8", ".css": "te
 // (no cookies, no access to the admin), scripts only from the site, no
 // network access of their own (everything goes through the bridge).
 func uiCSP(origin string) string {
-	return "sandbox allow-scripts allow-forms allow-popups allow-modals; default-src 'none'; script-src " + origin +
+	return "sandbox allow-scripts allow-forms allow-modals; default-src 'none'; script-src " + origin +
 		"/plugin-ui/; style-src " + origin + "/plugin-ui/ 'unsafe-inline'; img-src " + origin + " data: blob:; font-src " +
 		origin + "/plugin-ui/; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'"
 }

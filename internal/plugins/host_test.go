@@ -56,6 +56,8 @@ func newHostEnv(t *testing.T) *hostEnv {
 	now := db.Time{Time: time.Now().UTC()}
 	db.InsertPost(ctx, d.W, &db.Post{ID: 10, Type: db.TypePost, Status: db.StatusPublish, Slug: "hello", Title: "Hello",
 		Content: "<p>Hi</p>", Date: now, DateGMT: now, Modified: now, ModifiedGMT: now})
+	db.InsertPost(ctx, d.W, &db.Post{ID: 12, Type: db.TypePost, Status: db.StatusPublish, Slug: "members", Title: "Members",
+		Content: "<p>secretword</p>", Password: "pw", Date: now, DateGMT: now, Modified: now, ModifiedGMT: now})
 	db.InsertPost(ctx, d.W, &db.Post{ID: 11, Type: db.TypePost, Status: db.StatusDraft, Title: "Draft", Content: "secret",
 		Date: now, Modified: now, ModifiedGMT: now})
 	db.InsertPost(ctx, d.W, &db.Post{ID: 20, Type: db.TypeAttachment, Status: db.StatusInherit, ParentID: 10, Title: "pic",
@@ -108,7 +110,7 @@ func newHostEnv(t *testing.T) *hostEnv {
 	if _, _, err := e.h.Install(ctx, testerPackage(t)); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.h.Activate(ctx, "tester"); err != nil {
+	if err := e.h.Activate(ctx, "tester", ""); err != nil {
 		t.Fatal(err)
 	}
 	return e
@@ -275,7 +277,7 @@ func TestHostFunctionPermissions(t *testing.T) {
 	pkg := e.h.Package("tester")
 	pkg.Manifest.Permissions.Data = nil
 	pkg.Manifest.Permissions.HTTP = nil
-	if err := e.h.Activate(ctx, "tester"); err != nil {
+	if err := e.h.Activate(ctx, "tester", ""); err != nil {
 		t.Fatal(err)
 	}
 	for _, do := range []string{"post", "posts", "media", "comment", "spam", "fetch"} {
@@ -299,4 +301,59 @@ func TestPublicAddr(t *testing.T) {
 		dialControl("tcp", "127.0.0.1:443", nil) == nil {
 		t.Error("dialControl")
 	}
+}
+
+// Regression tests for the M3 security review.
+func TestReviewFindings(t *testing.T) {
+	e := newHostEnv(t)
+	ctx := context.Background()
+	// Load is not a fault: many slow calls at once queue, they do not
+	// pause the plugin.
+	var wg sync.WaitGroup
+	for range 24 {
+		wg.Add(1)
+		go func() { defer wg.Done(); e.shortcode("slow", nil) }()
+	}
+	wg.Wait()
+	if st := e.h.Status("tester"); st.Paused {
+		t.Errorf("paused by load: %+v", st)
+	}
+	// Password protected posts are neither listed nor counted.
+	if got := e.op(map[string]string{"do": "posts", "search": "secretword"}); !strings.Contains(got, `"total":0`) {
+		t.Errorf("password protected post found: %s", got)
+	}
+	if got := e.op(map[string]string{"do": "kvlist", "collection": "_settings"}); !strings.Contains(got, "invalid collection") {
+		t.Errorf("_settings listed: %s", got)
+	}
+	if err := e.h.Activate(ctx, "tester", strings.Repeat("0", 64)); err != ErrChanged {
+		t.Errorf("activation of another package: %v", err)
+	}
+}
+
+func TestCheckModule(t *testing.T) {
+	if err := checkModule(e2eWasm(t)); err != nil {
+		t.Fatalf("Go plugin refused: %v", err)
+	}
+	huge := append(append([]byte{}, wasmMagic...), 4, 7, 1, 0x70, 0, 0x80, 0x80, 0x80, 0x40) // one table, min 2^27
+	if err := checkModule(huge); err == nil || !strings.Contains(err.Error(), "table") {
+		t.Errorf("huge table: %v", err)
+	}
+	imported := append(append([]byte{}, wasmMagic...), 2, 12, 1, 1, 'm', 1, 't', 1, 0x70, 0, 0x80, 0x80, 0x80, 0x40)
+	if err := checkModule(imported); err == nil {
+		t.Error("huge imported table accepted")
+	}
+	for _, bad := range [][]byte{wasmMagic[:4], append(append([]byte{}, wasmMagic...), 4, 200)} {
+		if checkModule(bad) == nil {
+			t.Errorf("malformed module %x accepted", bad)
+		}
+	}
+}
+
+func e2eWasm(t *testing.T) []byte {
+	_, wasm := plugintest.Tester(t)
+	b, err := os.ReadFile(wasm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }

@@ -113,6 +113,19 @@ Users › Edit) and are revoked automatically by a password change or reset, a 2
 everywhere". Every change made with a token is recorded in the activity log with the token's
 name. Failed token checks are rate limited per network, calls per token.
 
+### Plugins
+
+Plugins are WebAssembly packages (`.zip`) that run in a sandbox. Administrators upload them under
+Plugins › Upload Plugin, review what each one asks for (HTTPS hosts, routes, hooks, data, scripts on
+public pages) and approve exactly that package when activating it. An update that asks for more
+stays inactive until it is approved again. Plugins add shortcodes, widgets, settings pages, lists,
+custom admin pages (in a sandboxed iframe), dashboard boxes and editor buttons. Their HTML is
+filtered, and a plugin that crashes or hangs is paused instead of affecting the site.
+
+Write plugins in Go with `pdk/go` (or any language with an Extism PDK) and build them with
+`gopress plugin-pack DIR`; `plugins/hello` is the example (`make hello`). See
+[docs/plugins.md](docs/plugins.md).
+
 Behind a reverse proxy, pass `--trusted-proxies` and make sure the proxy sets (overwrites)
 `X-Real-Ip` or appends to `X-Forwarded-For` (Traefik and nginx with `proxy_set_header` do);
 client addresses are used for rate limits and the audit log.

@@ -69,7 +69,7 @@
 				reply(m.id, true);
 				break;
 			case 'navigate':
-				if (typeof m.page === 'string' && /^[a-z][a-z0-9_-]{0,39}$/.test(m.page)) {
+				if (handlers.navigate && typeof m.page === 'string' && /^[a-z][a-z0-9_-]{0,39}$/.test(m.page)) {
 					var base = location.pathname.replace(/\/[^/]+$/, '/');
 					location.href = base + m.page;
 				}
@@ -88,7 +88,9 @@
 
 	gp.pluginBridge = { connect: connect };
 
+	// Admin pages may switch to another page of the plugin; editor dialogs
+	// may not leave the editor.
 	document.querySelectorAll('iframe[data-plugin-frame]').forEach(function (f) {
-		connect(f, f.getAttribute('data-api'), f.getAttribute('data-csrf'));
+		connect(f, f.getAttribute('data-api'), f.getAttribute('data-csrf'), { navigate: true });
 	});
 })();

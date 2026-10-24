@@ -65,7 +65,7 @@
 	{{- end}}
 
 	{{- else if eq .Page.Kind "iframe"}}
-	<iframe class="gp-plugin-frame" src="{{.Frame}}" title="{{.Page.Title}}" sandbox="allow-scripts allow-forms allow-popups allow-modals"
+	<iframe class="gp-plugin-frame" src="{{.Frame}}" title="{{.Page.Title}}" sandbox="allow-scripts allow-forms allow-modals"
 		referrerpolicy="no-referrer" data-plugin-frame data-api="{{.APIURL}}" data-csrf="{{.CSRF}}"></iframe>
 	{{- end}}
 </div>

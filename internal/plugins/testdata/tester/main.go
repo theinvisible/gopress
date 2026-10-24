@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	gp "github.com/theinvisible/gopress/pdk/go"
 )
@@ -50,6 +51,12 @@ func init() {
 	gp.HandleShortcode("big", func(gp.ShortcodeRequest) (gp.Render, error) {
 		return gp.Render{HTML: strings.Repeat("x", 3<<20)}, nil
 	})
+	gp.HandleShortcode("slow", func(gp.ShortcodeRequest) (gp.Render, error) {
+		start := time.Now() // time.Sleep returns at once under WASI
+		for time.Since(start) < 200*time.Millisecond {
+		}
+		return gp.Render{HTML: "slow"}, nil
+	})
 	gp.HandleShortcode("fail", func(gp.ShortcodeRequest) (gp.Render, error) {
 		return gp.Render{}, errors.New("deliberate failure")
 	})
@@ -65,8 +72,9 @@ func init() {
 			out, err = gp.GetPost(10)
 		case "posts":
 			var list []gp.Post
-			list, _, err = gp.Posts("post", "", 10, 0)
-			out = list
+			var total int
+			list, total, err = gp.Posts("post", r.Attr("search", ""), 10, 0)
+			out = map[string]any{"posts": list, "total": total}
 		case "media":
 			out, err = gp.GetMedia(20, 21)
 		case "comment":
@@ -77,6 +85,10 @@ func init() {
 			out, err = gp.Stash(r.Attr("kind", ""))
 		case "kvbig":
 			err = gp.KVSet("big", r.Attr("key", "k"), strings.Repeat("y", 900<<10))
+		case "kvlist":
+			var entries []gp.Entry
+			entries, _, err = gp.KVList(r.Attr("collection", ""), "", 10)
+			out = entries
 		case "kvbad":
 			err = gp.KVSet("_settings", "settings", map[string]any{"greeting": "hacked"})
 		case "site":

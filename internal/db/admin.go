@@ -17,6 +17,7 @@ type AdminPostQuery struct {
 	TagID      int64
 	AuthorID   int64
 	VisibleTo  int64  // only published posts and those of this user (access tokens)
+	NoPassword bool   // leave out password protected posts (plugins)
 	OrderBy    string // "date" (default), "title", "comments", "menu_order"
 	Ascending  bool
 	Limit      int
@@ -57,6 +58,9 @@ func (aq AdminPostQuery) where() (string, []any) {
 	if aq.AuthorID > 0 {
 		conds = append(conds, "author_id = ?")
 		args = append(args, aq.AuthorID)
+	}
+	if aq.NoPassword {
+		conds = append(conds, "password = ''")
 	}
 	if aq.VisibleTo > 0 {
 		conds = append(conds, "(status = 'publish' OR author_id = ?)")

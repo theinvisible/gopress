@@ -101,7 +101,7 @@ func (h *Host) RenderDashboard(ctx context.Context, name, id string, u *db.User)
 	if err := h.call(ctx, name, ExportDashboard, callHook, DashboardIn{ID: id, User: userData(u)}, &out); err != nil {
 		return "", err
 	}
-	return render.SanitizePluginHTML(out.HTML), nil
+	return render.SanitizePluginAdminHTML(out.HTML), nil
 }
 
 // WidgetType is a widget type of an active plugin.

@@ -143,7 +143,7 @@ func (h *Host) HeadFooter(env *render.Env, hook string) string {
 		if err := p.call(envCtx(env), ExportFilter, callRender, in, &out); err != nil {
 			continue
 		}
-		b.WriteString(sanitizeHeadTags(out.Value))
+		b.WriteString(p.sanitizeHeadTags(out.Value))
 		p.addAssets(env, nil, out.Assets)
 	}
 	return b.String()
@@ -198,7 +198,9 @@ func (h *Host) ServeHTTP(w http.ResponseWriter, r *http.Request) bool {
 		}
 		return false
 	}
-	if r.URL.RawQuery == "" {
+	// Legacy URLs are query parameters on the home URL (as WordPress
+	// plugins used them); other paths belong to the core.
+	if r.URL.RawQuery == "" || r.URL.Path != "/" {
 		return false
 	}
 	q := r.URL.Query()
@@ -347,9 +349,9 @@ func (p *plugin) serveRoute(w http.ResponseWriter, r *http.Request, sub string) 
 	}
 }
 
-// sanitizeHeadTags keeps <meta name|property content> and <link> tags
-// with rel stylesheet/preload/alternate to the plugin's own paths.
-func sanitizeHeadTags(s string) string {
+// sanitizeHeadTags keeps <meta name|property content> tags and <link>
+// tags (rel stylesheet/preload/prefetch) to the plugin's approved assets.
+func (p *plugin) sanitizeHeadTags(s string) string {
 	var b strings.Builder
 	for _, tag := range reTag.FindAllString(s, 50) {
 		attrs := map[string]string{}
@@ -373,11 +375,11 @@ func sanitizeHeadTags(s string) string {
 			fmt.Fprintf(&b, "<meta %s=\"%s\" content=\"%s\" />\n", key, html.EscapeString(val), html.EscapeString(attrs["content"]))
 		case strings.HasPrefix(strings.ToLower(tag), "<link"):
 			href, rel := attrs["href"], attrs["rel"]
-			if !strings.HasPrefix(href, "/plugins/") || strings.Contains(href, "..") ||
-				!slices.Contains([]string{"stylesheet", "preload", "alternate", "prefetch"}, rel) {
+			file, ok := strings.CutPrefix(strings.SplitN(href, "?", 2)[0], "/plugins/"+p.pkg.Manifest.Name+"/")
+			if !ok || !slices.Contains(p.perms.FrontendAssets, file) || !slices.Contains([]string{"stylesheet", "preload", "prefetch"}, rel) {
 				continue
 			}
-			fmt.Fprintf(&b, "<link rel=\"%s\" href=\"%s\" />\n", rel, html.EscapeString(href))
+			fmt.Fprintf(&b, "<link rel=\"%s\" href=\"%s\" />\n", rel, html.EscapeString(assetURL(p.pkg, file)))
 		}
 	}
 	return b.String()

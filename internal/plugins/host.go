@@ -88,7 +88,8 @@ type Host struct {
 	mu     sync.RWMutex
 	active map[string]*plugin // by name
 
-	routeLimit *limiter
+	routeLimit      *limiter
+	invalidateLimit *limiter
 }
 
 // plugin is an active plugin.
@@ -119,7 +120,7 @@ func New(ctx context.Context, opts Options) (*Host, error) {
 		opts.Log = slog.Default()
 	}
 	h := &Host{opts: opts, log: opts.Log, now: time.Now, active: map[string]*plugin{}, http: opts.HTTP,
-		routeLimit: newLimiter(routePerMin, time.Minute)}
+		routeLimit: newLimiter(routePerMin, time.Minute), invalidateLimit: newLimiter(1, time.Second)}
 	if h.http == nil {
 		h.http = safeClient()
 	}
@@ -195,6 +196,10 @@ func (p *plugin) compile(ctx context.Context) {
 			p.err = fmt.Errorf("compile: %v", r)
 		}
 	}()
+	if p.err = checkModule(p.pkg.Wasm); p.err != nil {
+		p.h.log.Error("plugin rejected", "plugin", p.pkg.Manifest.Name, "err", p.err)
+		return
+	}
 	m := extism.Manifest{
 		Wasm:         []extism.Wasm{extism.WasmData{Data: p.pkg.Wasm, Name: "main"}},
 		Memory:       &extism.ManifestMemory{MaxPages: maxPages, MaxVarBytes: 64 << 10, MaxHttpResponseBytes: 0},
@@ -225,6 +230,9 @@ func (p *plugin) close(ctx context.Context) {
 		}
 	}()
 }
+
+// ErrBusy is returned when all instances of a plugin stayed busy.
+var ErrBusy = errors.New("plugin busy")
 
 // ErrUnavailable is returned for calls to plugins that are not active,
 // paused after errors or failed to load.
@@ -282,15 +290,19 @@ func (p *plugin) call(ctx context.Context, export string, kind callKind, in, out
 	if len(input) > maxInputBytes {
 		return errors.New("plugin input too large")
 	}
+	// At most maxInstances calls run at a time; waiting for a free
+	// instance is load, not a fault of the plugin, and has its own limit.
+	wait, cancelWait := context.WithTimeout(ctx, kind.timeout())
+	select {
+	case p.sem <- struct{}{}:
+		cancelWait()
+		defer func() { <-p.sem }()
+	case <-wait.Done():
+		cancelWait()
+		return ErrBusy
+	}
 	ctx, cancel := context.WithTimeout(ctx, kind.timeout())
 	defer cancel()
-	select { // at most maxInstances calls at a time
-	case p.sem <- struct{}{}:
-		defer func() { <-p.sem }()
-	case <-ctx.Done():
-		p.fail(errors.New("busy"))
-		return ErrUnavailable
-	}
 	var inst *extism.Plugin
 	select {
 	case inst = <-p.idle:
@@ -313,7 +325,7 @@ func (p *plugin) call(ctx context.Context, export string, kind callKind, in, out
 			inst.Close(context.Background())
 		}
 		var pe *PluginError
-		if err != nil && !errors.Is(err, ErrUnavailable) && !errors.As(err, &pe) {
+		if err != nil && !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrBusy) && !errors.As(err, &pe) {
 			p.fail(err) // crashes, time and size limits; not errors the plugin reports
 		}
 	}()
@@ -342,7 +354,6 @@ func (p *plugin) call(ctx context.Context, export string, kind callKind, in, out
 		}
 		return &PluginError{Msg: truncate(msg, 500)}
 	case len(output) > maxOutputBytes:
-		keep = true
 		return errors.New(export + ": output too large")
 	}
 	keep = true
@@ -500,12 +511,19 @@ func (h *Host) List(ctx context.Context) ([]Info, error) {
 // Package returns the installed package name.
 func (h *Host) Package(name string) *Package { return h.opts.Store.Get(name) }
 
-// Activate approves the package's permissions and activates it. The
-// caller has checked the administrator's re-authentication.
-func (h *Host) Activate(ctx context.Context, name string) error {
+// ErrChanged is returned when the package changed since it was reviewed.
+var ErrChanged = errors.New("the plugin changed since it was reviewed")
+
+// Activate approves the package's permissions and activates it; sha256
+// is the reviewed package ("" for any). The caller has checked the
+// administrator's re-authentication.
+func (h *Host) Activate(ctx context.Context, name, sha256 string) error {
 	pkg := h.opts.Store.Get(name)
 	if pkg == nil {
 		return errors.New("no such plugin")
+	}
+	if sha256 != "" && pkg.SHA256 != sha256 {
+		return ErrChanged
 	}
 	states, err := db.Plugins(ctx, h.opts.DB.R)
 	if err != nil {

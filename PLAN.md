@@ -236,7 +236,12 @@ GoPress serves a public, internet-facing site. Security follows current best pra
 - `/mcp` accepts only Bearer tokens (no cookies, no CORS), refuses foreign `Origin`/cross-site fetches and JSON-RPC batches, limits failed authentication per network, calls per token, content and body size and concurrency; no tool fetches URLs; uploads only images and PDF through the media pipeline. Every change is audited with the token.
 
 **Plugins (M3)**
-- WASM sandbox: no filesystem or network access except the host functions; HTTP only to allowlisted hosts; per-call timeout and memory limit; plugin zip uploads validated (size, paths, manifest).
+- WASM sandbox (Extism/wazero): no files, environment or network; one host function checks every operation against the approved permissions; per call time limits (1 s render … 2 min import), 64 MB memory, bounded input/output; at most 4 instances per plugin; crashed instances are discarded, five crashes in a minute pause a plugin.
+- Packages: strict manifest (unknown keys refused), zip checks (paths, links, duplicates, sizes counted while reading, entry count, file types, WASM magic); stored via `os.Root`.
+- Approval: only administrators with a recent re-authentication upload, activate and delete; activation approves exactly the reviewed package (SHA-256); an update asking for more stays inactive until approved; everything audited.
+- HTTP from plugins: HTTPS to approved host names only, public addresses checked after DNS resolution, redirects only to approved hosts, no proxies, size and time limits.
+- Public pages: plugin HTML filtered (no scripts, handlers, iframes, javascript: URLs); scripts only from approved asset files, only on pages that need them; routes get no cookies, answer under a sandbox CSP without cookies or redirects, rate limited.
+- Admin: plugin pages are forms and tables rendered by GoPress or custom pages in a sandboxed iframe (opaque origin, CSP sandbox, no network of its own) that reach the server only through a postMessage bridge with the admin's CSRF token; editor buttons insert escaped shortcodes, never HTML.
 
 **Operations (M5)**
 - Run as non-root in a `FROM scratch` image, read-only root filesystem, data volume only.
@@ -302,14 +307,14 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [ ] Later, if needed: OAuth 2.1 authorization (MCP authorization spec) as an alternative to copying tokens
 
 ### M3 – Plugin host
-- [ ] Manifest format `plugin.json` and zip install/delete
-- [ ] Extism host: module cache, instance pool, timeouts, memory limits, panic isolation
-- [ ] Host functions (kv, option, posts, media, HTTP allowlist, log, comments)
-- [ ] Hook registry (`the_content`, `comment_pre_save`, `comment_status_changed`, `dashboard_widgets`, `head`/`footer`)
-- [ ] Shortcodes, widgets, routes, admin pages (form schema), on-demand assets, editor scripts
-- [ ] `pdk/go`, `gopress plugin-pack`, example plugin
-- [ ] Plugins admin: list, activate/deactivate, upload
-- [ ] Security review of the plugin sandbox and upload
+- [x] Manifest format `plugin.json` and zip install/delete
+- [x] Extism host: module cache, instance pool, timeouts, memory limits, panic isolation, circuit breaker
+- [x] Host functions (kv, settings, posts, media, HTTPS to approved hosts, log, comments, import stash)
+- [x] Hooks (`the_content`, `comment_pre_save`, `comment_status_changed`, dashboard boxes, `head`/`footer`)
+- [x] Shortcodes, widgets, routes and legacy URLs, admin pages (forms, tables, sandboxed iframes with a bridge), on-demand assets, editor buttons
+- [x] `pdk/go` (standard Go toolchain), `gopress plugin-pack`, example plugin `plugins/hello`, `docs/plugins.md`
+- [x] Plugins admin: list, review and approve permissions, activate/deactivate, upload, delete, WordPress import
+- [x] Security review of the plugin sandbox and upload (see devlog)
 
 ### M4 – Plugins
 - [ ] foto-slider-lightbox: gallery admin, shortcode, assets, editor button, import of `fslb_gallery`

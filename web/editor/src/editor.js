@@ -591,7 +591,7 @@ function pluginFields(fields) {
 function frameDialog(p, onInsert) {
 	const bridge = window.gopress && window.gopress.pluginBridge;
 	if (!bridge) return;
-	const frame = h('iframe', { src: p.frame, title: p.label, sandbox: 'allow-scripts allow-forms allow-popups allow-modals',
+	const frame = h('iframe', { src: p.frame, title: p.label, sandbox: 'allow-scripts allow-forms allow-modals',
 		referrerpolicy: 'no-referrer', class: 'gp-plugin-dialog-frame' });
 	const dlg = h('dialog', { class: 'gp-dialog gp-dialog-wide gp-plugin-dialog' },
 		h('header', {}, h('h2', { text: p.label }),

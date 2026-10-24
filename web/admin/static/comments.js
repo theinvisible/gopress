@@ -30,9 +30,12 @@
 		var b = ev.target.closest('[data-moderate]');
 		if (!b) { return; }
 		var action = b.getAttribute('data-moderate');
+		var box = b.closest('[data-comment-actions]');
+		var id = box ? box.getAttribute('data-id') : '';
+		// Only real moderation buttons: a numeric comment id and a known action.
+		if (!/^[0-9]+$/.test(id) || ['approve', 'unapprove', 'spam', 'unspam', 'trash', 'untrash', 'delete'].indexOf(action) < 0) { return; }
 		if (b.hasAttribute('data-confirm') && !confirm(b.getAttribute('data-confirm'))) { return; }
 		var row = rowOf(b);
-		var id = b.closest('[data-comment-actions]').getAttribute('data-id');
 		if (row) { row.classList.add('gp-saving'); }
 		act(id, action).then(function (res) {
 			updateCounts(res.counts);

@@ -207,7 +207,7 @@ func (p *plugin) op(ctx context.Context, op string, raw json.RawMessage) (any, e
 		if err != nil {
 			return nil, err
 		}
-		if !reColl.MatchString(a.Collection) {
+		if !reColl.MatchString(a.Collection) || strings.HasPrefix(a.Collection, "_") {
 			return nil, userErr("invalid collection")
 		}
 		limit := min(max(a.Limit, 1), 500)
@@ -230,7 +230,7 @@ func (p *plugin) op(ctx context.Context, op string, raw json.RawMessage) (any, e
 		if err != nil {
 			return nil, err
 		}
-		if !reColl.MatchString(a.Collection) {
+		if !reColl.MatchString(a.Collection) || strings.HasPrefix(a.Collection, "_") {
 			return nil, userErr("invalid collection")
 		}
 		return db.KVCount(ctx, h.opts.DB.R, name, a.Collection)
@@ -257,7 +257,7 @@ func (p *plugin) op(ctx context.Context, op string, raw json.RawMessage) (any, e
 		if a.Type == db.TypePage {
 			typ = db.TypePage
 		}
-		posts, total, err := db.AdminPosts(ctx, h.opts.DB.R, db.AdminPostQuery{Type: typ, Status: db.StatusPublish, Search: a.Search,
+		posts, total, err := db.AdminPosts(ctx, h.opts.DB.R, db.AdminPostQuery{Type: typ, Status: db.StatusPublish, Search: a.Search, NoPassword: true,
 			Limit: min(max(a.Limit, 1), 100), Offset: max(a.Offset, 0)})
 		if err != nil {
 			return nil, err
@@ -358,7 +358,11 @@ func (p *plugin) op(ctx context.Context, op string, raw json.RawMessage) (any, e
 		return db.StashEntries(ctx, h.opts.DB.R, "wordpress", a.Kind)
 
 	case "invalidate":
-		h.opts.Site.Invalidate()
+		// At most once a second per plugin: clearing the cache on every
+		// request would turn every page view into a render.
+		if h.invalidateLimit.allow(name, h.now()) {
+			h.opts.Site.Invalidate()
+		}
 		return true, nil
 	}
 	return nil, userErr("unknown operation " + strconv.Quote(op))

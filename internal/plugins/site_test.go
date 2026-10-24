@@ -81,6 +81,9 @@ func TestSiteIntegration(t *testing.T) {
 	if rec := e.get("/?tester_ping=1"); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"method":"GET"`) {
 		t.Errorf("legacy route: %d %s", rec.Code, rec.Body)
 	}
+	if rec := e.get("/wp-content/uploads/x.png?tester_ping=1"); strings.Contains(rec.Body.String(), `"method"`) {
+		t.Error("legacy route on a core path")
+	}
 	if rec := e.get("/plugins/tester/other"); rec.Code == 200 || strings.Contains(rec.Body.String(), "method") {
 		t.Errorf("undeclared route answered by the plugin: %d", rec.Code) // the site's router handles it
 	}
@@ -139,11 +142,16 @@ func TestCommentHooks(t *testing.T) {
 }
 
 func TestSanitizeHeadTags(t *testing.T) {
+	e := newHostEnv(t)
+	p := e.h.get("tester")
 	in := `<meta name="description" content="x &quot;y&quot;"><meta http-equiv="refresh" content="0;url=https://evil">` +
-		`<link rel="stylesheet" href="/plugins/x/assets/a.css"><link rel="stylesheet" href="https://evil/a.css">` +
-		`<script>alert(1)</script><link rel="import" href="/plugins/x/a.html">`
-	got := sanitizeHeadTags(in)
-	if got != "<meta name=\"description\" content=\"x &#34;y&#34;\" />\n<link rel=\"stylesheet\" href=\"/plugins/x/assets/a.css\" />\n" {
+		`<link rel="stylesheet" href="/plugins/tester/assets/hello.css"><link rel="stylesheet" href="https://evil/a.css">` +
+		`<link rel="stylesheet" href="/plugins/tester/ping"><link rel="stylesheet" href="/plugins/other/assets/hello.css">` +
+		`<script>alert(1)</script><link rel="import" href="/plugins/tester/assets/hello.js">`
+	got := p.sanitizeHeadTags(in)
+	want := "<meta name=\"description\" content=\"x &#34;y&#34;\" />\n<link rel=\"stylesheet\" href=\"" +
+		strings.ReplaceAll(assetURL(p.pkg, "assets/hello.css"), "&", "&amp;") + "\" />\n"
+	if got != want {
 		t.Errorf("head tags: %q", got)
 	}
 }

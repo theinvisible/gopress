@@ -73,7 +73,7 @@ These are what the approval screen lists:
 - **`routes`:** paths below `/plugins/<name>/`.
   - Requests reach the plugin without cookies, rate-limited (60 per minute per network).
   - Answers can set `Content-Type` and `Content-Disposition` only, and always carry `Content-Security-Policy: sandbox`.
-- **`legacy_routes`:** query parameters of old WordPress URLs (on any path) mapped to a route. Core parameters (`p`, `s`, `feed` …) are not allowed.
+- **`legacy_routes`:** query parameters of old WordPress URLs on the home URL (e.g. `/?my_ipn=process`) mapped to a route. Core parameters (`p`, `s`, `feed` …) are not allowed.
 - **`hooks`:** see below.
 - **`data`:**
   - `posts:read`: published posts and pages.
@@ -105,11 +105,12 @@ Settings pages, widget forms and editor dialogs share one field format:
     gopress.media.pick({multiple, imagesOnly})   // → [{id, url, alt, title, sizes, …}]
     gopress.notice(text, kind)          // admin notice (success, error, warning, info)
     gopress.resize(height)              // automatic with ResizeObserver
-    gopress.navigate(pageID)            // another page of the plugin
+    gopress.navigate(pageID)            // another page of the plugin (not in editor dialogs)
     gopress.insertShortcode(tag, attrs, content)  // in editor dialogs
     gopress.close()                     // close an editor dialog
     ```
 
+- **Trust:** the iframe page can still navigate itself to another site, and data the bridge hands it could leave that way. Popups are not allowed.
 - **Menu placement:** `menu` places the page under Settings, Tools, Posts or Comments, or as the plugin's own entry (`plugin`).
 - **Capability:** `capability` is one of `manage_options`, `edit_posts`, `edit_others_posts`, `moderate_comments`, `upload_files`.
 
@@ -147,7 +148,9 @@ func init() {
 | `HandleDashboard(id, fn)` | A dashboard box. |
 | `HandleMigrate(fn)` | The WordPress import; it runs once when the plugin is first activated, and administrators can run it again. |
 
-All HTML from plugins is filtered:
+Dashboard boxes are shown inside the admin, so a stricter filter applies to them: text, links, lists, tables and images only (no `class`, `id`, `style`, `data-*` or form elements).
+
+All other HTML from plugins is filtered:
 - allowed: formatting, links, images, media, forms (to https or same-site targets), `data-*` and `aria-*` attributes;
 - removed: scripts, event handlers, iframes and `javascript:` URLs.
 
@@ -173,6 +176,7 @@ All HTML from plugins is filtered:
   - 5 s for hooks and dashboard boxes;
   - 15 s for routes and admin calls;
   - 2 min for the import.
-- **Memory:** 64 MB per instance. Each plugin has at most 4 instances, so calls run in parallel.
-- **Crashes:** a crash, timeout or oversized answer (more than 2 MB) discards the instance. Five of them within a minute pause the plugin for five minutes: its output is empty, its hooks are skipped and comments keep the core's decision. The admin shows the last error.
+- **Memory:** 64 MB for the plugin's module and 64 MB for the Extism kernel of each instance. Function tables can have at most 2^20 entries (checked before loading). Each plugin has at most 4 instances, so calls run in parallel. Calls that find all instances busy wait up to their time limit, then fail without counting as errors.
+- **Crashes:** a crash, timeout or oversized answer (more than 2 MB) discards the instance.
+- **Cache:** `Invalidate()` takes effect at most once a second per plugin. Five of them within a minute pause the plugin for five minutes: its output is empty, its hooks are skipped and comments keep the core's decision. The admin shows the last error.
 - **Errors the plugin reports** (`return err`) do not count.

@@ -111,13 +111,19 @@ func TestPluginsScreen(t *testing.T) {
 		t.Error("table cell not escaped")
 	}
 	res := post(e, "/admin/plugin/tester/items", editor, url.Values{"action": {"delete"}, "ids[]": {"1"}})
-	if loc := res.Header.Get("Location"); !strings.Contains(loc, "delete") || !strings.Contains(loc, "editor") {
-		t.Errorf("table action: %d %s", res.StatusCode, loc)
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("table action: %d", res.StatusCode)
+	}
+	if p := e.do("GET", "/admin/plugin/tester/items", editor, nil, nil).Body.String(); !strings.Contains(p, "delete [1] by editor") {
+		t.Error("table action notice")
+	}
+	if p := e.do("GET", "/admin/plugin/tester/items?msg=n:Session+expired", editor, nil, nil).Body.String(); strings.Contains(p, "Session expired") {
+		t.Error("notice text from the URL")
 	}
 
 	// Iframe page and its bridge API.
 	frame := e.do("GET", "/admin/plugin/tester/app", admin, nil, nil).Body.String()
-	if !strings.Contains(frame, `sandbox="allow-scripts allow-forms allow-popups allow-modals"`) || strings.Contains(frame, "allow-same-origin") ||
+	if !strings.Contains(frame, `sandbox="allow-scripts allow-forms allow-modals"`) || strings.Contains(frame, "allow-same-origin") ||
 		!strings.Contains(frame, `src="/plugin-ui/tester/app.html"`) {
 		t.Error("iframe sandbox or src")
 	}
