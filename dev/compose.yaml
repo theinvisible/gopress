@@ -18,5 +18,32 @@ services:
       interval: 2s
       timeout: 5s
       retries: 60
+  # Reference WordPress (same version as live) on the dev DB, for golden
+  # files and parity checks. Not exposed beyond localhost.
+  wpref:
+    image: wordpress:7.1.3-php8.3-apache
+    depends_on:
+      wpdb:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: wpdb
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_HOME', 'http://127.0.0.1:8081');
+        define('WP_SITEURL', 'http://127.0.0.1:8081');
+        define('DISABLE_WP_CRON', true);
+        define('AUTOMATIC_UPDATER_DISABLED', true);
+        define('WP_HTTP_BLOCK_EXTERNAL', true);
+    ports:
+      - "127.0.0.1:8081:80"
+    volumes:
+      - ../local/wp-themes/twentytwelve:/var/www/html/wp-content/themes/twentytwelve:ro
+      - ../local/wp-plugins/akismet:/var/www/html/wp-content/plugins/akismet:ro
+      - ../local/wp-plugins/paypal-donations:/var/www/html/wp-content/plugins/paypal-donations:ro
+      - ../local/wp-plugins/foto-slider-lightbox:/var/www/html/wp-content/plugins/foto-slider-lightbox:ro
+      - ../local/uploads:/var/www/html/wp-content/uploads:ro
+      - ./golden:/golden:ro
 volumes:
   gopress-devdb:

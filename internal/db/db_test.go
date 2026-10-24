@@ -37,7 +37,6 @@ func TestPostRoundTripAndQueries(t *testing.T) {
 	d := openTest(t)
 	at := func(s string) Time { tm, _ := time.Parse(TimeLayout, s); return Time{tm} }
 
-
 	for _, p := range []Post{
 		{ID: 10, Type: TypePost, Status: StatusPublish, Slug: "a", Title: "Alpha", Content: "<p>Hello world</p>", Date: at("2024-01-05 10:00:00"), DateGMT: at("2024-01-05 09:00:00")},
 		{ID: 11, Type: TypePost, Status: StatusPublish, Slug: "b", Title: "Beta", Content: "x", Date: at("2024-02-01 00:30:00"), DateGMT: at("2024-01-31 23:30:00")},

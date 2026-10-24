@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"syscall"
 	"time"
 
 	"github.com/theinvisible/gopress/internal/buildinfo"
 	"github.com/theinvisible/gopress/internal/config"
+	"github.com/theinvisible/gopress/internal/wpimport"
 )
 
 const usage = `usage: gopress <command> [flags]
@@ -45,7 +47,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "version", "-v", "--version":
 		fmt.Fprintln(stdout, buildinfo.String())
 		return 0
-	case "import-wp", "backup", "user", "plugin-pack":
+	case "import-wp":
+		return cmdImportWP(rest, stdout, stderr)
+	case "backup", "user", "plugin-pack":
 		fmt.Fprintf(stderr, "gopress %s: not implemented yet\n", cmd)
 		return 2
 	case "help", "-h", "--help":
@@ -97,6 +101,45 @@ func cmdServe(args []string, stderr io.Writer) int {
 	if err := <-errc; err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Error("server failed", "err", err)
 		return 1
+	}
+	return 0
+}
+
+func cmdImportWP(args []string, stdout, stderr io.Writer) int {
+	var cfg config.Config
+	var opts wpimport.Options
+	fs := flag.NewFlagSet("import-wp", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	cfg.RegisterFlags(fs)
+	fs.StringVar(&opts.DSN, "dsn", "", "WordPress database DSN, e.g. user:pass@tcp(127.0.0.1:3306)/wordpress")
+	fs.StringVar(&opts.Prefix, "prefix", "wp_", "WordPress table prefix")
+	fs.StringVar(&opts.UploadsDir, "uploads", "", "WordPress wp-content/uploads directory to copy")
+	fs.BoolVar(&opts.Force, "force", false, "replace an existing GoPress database")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if opts.DSN == "" {
+		fmt.Fprintln(stderr, "import-wp: --dsn is required")
+		return 2
+	}
+	opts.DataDir = cfg.DataDir
+	opts.Log = slog.New(slog.NewTextHandler(stderr, nil))
+
+	rep, err := wpimport.Run(context.Background(), opts)
+	if err != nil {
+		fmt.Fprintf(stderr, "import-wp: %v\n", err)
+		return 1
+	}
+	keys := make([]string, 0, len(rep.Counts))
+	for k := range rep.Counts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Fprintf(stdout, "%-40s %6d\n", k, rep.Counts[k])
+	}
+	for _, w := range rep.Warnings {
+		fmt.Fprintf(stdout, "warning: %s\n", w)
 	}
 	return 0
 }

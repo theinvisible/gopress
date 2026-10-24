@@ -5,7 +5,7 @@ COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS  := -s -w -X $(PKG)/internal/buildinfo.Version=$(VERSION) -X $(PKG)/internal/buildinfo.Commit=$(COMMIT)
 COMPOSE  := docker compose -f dev/compose.yaml
 
-.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts
+.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/gopress
@@ -41,3 +41,15 @@ devdb-reset:
 
 devdb-counts:
 	$(COMPOSE) exec -T wpdb mariadb -uwordpress -pwordpress wordpress < dev/counts.sql | tee local/reference-counts.txt
+
+wpref-up: devdb-up
+	$(COMPOSE) up -d wpref
+	@until curl -fsS -o /dev/null http://127.0.0.1:8081/; do sleep 1; done
+	@echo "reference WordPress on http://127.0.0.1:8081"
+
+wpref-down:
+	$(COMPOSE) stop wpref
+
+# Regenerate golden files for the render package from the reference WordPress.
+golden: wpref-up
+	$(COMPOSE) exec -T wpref php /golden/gen.php > internal/render/testdata/golden.json
