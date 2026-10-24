@@ -115,6 +115,7 @@ CREATE TABLE comments (
 );
 CREATE INDEX comments_post_status_date ON comments (post_id, status, date_gmt);
 CREATE INDEX comments_status_date ON comments (status, date_gmt);
+CREATE INDEX comments_email_status ON comments (author_email, status);
 
 -- Site settings; value is JSON.
 CREATE TABLE options (

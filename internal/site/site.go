@@ -6,6 +6,8 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/netip"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,20 +24,22 @@ type Options struct {
 	UploadsDir string
 	Secret     []byte // HMAC key for comment form tokens
 	CacheBytes int64  // page cache size; 0 disables the cache
-	TrustProxy bool   // take the client IP from X-Real-Ip/X-Forwarded-For
-	Log        *slog.Logger
+	// TrustedProxies are the reverse proxies whose X-Real-Ip and
+	// X-Forwarded-For headers are believed.
+	TrustedProxies []netip.Prefix
+	Log            *slog.Logger
 }
 
 // Site is the public website handler.
 type Site struct {
-	db      *db.DB
-	theme   *theme.Theme
-	opts    Options
-	log     *slog.Logger
-	cache   *pageCache
-	guard   *antispam.Guard
-	static  http.Handler
-	uploads http.Handler
+	db          *db.DB
+	theme       *theme.Theme
+	opts        Options
+	log         *slog.Logger
+	cache       *pageCache
+	guard       *antispam.Guard
+	static      http.Handler
+	uploadsRoot *os.Root
 
 	commentFilter CommentFilter
 	widgets       map[string]WidgetRenderer
@@ -54,6 +58,8 @@ type state struct {
 	links *Links
 	pipe  *render.Pipeline
 	perma *permalinkMatcher
+	// uploads is the set of servable files below the uploads directory.
+	uploads map[string]bool
 }
 
 // New creates the site handler.
@@ -65,7 +71,7 @@ func New(d *db.DB, th *theme.Theme, opts Options) *Site {
 	s.cache = newPageCache(opts.CacheBytes)
 	s.guard = antispam.New(opts.Secret)
 	s.static = staticHandler(th)
-	s.uploads = uploadsHandler(opts.UploadsDir)
+	s.uploadsRoot = openUploadsRoot(opts.UploadsDir)
 	return s
 }
 
@@ -94,15 +100,20 @@ func (s *Site) current(ctx context.Context) (*state, error) {
 	if err != nil {
 		return nil, err
 	}
+	uploads, err := uploadAllowlist(ctx, s.db.R, settings)
+	if err != nil {
+		return nil, err
+	}
 	pipe := render.NewPipeline()
 	pipe.UseSmilies = settings.UseSmilies
 	st := &state{
-		gen:   gen,
-		s:     settings,
-		ix:    ix,
-		links: &Links{home: settings.Home, s: settings, ix: ix},
-		pipe:  pipe,
-		perma: newPermalinkMatcher(settings.Permalink),
+		gen:     gen,
+		s:       settings,
+		ix:      ix,
+		links:   &Links{home: settings.Home, s: settings, ix: ix},
+		pipe:    pipe,
+		perma:   newPermalinkMatcher(settings.Permalink),
+		uploads: uploads,
 	}
 	s.state.Store(st)
 	s.cache.reset(gen)
@@ -117,9 +128,6 @@ func (s *Site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case strings.HasPrefix(p, "/static/"):
 		s.static.ServeHTTP(w, r)
-		return
-	case strings.HasPrefix(p, "/wp-content/uploads/"):
-		s.uploads.ServeHTTP(w, r)
 		return
 	case p == "/wp-comments-post.php":
 		if r.Method == http.MethodGet && r.URL.Query().Get("gp_token") == "1" {
@@ -147,28 +155,22 @@ func (s *Site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	if cacheable(r) {
-		if s.cache.serve(w, r, st.gen) {
-			return
-		}
+	if strings.HasPrefix(r.URL.Path, "/wp-content/uploads/") {
+		s.serveUpload(w, r, st)
+		return
 	}
-	resp := s.handle(st, r)
+	email := s.personalized(r.Context(), r)
+	if email == "" && s.cache.serve(w, r, st.gen) {
+		return
+	}
+	resp := s.handle(st, r, email)
 	if resp.status == http.StatusInternalServerError {
 		s.log.Error("render", "path", r.URL.String(), "err", resp.err)
 	}
-	if cacheable(r) && resp.cacheable() {
+	if email != "" {
+		resp.header.Set("Cache-Control", "private, no-store")
+	} else if resp.cacheable() {
 		s.cache.store(r, st.gen, resp)
 	}
 	resp.write(w, r)
-}
-
-// cacheable reports whether a request may be answered from the page cache:
-// anonymous visitors without per-visitor content.
-func cacheable(r *http.Request) bool {
-	for _, c := range r.Cookies() {
-		if strings.HasPrefix(c.Name, "comment_author_") || strings.HasPrefix(c.Name, "wordpress_logged_in") || c.Name == "gopress_session" {
-			return false
-		}
-	}
-	return r.URL.Query().Get("replytocom") == ""
 }

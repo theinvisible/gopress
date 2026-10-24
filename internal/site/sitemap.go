@@ -100,8 +100,17 @@ func (rq *request) sitemap(name string) *response {
 			}
 		}
 	case "users-1":
-		for _, u := range st.ix.users {
-			url(st.links.AuthorURL(u), "")
+		// Only authors with published posts (their archives are public anyway).
+		authors := map[int64]bool{}
+		for _, list := range st.ix.postsBySlug {
+			for _, p := range list {
+				authors[p.AuthorID] = true
+			}
+		}
+		for id, u := range st.ix.users {
+			if authors[id] {
+				url(st.links.AuthorURL(u), "")
+			}
 		}
 	default:
 		return rq.notFound()

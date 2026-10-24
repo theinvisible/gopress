@@ -26,9 +26,10 @@ var voidElements = map[string]bool{
 }
 
 // BalanceTags closes elements left open in s, a simplified
-// force_balance_tags() for teasers cut at the more tag.
+// force_balance_tags() for teasers and comments. It runs in linear time.
 func BalanceTags(s string) string {
 	var stack []string
+	open := map[string]int{} // name -> number of entries on the stack
 	parts := htmlSplit(s)
 	for i := 1; i < len(parts); i += 2 {
 		el := parts[i]
@@ -46,17 +47,29 @@ func BalanceTags(s string) string {
 		}
 		if !closing {
 			stack = append(stack, name)
+			open[name]++
+			continue
+		}
+		if open[name] == 0 {
 			continue
 		}
 		for k := len(stack) - 1; k >= 0; k-- {
-			if stack[k] == name {
-				stack = stack[:k]
+			top := stack[k]
+			stack = stack[:k]
+			open[top]--
+			if top == name {
 				break
 			}
 		}
 	}
-	for k := len(stack) - 1; k >= 0; k-- {
-		s += "</" + stack[k] + ">"
+	if len(stack) == 0 {
+		return s
 	}
-	return s
+	var b strings.Builder
+	b.Grow(len(s) + 8*len(stack))
+	b.WriteString(s)
+	for k := len(stack) - 1; k >= 0; k-- {
+		b.WriteString("</" + stack[k] + ">")
+	}
+	return b.String()
 }

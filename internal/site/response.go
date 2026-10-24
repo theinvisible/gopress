@@ -65,12 +65,12 @@ func encode(resp *response) *encoded {
 	e.compress = len(resp.body) > 512 && (strings.HasPrefix(ct, "text/") || strings.Contains(ct, "xml") || strings.Contains(ct, "json"))
 	if e.compress {
 		var gz bytes.Buffer
-		zw, _ := gzip.NewWriterLevel(&gz, gzip.BestCompression)
+		zw, _ := gzip.NewWriterLevel(&gz, 6)
 		zw.Write(resp.body)
 		zw.Close()
 		e.gz = gz.Bytes()
 		var br bytes.Buffer
-		bw := brotli.NewWriterLevel(&br, 9)
+		bw := brotli.NewWriterLevel(&br, 5)
 		bw.Write(resp.body)
 		bw.Close()
 		e.br = br.Bytes()

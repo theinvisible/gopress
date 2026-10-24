@@ -12,7 +12,6 @@ import (
 	"io/fs"
 	"path"
 	"strings"
-	"sync"
 )
 
 // Page kinds; each has a templates/<kind>.html defining "main".
@@ -24,8 +23,7 @@ type Theme struct {
 	static fs.FS
 	pages  map[string]*template.Template
 
-	mu     sync.RWMutex
-	hashes map[string]string // static path -> short content hash
+	hashes map[string]string // static path -> short content hash, computed at load
 }
 
 // Load loads theme name from fsys (a directory containing <name>/templates
@@ -53,6 +51,23 @@ func Load(fsys fs.FS, name string) (*Theme, error) {
 	}
 	if base, err = base.ParseFS(root, shared...); err != nil {
 		return nil, fmt.Errorf("theme %s: %w", name, err)
+	}
+	// Hash every static file once; lookups never add entries, so requests
+	// for unknown files cannot grow memory.
+	err = fs.WalkDir(static, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := fs.ReadFile(static, p)
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(data)
+		t.hashes[p] = hex.EncodeToString(sum[:4])
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	for _, kind := range pageKinds {
 		clone, err := base.Clone()
@@ -88,20 +103,9 @@ func (t *Theme) Static() fs.FS { return t.static }
 // hash so it can be cached forever: /static/<theme>/<hash>/<file>.
 func (t *Theme) AssetPath(file string) string {
 	file = strings.TrimPrefix(path.Clean("/"+file), "/")
-	t.mu.RLock()
 	h, ok := t.hashes[file]
-	t.mu.RUnlock()
 	if !ok {
-		data, err := fs.ReadFile(t.static, file)
-		if err != nil {
-			h = "missing"
-		} else {
-			sum := sha256.Sum256(data)
-			h = hex.EncodeToString(sum[:4])
-		}
-		t.mu.Lock()
-		t.hashes[file] = h
-		t.mu.Unlock()
+		h = "missing"
 	}
 	return "/static/" + t.Name + "/" + h + "/" + file
 }

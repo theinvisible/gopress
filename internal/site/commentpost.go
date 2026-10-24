@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/mail"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -29,25 +30,57 @@ type CommentFilter func(r *http.Request, c *db.Comment, post *db.Post) string
 // SetCommentFilter installs the comment filter (used by the plugin host).
 func (s *Site) SetCommentFilter(f CommentFilter) { s.commentFilter = f }
 
-// clientIP returns the visitor address. Proxy headers are only trusted if
-// configured (GoPress behind Traefik).
+// clientIP returns the visitor address. X-Real-Ip/X-Forwarded-For are only
+// trusted when the direct peer is a configured proxy (e.g. Traefik), so
+// clients reaching the server directly cannot fake their address.
 func (s *Site) clientIP(r *http.Request) string {
-	if s.opts.TrustProxy {
-		if ip := strings.TrimSpace(r.Header.Get("X-Real-Ip")); net.ParseIP(ip) != nil {
-			return ip
-		}
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			parts := strings.Split(xff, ",")
-			if ip := strings.TrimSpace(parts[len(parts)-1]); net.ParseIP(ip) != nil {
-				return ip
-			}
-		}
-	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
 	}
-	return host
+	peer, err := netip.ParseAddr(host)
+	if err != nil {
+		return host
+	}
+	peer = peer.Unmap()
+	trusted := false
+	for _, p := range s.opts.TrustedProxies {
+		if p.Contains(peer) {
+			trusted = true
+			break
+		}
+	}
+	if !trusted {
+		return peer.String()
+	}
+	if ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-Ip"))); err == nil {
+		return ip.Unmap().String()
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		if ip, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1])); err == nil {
+			return ip.Unmap().String()
+		}
+	}
+	return peer.String()
+}
+
+// sameOrigin rejects cross-site form posts (another site making visitors'
+// browsers submit comments): Sec-Fetch-Site must not be cross-site and an
+// Origin header, if present, must be the site itself.
+func (s *Site) sameOrigin(r *http.Request, home string) bool {
+	if sfs := r.Header.Get("Sec-Fetch-Site"); sfs == "cross-site" {
+		return false
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" || origin == "null" && r.Header.Get("Sec-Fetch-Site") == "" {
+		return true // old browsers and non-browser clients
+	}
+	h, err := url.Parse(home)
+	if err != nil {
+		return false
+	}
+	return origin == h.Scheme+"://"+h.Host || origin == "https://"+r.Host || origin == "http://"+r.Host
 }
 
 // commentError renders a wp_die()-style error page.
@@ -89,11 +122,13 @@ func (s *Site) postComment(w http.ResponseWriter, r *http.Request) {
 		commentError(w, http.StatusBadRequest, "Invalid request.")
 		return
 	}
-	// Cross-site form posts are allowed (a comment form is a plain form),
-	// but the signed token ties the post to a rendered form.
 	st, err := s.current(r.Context())
 	if err != nil {
 		commentError(w, http.StatusInternalServerError, "Please try again later.")
+		return
+	}
+	if !s.sameOrigin(r, st.s.Home) {
+		commentError(w, http.StatusForbidden, "Comments must be posted from this site.")
 		return
 	}
 	f := r.PostForm
@@ -202,11 +237,14 @@ func (s *Site) postComment(w http.ResponseWriter, r *http.Request) {
 		commentError(w, http.StatusInternalServerError, "The comment could not be saved. Please try again later.")
 		return
 	}
-	s.Invalidate()
+	if c.Status == db.CommentApproved {
+		s.Invalidate() // only approved comments change public pages
+	}
 	s.log.Info("comment stored", "id", c.ID, "post", postID, "status", c.Status)
 
 	if c.Status != db.CommentSpam {
-		s.setCommenterCookies(w, st, author, email, website)
+		remember := !st.s.CookiesOptIn || f.Get("wp-comment-cookies-consent") == "yes"
+		s.setCommenterCookies(w, st, author, email, website, remember)
 	}
 	target := st.links.PostURL(post) + "#comment-" + strconv.FormatInt(c.ID, 10)
 	http.Redirect(w, r, target, http.StatusSeeOther)
@@ -249,15 +287,28 @@ func (s *Site) moderate(r *http.Request, st *state, c *db.Comment) string {
 	return db.CommentApproved
 }
 
-func (s *Site) setCommenterCookies(w http.ResponseWriter, st *state, author, email, website string) {
+// setCommenterCookies sets WordPress' commenter cookies (read by
+// comment-guard.js to pre-fill the form; only with consent if the consent
+// checkbox is enabled) and the signed cookie that reveals the visitor's own
+// pending comments.
+func (s *Site) setCommenterCookies(w http.ResponseWriter, st *state, author, email, website string, remember bool) {
 	h := cookieHash(st.s.Home)
 	secure := strings.HasPrefix(st.s.Home, "https://")
-	for name, value := range map[string]string{"comment_author": author, "comment_author_email": email, "comment_author_url": website} {
-		http.SetCookie(w, &http.Cookie{
-			Name: name + "_" + h, Value: url.QueryEscape(value), Path: "/",
-			MaxAge: 30000000, HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode,
-		})
+	maxAge := 30000000
+	if remember {
+		for name, value := range map[string]string{"comment_author": author, "comment_author_email": email, "comment_author_url": website} {
+			http.SetCookie(w, &http.Cookie{
+				Name: name + "_" + h, Value: url.QueryEscape(value), Path: "/",
+				MaxAge: maxAge, Secure: secure, SameSite: http.SameSiteLaxMode,
+			})
+		}
+	} else {
+		maxAge = 0 // session cookie
 	}
+	http.SetCookie(w, &http.Cookie{
+		Name: commenterCookie, Value: s.signCommenter(email), Path: "/",
+		MaxAge: maxAge, HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode,
+	})
 }
 
 func truncateRunes(s string, n int) string {

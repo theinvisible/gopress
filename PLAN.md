@@ -239,20 +239,20 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 
 ### M1 – Core & import (*result: the imported site runs locally, read-only*)
 - [x] Docs in English, devlog moved to `docs/devlog/`, LICENSE (GPL-2.0-or-later)
-- [ ] SQLite schema and migrations (`internal/db`)
-- [ ] PHP unserialize (`internal/phpser`)
-- [ ] `import-wp`: posts/pages/terms/comments/users/options/media/widgets with the same IDs, plugin data stash
-- [ ] Block → HTML conversion, plugin blocks become shortcodes, same-site URLs become root-relative
-- [ ] Render pipeline: wpautop, wptexturize, smilies, shortcode parser, built-in `[gallery]`/`[caption]`, content image filter (srcset), more tag, excerpts
-- [ ] Golden tests against PHP output (reference WP container)
-- [ ] Copy uploads, route `/wp-content/uploads/…`
-- [ ] Twenty Twelve port: index/single/page/full-width/archive/search/attachment/404, sidebar widgets, customizer values
-- [ ] Comments display (threading, pagination) and form incl. antispam
-- [ ] Permalink router and redirects (`?p=`, `?page_id=`, trailing slash, old slugs, slug guessing)
-- [ ] RSS feeds, sitemaps, robots.txt, canonical, search (FTS5)
-- [ ] Page cache (br/gzip, ETag), load test
-- [ ] Parity check against a local reference WordPress (`dev/parity`)
-- [ ] Security: headers/CSP, comment sanitizing, file serving hardening, server limits, security review
+- [x] SQLite schema and migrations (`internal/db`)
+- [x] PHP unserialize (`internal/phpser`)
+- [x] `import-wp`: posts/pages/terms/comments/users/options/media/widgets with the same IDs, plugin data stash
+- [x] Block → HTML conversion like `do_blocks()` (classic-theme block supports), plugin blocks become shortcodes, same-site URLs become root-relative
+- [x] Render pipeline: wpautop, wptexturize, smilies, shortcode parser, built-in `[gallery]`/`[caption]`, content image filter (srcset), more tag, excerpts, make_clickable
+- [x] Golden tests against PHP output (reference WP container)
+- [x] Copy uploads, route `/wp-content/uploads/…`
+- [x] Twenty Twelve port: index/single/page/full-width/archive/search/attachment/404, sidebar widgets, customizer values
+- [x] Comments display (threading, pagination) and form incl. antispam
+- [x] Permalink router and redirects (`?p=`, `?page_id=`, trailing slash, old slugs, slug guessing)
+- [x] RSS feeds, sitemaps, robots.txt, canonical, search (WordPress-compatible LIKE search instead of FTS5)
+- [x] Page cache (br/gzip, ETag), load test
+- [x] Parity check against a local reference WordPress (`dev/parity`): 162/162 URLs identical
+- [x] Security: headers/CSP, comment sanitizing, file serving hardening, server limits, govulncheck, security review (12 findings fixed, see devlog)
 
 ### M2 – Admin
 - [ ] Auth: login, sessions, CSRF, rate limit + lockout, argon2id, WP hash verification + rehash (see Security)

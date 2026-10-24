@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/theinvisible/gopress/internal/db"
 )
@@ -103,8 +104,9 @@ func isFeedType(s string) bool {
 }
 
 // handle routes a GET request to a response.
-func (s *Site) handle(st *state, r *http.Request) *response {
+func (s *Site) handle(st *state, r *http.Request, commenterEmail string) *response {
 	rq := newRequest(s, st, r)
+	rq.commenter.Email = commenterEmail
 	p := r.URL.Path
 
 	switch p {
@@ -158,7 +160,7 @@ func (rq *request) queryRoute(rt *route) *response {
 			paged = n
 		}
 		if rt.feed != "" || q.Get("feed") != "" {
-			return rq.feed(feedSearch, nil, q.Get("s"))
+			return rq.feed(feedSearch, nil, limitQuery(q.Get("s")))
 		}
 		return rq.search(q.Get("s"), paged)
 	}
@@ -267,7 +269,7 @@ func (rq *request) pathRoute(rt *route) *response {
 		return rq.authorArchive(u, rt.paged)
 	case segs[0] == "search" && len(segs) == 2:
 		if rt.feed != "" {
-			return rq.feed(feedSearch, nil, segs[1])
+			return rq.feed(feedSearch, nil, limitQuery(segs[1]))
 		}
 		return rq.search(segs[1], rt.paged)
 	}
@@ -444,6 +446,19 @@ func dateSegments(segs []string) (y, m, d int, ok bool) {
 		}
 	}
 	return y, m, d, true
+}
+
+// limitQuery caps search input at 200 bytes (on a UTF-8 boundary).
+func limitQuery(q string) string {
+	q = strings.TrimSpace(q)
+	if len(q) <= 200 {
+		return q
+	}
+	q = q[:200]
+	for len(q) > 0 && !utf8.ValidString(q) {
+		q = q[:len(q)-1]
+	}
+	return q
 }
 
 func atoi(s string) int {

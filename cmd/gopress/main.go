@@ -9,10 +9,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -73,12 +75,25 @@ func cmdServe(args []string, stderr io.Writer) int {
 	cfg.RegisterFlags(fs)
 	baseURL := fs.String("base-url", os.Getenv("GOPRESS_BASE_URL"), "public base URL (default: the home option)")
 	cacheMB := fs.Int("cache-mb", 256, "page cache size in MiB (0 disables)")
-	trustProxy := fs.Bool("trust-proxy", os.Getenv("GOPRESS_TRUST_PROXY") == "1", "trust X-Real-Ip/X-Forwarded-For (behind a reverse proxy)")
+	trustedProxies := fs.String("trusted-proxies", os.Getenv("GOPRESS_TRUSTED_PROXIES"),
+		"comma-separated CIDRs of reverse proxies whose X-Real-Ip/X-Forwarded-For are trusted, e.g. 172.16.0.0/12")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 
 	log := slog.New(slog.NewTextHandler(stderr, nil))
+	var proxies []netip.Prefix
+	for _, p := range strings.Split(*trustedProxies, ",") {
+		if p = strings.TrimSpace(p); p == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(p)
+		if err != nil {
+			fmt.Fprintf(stderr, "serve: invalid --trusted-proxies entry %q\n", p)
+			return 2
+		}
+		proxies = append(proxies, prefix)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -103,12 +118,12 @@ func cmdServe(args []string, stderr io.Writer) int {
 		return 1
 	}
 	public := site.New(d, th, site.Options{
-		BaseURL:    *baseURL,
-		UploadsDir: filepath.Join(cfg.DataDir, "uploads"),
-		Secret:     secret,
-		CacheBytes: int64(*cacheMB) << 20,
-		TrustProxy: *trustProxy,
-		Log:        log,
+		BaseURL:        *baseURL,
+		UploadsDir:     filepath.Join(cfg.DataDir, "uploads"),
+		Secret:         secret,
+		CacheBytes:     int64(*cacheMB) << 20,
+		TrustedProxies: proxies,
+		Log:            log,
 	})
 
 	srv := &http.Server{

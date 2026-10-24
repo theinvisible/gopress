@@ -5,7 +5,7 @@ COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS  := -s -w -X $(PKG)/internal/buildinfo.Version=$(VERSION) -X $(PKG)/internal/buildinfo.Commit=$(COMMIT)
 COMPOSE  := docker compose -f dev/compose.yaml
 
-.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden
+.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden import serve parity vulncheck
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/gopress
@@ -53,3 +53,18 @@ wpref-down:
 # Regenerate golden files for the render package from the reference WordPress.
 golden: wpref-up
 	$(COMPOSE) exec -T wpref php /golden/gen.php > internal/render/testdata/golden.json
+
+# Import the dev database into ./local/data (replaces it).
+import: build
+	./$(BIN) import-wp --dsn 'wordpress:wordpress@tcp(127.0.0.1:33066)/wordpress' --uploads ./local/uploads --data ./local/data --force
+
+# (Re)start GoPress on 127.0.0.1:8080 in the background.
+serve:
+	dev/serve-local.sh
+
+# Compare GoPress (8080) with the reference WordPress (8081).
+parity: wpref-up serve
+	go run ./dev/parity
+
+vulncheck:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...

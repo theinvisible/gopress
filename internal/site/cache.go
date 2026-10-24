@@ -3,6 +3,8 @@ package site
 import (
 	"container/list"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 )
 
@@ -28,8 +30,24 @@ func newPageCache(max int64) *pageCache {
 	return &pageCache{max: max, lru: list.New(), items: map[string]*list.Element{}}
 }
 
+// cacheParams are the query parameters that change a response; all others
+// (tracking parameters, cache busters) are ignored for the cache key, so
+// random query strings cannot flood the cache.
+var cacheParams = []string{"s", "paged", "replytocom", "feed", "p", "page_id", "attachment_id", "cat", "tag", "author", "m", "post"}
+
 func cacheKey(r *http.Request) string {
-	return r.URL.Path + "?" + r.URL.RawQuery
+	if r.URL.RawQuery == "" {
+		return r.URL.Path
+	}
+	q := r.URL.Query()
+	var b strings.Builder
+	b.WriteString(r.URL.Path)
+	for _, k := range cacheParams {
+		if v, ok := q[k]; ok {
+			b.WriteString("?" + k + "=" + url.QueryEscape(strings.Join(v, ",")))
+		}
+	}
+	return b.String()
 }
 
 // reset drops all entries if gen is newer than the cached generation.

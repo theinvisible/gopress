@@ -684,6 +684,17 @@ func copyTree(src, dst string) (int, error) {
 			return err
 		}
 		target := filepath.Join(dst, rel)
+		// Skip hidden files/dirs (.htaccess, .git) and server-side scripts;
+		// they are never served and may hold plugin secrets.
+		if strings.HasPrefix(d.Name(), ".") && rel != "." {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if ext := strings.ToLower(filepath.Ext(d.Name())); ext == ".php" || ext == ".phtml" || ext == ".phar" {
+			return nil
+		}
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}

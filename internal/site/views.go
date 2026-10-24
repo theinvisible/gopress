@@ -9,7 +9,6 @@ import (
 	"html"
 	"html/template"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -36,15 +35,15 @@ type request struct {
 	threads map[int64]*commentThreads // comment pagination cache
 }
 
-// commenter is the visitor's identity from the comment cookies.
+// commenter is the visitor's verified identity (signed cookie); used to
+// show their pending comments.
 type commenter struct {
-	Author, Email, URL string
+	Email string
 }
 
 func newRequest(s *Site, st *state, r *http.Request) *request {
 	rq := &request{site: s, st: st, r: r, ctx: r.Context()}
 	rq.env = &render.Env{Ctx: r.Context(), Q: s.db.R, Links: st.links}
-	rq.commenter = readCommenter(r, st.s.Home)
 	return rq
 }
 
@@ -53,19 +52,6 @@ func newRequest(s *Site, st *state, r *http.Request) *request {
 func cookieHash(home string) string {
 	sum := md5.Sum([]byte(home))
 	return hex.EncodeToString(sum[:])
-}
-
-func readCommenter(r *http.Request, home string) commenter {
-	h := cookieHash(home)
-	get := func(name string) string {
-		if c, err := r.Cookie(name + "_" + h); err == nil {
-			if v, err := url.QueryUnescape(c.Value); err == nil {
-				return v
-			}
-		}
-		return ""
-	}
-	return commenter{Author: get("comment_author"), Email: get("comment_author_email"), URL: get("comment_author_url")}
 }
 
 // esc escapes text for HTML (esc_html / esc_attr).
@@ -676,10 +662,7 @@ func monthName(m int) string {
 
 func (rq *request) search(q string, paged int) *response {
 	s := rq.st.s
-	q = strings.TrimSpace(q)
-	if len(q) > 200 {
-		q = q[:200]
-	}
+	q = limitQuery(q)
 	var posts []db.Post
 	total := 0
 	if q != "" {

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/microcosm-cc/bluemonday"
+	"golang.org/x/net/html"
 )
 
 var (
@@ -35,26 +36,48 @@ func SanitizeComment(s string) string {
 	return addRelUGC(unescapeTextQuotes(commentPolicy.Sanitize(s)))
 }
 
-var reAnchor = regexp.MustCompile(`<a\s[^>]*>`)
-
-// addRelUGC makes sure every link in user content carries
-// rel="nofollow ugc" (wp_rel_ugc()).
+// addRelUGC makes sure every link carries rel="nofollow ugc"
+// (wp_rel_ugc()). It works on parsed tokens of the sanitizer output and
+// re-serializes only <a> start tags, so attribute values cannot break out.
 func addRelUGC(s string) string {
-	return reAnchor.ReplaceAllStringFunc(s, func(tag string) string {
-		if m := reRelAttr.FindStringSubmatchIndex(tag); m != nil {
-			rel := strings.Fields(tag[m[2]:m[3]])
-			for _, need := range []string{"nofollow", "ugc"} {
-				if !containsWord(rel, need) {
-					rel = append(rel, need)
-				}
-			}
-			return tag[:m[2]] + strings.Join(rel, " ") + tag[m[3]:]
+	if !strings.Contains(s, "<a") {
+		return s
+	}
+	var b strings.Builder
+	z := html.NewTokenizer(strings.NewReader(s))
+	for {
+		tt := z.Next()
+		if tt == html.ErrorToken {
+			break
 		}
-		return strings.TrimSuffix(tag, ">") + ` rel="nofollow ugc">`
-	})
+		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
+			b.Write(z.Raw())
+			continue
+		}
+		tok := z.Token()
+		if tok.Data != "a" {
+			b.WriteString(tok.String())
+			continue
+		}
+		var rel []string
+		attrs := tok.Attr[:0]
+		for _, a := range tok.Attr {
+			if a.Key == "rel" {
+				rel = strings.Fields(a.Val)
+				continue
+			}
+			attrs = append(attrs, a)
+		}
+		for _, need := range []string{"nofollow", "ugc"} {
+			if !containsWord(rel, need) {
+				rel = append(rel, need)
+			}
+		}
+		tok.Attr = append(attrs, html.Attribute{Key: "rel", Val: strings.Join(rel, " ")})
+		b.WriteString(tok.String())
+	}
+	return b.String()
 }
-
-var reRelAttr = regexp.MustCompile(`\srel="([^"]*)"`)
 
 func containsWord(list []string, w string) bool {
 	for _, x := range list {
@@ -65,9 +88,9 @@ func containsWord(list []string, w string) bool {
 	return false
 }
 
-// unescapeTextQuotes undoes bluemonday's escaping of quotes in text so
-// that wptexturize can turn them into typographic quotes. Attribute values
-// are double-quoted, so &#34; stays escaped inside tags.
+// unescapeTextQuotes undoes bluemonday's escaping of quotes in text nodes
+// so that the output matches WordPress (and wptexturize can process it).
+// Quotes are harmless in text; attribute values keep their escaping.
 func unescapeTextQuotes(s string) string {
 	if !strings.Contains(s, "&#") {
 		return s

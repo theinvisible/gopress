@@ -65,6 +65,15 @@ func newTestSite(t *testing.T) (*Site, http.Handler) {
 		must(db.InsertPost(ctx, q, &posts[i]))
 	}
 	must(db.AddPostTerm(ctx, q, 10, 5, 0))
+	att := db.Post{ID: 40, Type: db.TypeAttachment, Status: db.StatusInherit, Slug: "a", ParentID: 10, MimeType: "image/png",
+		Date: at("2024-02-10 12:00:00"), DateGMT: at("2024-02-10 11:00:00")}
+	must(db.InsertPost(ctx, q, &att))
+	must(db.InsertMedia(ctx, q, &db.Media{PostID: 40, File: "2024/a.png", Mime: "image/png", Width: 300, Height: 300,
+		Sizes: map[string]db.MediaSize{"thumbnail": {File: "a-150x150.png", Width: 150, Height: 150}}}))
+	att2 := db.Post{ID: 41, Type: db.TypeAttachment, Status: db.StatusInherit, Slug: "link", MimeType: "image/png",
+		Date: at("2024-02-10 12:00:00"), DateGMT: at("2024-02-10 11:00:00")}
+	must(db.InsertPost(ctx, q, &att2))
+	must(db.InsertMedia(ctx, q, &db.Media{PostID: 41, File: "2024/link.png", Mime: "image/png"}))
 	must(db.AddSlugRedirect(ctx, q, "old-hello", 10))
 	must(db.InsertComment(ctx, q, &db.Comment{ID: 100, PostID: 10, Type: "comment", Status: db.CommentApproved, Author: "Alice",
 		AuthorEmail: "alice@example.org", Content: "Great <b>post</b>!", Date: at("2024-02-11 10:00:00"), DateGMT: at("2024-02-11 09:00:00")}))
@@ -76,7 +85,12 @@ func newTestSite(t *testing.T) (*Site, http.Handler) {
 	}
 	uploads := filepath.Join(dir, "uploads")
 	os.MkdirAll(filepath.Join(uploads, "2024"), 0o755)
-	os.WriteFile(filepath.Join(uploads, "2024", "a.txt"), []byte("file"), 0o644)
+	os.WriteFile(filepath.Join(uploads, "2024", "a.png"), []byte("file"), 0o644)
+	os.WriteFile(filepath.Join(uploads, "2024", "a-150x150.png"), []byte("thumb"), 0o644)
+	os.WriteFile(filepath.Join(uploads, "2024", "plugin-cache.json"), []byte("secret"), 0o644)
+	os.WriteFile(filepath.Join(uploads, "2024", "orphan.png"), []byte("secret"), 0o644)
+	os.WriteFile(filepath.Join(uploads, "2024", ".htaccess"), []byte("secret"), 0o644)
+	os.Symlink(filepath.Join(dir, "secret.txt"), filepath.Join(uploads, "2024", "link.png"))
 	os.WriteFile(filepath.Join(dir, "secret.txt"), []byte("secret"), 0o644)
 	s := New(d, th, Options{BaseURL: "https://example.org", UploadsDir: uploads, Secret: []byte("k"), CacheBytes: 1 << 20})
 	return s, SecurityHeaders(s)
@@ -165,17 +179,22 @@ func TestSecurityHeaders(t *testing.T) {
 
 func TestUploadsAreConfined(t *testing.T) {
 	_, h := newTestSite(t)
-	if rec := get(t, h, "/wp-content/uploads/2024/a.txt"); rec.Code != 200 || rec.Body.String() != "file" {
+	if rec := get(t, h, "/wp-content/uploads/2024/a.png"); rec.Code != 200 || rec.Body.String() != "file" {
 		t.Errorf("upload: %d %q", rec.Code, rec.Body.String())
 	}
-	for _, p := range []string{"/wp-content/uploads/2024/", "/wp-content/uploads/../secret.txt", "/wp-content/uploads/%2e%2e/secret.txt", "/static/twentytwelve/x/../../secret.txt"} {
+	if rec := get(t, h, "/wp-content/uploads/2024/a-150x150.png"); rec.Code != 200 {
+		t.Errorf("generated size: %d", rec.Code)
+	}
+	for _, p := range []string{"/wp-content/uploads/2024/", "/wp-content/uploads/../secret.txt", "/wp-content/uploads/%2e%2e/secret.txt",
+		"/static/twentytwelve/x/../../secret.txt", "/wp-content/uploads/2024/plugin-cache.json", "/wp-content/uploads/2024/orphan.png",
+		"/wp-content/uploads/2024/.htaccess", "/wp-content/uploads/2024/link.png"} {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.URL.Path = p
 		req.URL.RawPath = ""
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
 		if rec.Code == 200 && strings.Contains(rec.Body.String(), "secret") {
-			t.Errorf("%s leaked a file outside uploads", p)
+			t.Errorf("%s leaked a protected file", p)
 		}
 		if strings.HasSuffix(p, "/") && rec.Code != 404 {
 			t.Errorf("%s: directory listing status %d", p, rec.Code)
@@ -183,10 +202,13 @@ func TestUploadsAreConfined(t *testing.T) {
 	}
 }
 
+var tokenSeq int
+
 func postComment(t *testing.T, h http.Handler, s *Site, form url.Values, tokenAge time.Duration) *httptest.ResponseRecorder {
 	t.Helper()
 	if form.Get(antispam.TokenField) == "" {
-		form.Set(antispam.TokenField, s.guard.Token(10, time.Now().Add(-tokenAge)))
+		tokenSeq++ // tokens are single-use: make each one unique
+		form.Set(antispam.TokenField, s.guard.Token(10, time.Now().Add(-tokenAge-time.Duration(tokenSeq)*time.Second)))
 	}
 	req := httptest.NewRequest(http.MethodPost, "/wp-comments-post.php", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -215,8 +237,14 @@ func TestCommentSubmission(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("valid comment: %d %s", rec.Code, rec.Body.String())
 	}
-	if c := rec.Result().Cookies(); len(c) == 0 || !c[0].HttpOnly {
-		t.Errorf("commenter cookies missing or not HttpOnly: %v", c)
+	var signed *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == commenterCookie {
+			signed = c
+		}
+	}
+	if signed == nil || !signed.HttpOnly {
+		t.Errorf("signed commenter cookie missing or not HttpOnly: %v", rec.Result().Cookies())
 	}
 	var content, status, website string
 	s.db.R.QueryRow(`SELECT content, status, author_url FROM comments WHERE author = 'Bob'`).Scan(&content, &status, &website)
@@ -239,6 +267,7 @@ func TestCommentSubmission(t *testing.T) {
 	if status != db.CommentPending {
 		t.Errorf("comment with 2 links: status %q, want pending", status)
 	}
+	f.Del(antispam.TokenField) // fresh token, same content
 	if rec := postComment(t, h, s, f, time.Minute); rec.Code != http.StatusConflict {
 		t.Errorf("duplicate: %d", rec.Code)
 	}
@@ -246,6 +275,15 @@ func TestCommentSubmission(t *testing.T) {
 	f.Set("comment_post_ID", "20") // comments closed
 	if rec := postComment(t, h, s, f, time.Minute); rec.Code != http.StatusForbidden {
 		t.Errorf("closed: %d", rec.Code)
+	}
+	f = base("hi")
+	req := httptest.NewRequest(http.MethodPost, "/wp-comments-post.php", strings.NewReader(f.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://evil.example")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("cross-site post: %d", rec.Code)
 	}
 	big := base(strings.Repeat("x", maxCommentBody+10))
 	if rec := postComment(t, h, s, big, time.Minute); rec.Code != http.StatusRequestEntityTooLarge {
@@ -271,12 +309,44 @@ func TestPageCache(t *testing.T) {
 	if rec.Code != http.StatusNotModified {
 		t.Errorf("If-None-Match: %d", rec.Code)
 	}
-	// Visitors with commenter cookies bypass the cache.
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
-	req.AddCookie(&http.Cookie{Name: "comment_author_x", Value: "y"})
-	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Header().Get("X-Cache") == "HIT" {
-		t.Error("cache served a visitor with comment cookies")
+	// Random query parameters and unsigned commenter cookies cannot bypass
+	// or flood the cache.
+	for _, c := range []*http.Cookie{{Name: "comment_author_email_x", Value: "a@b.c"}, {Name: commenterCookie, Value: "Zm9v.bad"}} {
+		req = httptest.NewRequest(http.MethodGet, "/?utm_source=x", nil)
+		req.AddCookie(c)
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Header().Get("X-Cache") != "HIT" {
+			t.Errorf("cookie %s bypassed the cache", c.Name)
+		}
+	}
+}
+
+func TestPendingCommentsOnlyForSignedCommenter(t *testing.T) {
+	s, h := newTestSite(t)
+	s.db.W.Exec(`INSERT INTO comments (id, post_id, type, status, author, author_email, content, date_local, date_gmt)
+		VALUES (200, 10, 'comment', 'pending', 'Eve', 'eve@example.org', 'Pending text', '2024-02-12 10:00:00', '2024-02-12 09:00:00')`)
+	page := func(c *http.Cookie) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/2024/02/hello-world/", nil)
+		if c != nil {
+			req.AddCookie(c)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	if strings.Contains(page(nil).Body.String(), "Pending text") {
+		t.Error("pending comment visible to everyone")
+	}
+	forged := &http.Cookie{Name: "comment_author_email_" + cookieHash("https://example.org"), Value: "eve%40example.org"}
+	if strings.Contains(page(forged).Body.String(), "Pending text") {
+		t.Error("pending comment visible with a forged WordPress cookie")
+	}
+	rec := page(&http.Cookie{Name: commenterCookie, Value: s.signCommenter("eve@example.org")})
+	if !strings.Contains(rec.Body.String(), "Pending text") || !strings.Contains(rec.Body.String(), "awaiting moderation") {
+		t.Error("pending comment not shown to its author")
+	}
+	if rec.Header().Get("Cache-Control") != "private, no-store" {
+		t.Errorf("personalized page Cache-Control = %q", rec.Header().Get("Cache-Control"))
 	}
 }

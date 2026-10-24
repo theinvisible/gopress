@@ -3,6 +3,8 @@ package render
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
 )
 
 func TestMakeClickable(t *testing.T) {
@@ -32,5 +34,38 @@ func TestSanitizeComment(t *testing.T) {
 	}
 	if !strings.Contains(got, `href="https://ok.example"`) || !strings.Contains(got, `rel="nofollow ugc"`) {
 		t.Errorf("SanitizeComment = %s", got)
+	}
+}
+
+func TestSanitizeCommentRelInjection(t *testing.T) {
+	// A " rel=" inside another attribute value must not be treated as the
+	// rel attribute (found by the M1 security review).
+	in := `<a title="z rel=" href="https://e.com/a/onmouseover=alert(1)//">x</a> <a href="https://f.example" rel="external">y</a>`
+	for range 2 { // sanitized on save and again on output
+		in = SanitizeComment(in)
+	}
+	z := html.NewTokenizer(strings.NewReader(in))
+	var links [][]html.Attribute
+	for tt := z.Next(); tt != html.ErrorToken; tt = z.Next() {
+		if tok := z.Token(); tt == html.StartTagToken && tok.Data == "a" {
+			links = append(links, tok.Attr)
+		}
+	}
+	if len(links) != 2 {
+		t.Fatalf("links: %s", in)
+	}
+	for _, a := range links[0] {
+		switch a.Key {
+		case "title", "href":
+		case "rel":
+			if a.Val != "nofollow ugc" {
+				t.Errorf("rel = %q", a.Val)
+			}
+		default:
+			t.Errorf("injected attribute %s=%q in %s", a.Key, a.Val, in)
+		}
+	}
+	if !strings.Contains(in, `rel="external nofollow ugc"`) {
+		t.Errorf("rel attributes: %s", in)
 	}
 }

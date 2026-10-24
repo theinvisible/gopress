@@ -2,6 +2,7 @@ package antispam
 
 import (
 	"net/url"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -24,15 +25,23 @@ func TestCheck(t *testing.T) {
 	if r := g.Check(form(tok, ""), 7, "1.2.3.4", now.Add(72*time.Hour)); r != Expired {
 		t.Errorf("old = %q", r)
 	}
-	for i := range RateMax {
-		if r := g.Check(form(tok, ""), 7, "1.2.3.4", now.Add(time.Minute+time.Duration(i)*time.Second)); r != OK {
-			t.Fatalf("submit %d = %q", i, r)
+	if r := g.Check(form(tok, ""), 7, "1.2.3.4", now.Add(time.Minute)); r != OK {
+		t.Fatalf("valid = %q", r)
+	}
+	if r := g.Check(form(tok, ""), 7, "1.2.3.4", now.Add(time.Minute)); r != Reused {
+		t.Errorf("reused token = %q", r)
+	}
+	// Different addresses of one IPv6 /64 share a limit.
+	for i := range RateMax + 1 {
+		tok := g.Token(7, now.Add(time.Duration(i+100)*time.Second))
+		ip := "2001:db8::" + strconv.Itoa(i+1)
+		r := g.Check(form(tok, ""), 7, ip, now.Add(5*time.Minute))
+		if i < RateMax && r != OK || i == RateMax && r != RateLimited {
+			t.Fatalf("submit %d from %s = %q", i, ip, r)
 		}
 	}
-	if r := g.Check(form(tok, ""), 7, "1.2.3.4", now.Add(2*time.Minute)); r != RateLimited {
-		t.Errorf("rate = %q", r)
-	}
-	if r := g.Check(form(tok, ""), 7, "5.6.7.8", now.Add(2*time.Minute)); r != OK {
+	tok2 := g.Token(7, now.Add(30*time.Second))
+	if r := g.Check(form(tok2, ""), 7, "5.6.7.8", now.Add(2*time.Minute)); r != OK {
 		t.Errorf("other ip = %q", r)
 	}
 }
