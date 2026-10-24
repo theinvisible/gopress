@@ -1,6 +1,12 @@
 package wpimport
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"regexp"
+	"strings"
+	"testing"
+)
 
 func TestConvertBlocks(t *testing.T) {
 	in := "<!-- wp:paragraph -->\n<p>Hi</p>\n<!-- /wp:paragraph -->\n\n" +
@@ -9,7 +15,7 @@ func TestConvertBlocks(t *testing.T) {
 		"<!-- wp:image {\"id\":5} -->\n<figure><img class=\"wp-image-5\"/></figure>\n<!-- /wp:image -->\n" +
 		"<!-- regular comment -->"
 	got, warnings := convertContent(in, "https://example.org")
-	want := "<p>Hi</p>\n\n\n[fotogalerie id=\"791\"]\n\n<!--more-->\n\n\n<figure><img class=\"wp-image-5\"/></figure>\n\n<!-- regular comment -->"
+	want := "<p class=\"wp-block-paragraph\">Hi</p>\n\n\n[fotogalerie id=\"791\"]\n\n\n<!--more-->\n\n\n\n<figure><img class=\"wp-image-5\"/></figure>\n\n<!-- regular comment -->"
 	if got != want {
 		t.Errorf("convertContent =\n%q\nwant\n%q", got, want)
 	}
@@ -24,5 +30,30 @@ func TestConvertClassicAndURLs(t *testing.T) {
 	want := "<p>See <a href=\"/2020/01/x/\">https://example.org/2020/01/x/</a></p>\n[gallery ids=\"1,2\"]\n"
 	if got != want {
 		t.Errorf("convertContent =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// TestBlocksGolden compares the block conversion with do_blocks() output of
+// the reference WordPress (internal/render/testdata/golden.json).
+func TestBlocksGolden(t *testing.T) {
+	raw, err := os.ReadFile("../render/testdata/golden.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct{ Name, In, Blocks string }
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		t.Fatal(err)
+	}
+	norm := regexp.MustCompile(` wp-container-[\w-]+-is-layout-[0-9a-f]+| wp-block-gallery-\d+`)
+	for _, c := range cases {
+		if c.Blocks == "" || strings.Contains(c.In, "foto-slider-lightbox/gallery") {
+			continue
+		}
+		got, _ := convertBlocks(c.In)
+		want := strings.TrimSpace(norm.ReplaceAllString(c.Blocks, ""))
+		got = norm.ReplaceAllString(got, "")
+		if got != want {
+			t.Errorf("%s:\n--- got\n%s\n--- want\n%s", c.Name, got, want)
+		}
 	}
 }

@@ -36,6 +36,10 @@ $edge = array(
 	'div'             => "<div>text</div>\n\nmore",
 	'nested-shortcode'=> "[paypal-donation]",
 	'wordpress'       => 'I use Wordpress daily.',
+	'block-group'     => "<!-- wp:group -->\n<div class=\"wp-block-group\"><!-- wp:paragraph -->\n<p>x</p>\n<!-- /wp:paragraph --></div>\n<!-- /wp:group -->",
+	'block-heading'   => "<!-- wp:heading -->\n<h2 class=\"wp-block-heading\">H</h2>\n<!-- /wp:heading -->",
+	'block-list-ol'   => "<!-- wp:list {\"ordered\":true} -->\n<ol><!-- wp:list-item -->\n<li>a</li>\n<!-- /wp:list-item --></ol>\n<!-- /wp:list -->",
+	'block-p-class'   => "<!-- wp:paragraph {\"className\":\"x\"} -->\n<p class=\"x\">y</p>\n<!-- /wp:paragraph -->",
 );
 foreach ( $edge as $k => $v ) {
 	$cases[ 'edge-' . $k ] = $v;
@@ -53,6 +57,7 @@ foreach ( $cases as $name => $in ) {
 		'smilies'   => convert_smilies( $in ),
 		'dangit'    => capital_P_dangit( $in ),
 		'excerpt'   => wp_trim_words( excerpt_remove_blocks( strip_shortcodes( $in ) ), 55, ' [&hellip;]' ),
+		'blocks'    => has_blocks( $in ) ? do_blocks( $in ) : '',
 	);
 }
 echo json_encode( $out, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ), "\n";

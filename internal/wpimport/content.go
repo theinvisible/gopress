@@ -3,6 +3,7 @@ package wpimport
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/theinvisible/gopress/internal/render"
@@ -25,12 +26,6 @@ var dynamicBlocks = map[string]func(attrs map[string]any) (string, bool){
 		}
 		return fmt.Sprintf(`[fotogalerie id="%d"]`, int64(id)), true
 	},
-	"core/more": func(a map[string]any) (string, bool) {
-		if text, ok := a["customText"].(string); ok && text != "" {
-			return "<!--more " + text + "-->", true
-		}
-		return "<!--more-->", true
-	},
 }
 
 // convertContent turns stored WordPress post content into GoPress content:
@@ -47,14 +42,41 @@ func convertContent(content, homeURL string) (string, []string) {
 	return relativizeURLs(content, homeURL), warnings
 }
 
-// convertBlocks strips block delimiters following the block grammar:
+// convertBlocks renders block content the way do_blocks() does for the
+// blocks used on the source site, so the stored HTML needs no block
+// rendering later. The block grammar is
 //
 //	<!-- wp:name {json} -->inner<!-- /wp:name -->  or  <!-- wp:name {json} /-->
 //
-// "name" without a namespace means "core/name".
+// where "name" without a namespace means "core/name". Static blocks keep
+// their saved HTML plus the classes WordPress adds at render time (layout
+// classes, wp-block-paragraph, ...); dynamic blocks become shortcodes.
 func convertBlocks(content string) (string, []string) {
-	var b strings.Builder
+	root, warnings := parseBlocks(content)
+	r := blockRenderer{}
+	out := r.renderChildren(root)
+	return strings.TrimSpace(out), append(warnings, r.warnings...)
+}
+
+type blockNode struct {
+	text     string // for text nodes (name == "")
+	name     string
+	attrs    map[string]any
+	children []*blockNode
+}
+
+// parseBlocks builds the block tree. Unbalanced delimiters are treated as
+// text.
+func parseBlocks(content string) (*blockNode, []string) {
+	root := &blockNode{name: "root"}
+	stack := []*blockNode{root}
 	var warnings []string
+	top := func() *blockNode { return stack[len(stack)-1] }
+	addText := func(t string) {
+		if t != "" {
+			top().children = append(top().children, &blockNode{text: t})
+		}
+	}
 	i := 0
 	for {
 		j := strings.Index(content[i:], "<!--")
@@ -69,36 +91,210 @@ func convertBlocks(content string) (string, []string) {
 		end += start + 3
 		name, attrs, closing, selfClosing, ok := parseDelimiter(content[start:end])
 		if !ok {
-			b.WriteString(content[i:end])
+			addText(content[i:end])
 			i = end
 			continue
 		}
-		b.WriteString(content[i:start])
+		addText(content[i:start])
 		i = end
-		if closing {
-			continue
-		}
-		if conv, isDynamic := dynamicBlocks[name]; isDynamic {
-			if out, ok := conv(attrs); ok {
-				b.WriteString(out)
+		switch {
+		case closing:
+			if len(stack) > 1 && top().name == name {
+				stack = stack[:len(stack)-1]
 			} else {
-				warnings = append(warnings, fmt.Sprintf("block %s: cannot convert attrs %v", name, attrs))
+				warnings = append(warnings, "unbalanced closer for "+name)
 			}
-			if !selfClosing {
-				// Skip the (ignored) inner content up to the closer.
-				closer := "<!-- /wp:" + strings.TrimPrefix(name, "core/") + " -->"
-				if k := strings.Index(content[i:], closer); k >= 0 {
-					i += k + len(closer)
-				}
-			}
-			continue
-		}
-		if selfClosing && !strings.HasPrefix(name, "core/") {
-			warnings = append(warnings, "unknown dynamic block "+name+" dropped")
+		case selfClosing:
+			top().children = append(top().children, &blockNode{name: name, attrs: attrs})
+		default:
+			b := &blockNode{name: name, attrs: attrs}
+			top().children = append(top().children, b)
+			stack = append(stack, b)
 		}
 	}
-	b.WriteString(content[i:])
-	return strings.TrimSpace(b.String()), warnings
+	addText(content[i:])
+	if len(stack) > 1 {
+		warnings = append(warnings, "unclosed block "+top().name)
+	}
+	return root, warnings
+}
+
+type blockRenderer struct {
+	galleries int
+	warnings  []string
+}
+
+func (r *blockRenderer) renderChildren(b *blockNode) string {
+	var sb strings.Builder
+	for _, c := range b.children {
+		if c.name == "" {
+			sb.WriteString(c.text)
+		} else {
+			sb.WriteString(r.render(c))
+		}
+	}
+	return sb.String()
+}
+
+func (r *blockRenderer) render(b *blockNode) string {
+	if conv, ok := dynamicBlocks[b.name]; ok {
+		out, ok := conv(b.attrs)
+		if !ok {
+			r.warnings = append(r.warnings, fmt.Sprintf("block %s: cannot convert attrs %v", b.name, b.attrs))
+		}
+		return out
+	}
+	inner := r.renderChildren(b)
+	if !strings.HasPrefix(b.name, "core/") {
+		r.warnings = append(r.warnings, "unknown block "+b.name+" rendered as saved HTML")
+		return inner
+	}
+	switch b.name {
+	case "core/paragraph":
+		return addClassToFirstTag(inner, "wp-block-paragraph")
+	case "core/image":
+		return restoreImageOuterContainer(inner, b.attrs)
+	case "core/list":
+		if !strings.Contains(firstTag(inner), "wp-block-list") {
+			return addClassToFirstTag(inner, "wp-block-list")
+		}
+	case "core/quote":
+		return addClassToFirstTag(inner, "is-layout-flow wp-block-quote-is-layout-flow")
+	case "core/column":
+		return addClassToFirstTag(inner, "is-layout-flow wp-block-column-is-layout-flow")
+	case "core/columns":
+		return addClassToFirstTag(inner, "is-layout-flex wp-block-columns-is-layout-flex")
+	case "core/gallery":
+		r.galleries++
+		inner = addClassToFirstTag(inner, fmt.Sprintf("wp-block-gallery-%d is-layout-flex wp-block-gallery-is-layout-flex", r.galleries))
+		return addImageDataIDs(inner)
+	case "core/group":
+		layout := "flow"
+		if l, ok := b.attrs["layout"].(map[string]any); ok {
+			if t, ok := l["type"].(string); ok && t != "default" {
+				layout = t
+			}
+		}
+		// Classic themes get the inner container wrapper
+		// (wp_restore_group_inner_container).
+		open := firstTagEnd(inner)
+		closeAt := strings.LastIndex(inner, "</")
+		if open < 0 || closeAt < open {
+			return inner
+		}
+		return inner[:open] + `<div class="wp-block-group__inner-container is-layout-` + layout +
+			` wp-block-group-is-layout-` + layout + `">` + inner[open:closeAt] + "</div>" + inner[closeAt:]
+	}
+	return inner
+}
+
+// restoreImageOuterContainer is wp_restore_image_outer_container(): in
+// classic themes, aligned images get a <div class="wp-block-image"> wrapper
+// that takes over the wp-block-image class.
+func restoreImageOuterContainer(inner string, attrs map[string]any) string {
+	tag := firstTag(inner)
+	if !strings.HasPrefix(tag, "<figure") {
+		return inner
+	}
+	m := reClassAttr.FindStringSubmatchIndex(tag)
+	if m == nil {
+		return inner
+	}
+	classes := strings.Fields(tag[m[2]:m[3]])
+	has := func(c string) bool {
+		for _, x := range classes {
+			if x == c {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("wp-block-image") || !(has("alignleft") || has("aligncenter") || has("alignright")) {
+		return inner
+	}
+	wrapper := []string{"wp-block-image"}
+	if cn, ok := attrs["className"].(string); ok {
+		wrapper = append(wrapper, strings.Fields(cn)...)
+	}
+	var kept []string
+	for _, c := range classes {
+		moved := false
+		for _, w := range wrapper {
+			if c == w {
+				moved = true
+			}
+		}
+		if !moved {
+			kept = append(kept, c)
+		}
+	}
+	newTag := tag[:m[2]] + strings.Join(kept, " ") + tag[m[3]:]
+	return `<div class="` + strings.Join(wrapper, " ") + `">` + strings.Replace(inner, tag, newTag, 1) + "</div>"
+}
+
+// firstTag returns the first start tag in s.
+func firstTag(s string) string {
+	i := strings.IndexByte(s, '<')
+	if i < 0 {
+		return ""
+	}
+	j := strings.IndexByte(s[i:], '>')
+	if j < 0 {
+		return ""
+	}
+	return s[i : i+j+1]
+}
+
+// firstTagEnd returns the offset after the first start tag, or -1.
+func firstTagEnd(s string) int {
+	i := strings.IndexByte(s, '<')
+	if i < 0 {
+		return -1
+	}
+	j := strings.IndexByte(s[i:], '>')
+	if j < 0 {
+		return -1
+	}
+	return i + j + 1
+}
+
+var reClassAttr = regexp.MustCompile(`\sclass="([^"]*)"`)
+
+// addClassToFirstTag appends classes to the class attribute of the first
+// start tag in s, adding the attribute if needed.
+func addClassToFirstTag(s, classes string) string {
+	tag := firstTag(s)
+	if tag == "" {
+		return s
+	}
+	var newTag string
+	if m := reClassAttr.FindStringSubmatchIndex(tag); m != nil {
+		existing := tag[m[2]:m[3]]
+		joined := strings.TrimSpace(existing + " " + classes)
+		newTag = tag[:m[2]] + joined + tag[m[3]:]
+	} else {
+		name := tag[1:]
+		k := strings.IndexAny(name, " \t\n/>")
+		if k < 0 {
+			return s
+		}
+		newTag = "<" + name[:k] + ` class="` + classes + `"` + name[k:]
+	}
+	return strings.Replace(s, tag, newTag, 1)
+}
+
+var reWPImageClass = regexp.MustCompile(`<img ([^>]*class="[^"]*wp-image-(\d+)[^"]*"[^>]*)>`)
+
+// addImageDataIDs adds data-id="N" to gallery images, as the gallery block
+// renderer does.
+func addImageDataIDs(s string) string {
+	return reWPImageClass.ReplaceAllStringFunc(s, func(tag string) string {
+		if strings.Contains(tag, "data-id=") {
+			return tag
+		}
+		m := reWPImageClass.FindStringSubmatch(tag)
+		return `<img data-id="` + m[2] + `" ` + m[1] + `>`
+	})
 }
 
 // parseDelimiter parses a block comment such as `<!-- wp:image {"id":1} -->`.
