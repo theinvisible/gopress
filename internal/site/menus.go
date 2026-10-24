@@ -92,7 +92,7 @@ func (rq *request) navMenu(menuID int64, ulClass string, current *db.Post, isFro
 			ancestor[p] = true
 		}
 	}
-	slug := sanitizeClass(strings.ToLower(menu.Name))
+	slug := menuSlug(menu.Name)
 	var b strings.Builder
 	fmt.Fprintf(&b, "<div class=\"menu-%s-container\"><ul id=\"menu-%s\" class=\"%s\">", slug, slug, ulClass)
 	var walk func(list []int, depth int)
@@ -179,4 +179,25 @@ func (rq *request) curPostObj() *db.Post {
 		return nil
 	}
 	return rq.st.ix.posts[rq.curPost]
+}
+
+// menuSlug is the menu term's slug (sanitize_title for ASCII names).
+func menuSlug(name string) string {
+	var b strings.Builder
+	dash := false
+	for _, c := range strings.ToLower(name) {
+		switch {
+		case c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_':
+			b.WriteRune(c)
+			dash = false
+		case !dash && b.Len() > 0:
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	s := strings.Trim(b.String(), "-")
+	if s == "" {
+		return "menu"
+	}
+	return s
 }

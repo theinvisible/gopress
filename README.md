@@ -45,6 +45,30 @@ create their setup code on the server. Break-glass commands for whoever has acce
 ./bin/gopress user revoke-sessions --data ./data alice
 ```
 
+Administrators manage users in the admin as well (Users › Add User): an invitation link (mailed
+and/or shown once) lets the new user choose a password and set up two-factor authentication.
+
+### Email
+
+Password resets, invitations, security notices and comment notifications are sent through an SMTP
+server configured under Settings › Email (STARTTLS or TLS is required, except for a relay on
+localhost; the password is stored encrypted with a key derived from `data/secret.key`). Until it
+is configured, messages wait in the queue. `gopress mail queue` lists it, `gopress mail test --to
+you@example.org` sends a test message. For development, `gopress serve --mail-sink DIR` writes
+every message as an `.eml` file instead of sending it.
+
+### Media
+
+Uploads (images, PDF, archives, audio/video; never HTML, SVG or scripts) are checked against their
+content. Location data and other metadata (EXIF/GPS, XMP, IPTC) are removed from photos without
+re-encoding them, the EXIF orientation is applied, and the image sizes from Settings › Media are
+created in pure Go. Images can also be pasted (Ctrl+V) or dropped into the editor.
+
+```sh
+./bin/gopress media regenerate --data ./data [--missing]   # after changing the image sizes
+./bin/gopress media strip-metadata --data ./data [--apply]  # older uploads: list (or clean) files with metadata
+```
+
 Behind a reverse proxy, pass `--trusted-proxies` and make sure the proxy sets (overwrites)
 `X-Real-Ip` or appends to `X-Forwarded-For` (Traefik and nginx with `proxy_set_header` do);
 client addresses are used for rate limits and the audit log.
