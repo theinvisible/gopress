@@ -4,7 +4,7 @@ A high-performance, single-binary WordPress alternative written in Go – built 
 WordPress stack behind [hadler.me](https://hadler.me). WordPress-like admin, SQLite embedded,
 plugins as WebAssembly (Extism/wazero).
 
-Status: early development. Plan, milestones and devlog: [PLAN.md](PLAN.md).
+Status: early development. Plan and milestones: [PLAN.md](PLAN.md), devlog: [docs/devlog/](docs/devlog/README.md).
 
 ## Build & run
 
@@ -25,3 +25,9 @@ make devdb-counts   # reference counts -> local/reference-counts.txt
 ```
 
 `./local` contains personal data (comments, donor data) and must never be committed.
+
+## License
+
+GPL-2.0-or-later (`SPDX-License-Identifier: GPL-2.0-or-later`), see [LICENSE](LICENSE).
+GoPress ports parts of WordPress (e.g. `wpautop`, `wptexturize`) and ships the Twenty Twelve
+theme assets, both licensed GPLv2 or later.

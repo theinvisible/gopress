@@ -1,331 +1,273 @@
-# GoPress – WordPress-Ersatz als Go Single-Binary für hadler.me
+# GoPress – a single-binary WordPress replacement in Go for hadler.me
+
+Devlog: [docs/devlog/](docs/devlog/README.md)
 
 ## Context
 
-hadler.me („Bits and Bytes“) läuft auf `root@hadler.me` als Docker-Stack: `wp-app` (wordpress:7.1.3-php8.3-apache) + `wp-db` (mariadb:11.8) hinter Traefik.
-Ziel: eine schnelle Single-Binary in Go, die sich im Admin wie WordPress bedient, Plugins als WASM lädt und die bestehende Seite ohne sichtbaren Bruch ersetzt (gleiche URLs, gleicher Look).
+hadler.me ("Bits and Bytes") runs on `root@hadler.me` as a Docker stack: `wp-app` (wordpress:7.1.3-php8.3-apache) + `wp-db` (mariadb:11.8) behind Traefik.
+Goal: a fast single binary in Go that is operated like WordPress in the admin, loads plugins as WASM and replaces the existing site without a visible break (same URLs, same look).
 
-**Ist-Stand (live gelesen):**
-- Theme **Twenty Twelve**. Theme-Mods: Hintergrund `#e6e6e6` mit Bild `uploads/2014/04/IMG_0485.jpg`, fixed/repeat, Header-Textfarbe `#515151`. Keine Nav-Menüs (Default-Seitenliste).
-- Permalinks `/%year%/%monthnum%/%postname%/`, Locale en_US, Startseite = neueste Posts.
-- Inhalt: 61 Posts, 24 Pages, 52 Attachments (41 MB Uploads), 39 Terms, 1 User. Kommentare: 679 freigegeben, 97 pending, 2144 Spam. 341 Revisionen (werden nicht importiert).
-- 87 Posts nutzen Gutenberg-Block-Markup, der Rest ist klassisches HTML (braucht wpautop). Shortcodes im Einsatz: `[gallery ids=…]`, `[paypal-donation]`. Blöcke: `foto-slider-lightbox/gallery {"galleryId":791}`, core gallery/image/columns/group/quote/list.
-- Sidebar-1-Widgets: search, block (leer), paypal_donations („Donate“), text („Partner Sites“), recent-posts, categories, tag_cloud, archives, meta.
+**Current state (read from the live site):**
+- Theme **Twenty Twelve**. Theme mods: background `#e6e6e6` with image `uploads/2014/04/IMG_0485.jpg`, fixed/repeat, header text color `#515151`. No nav menus (default page list).
+- Permalinks `/%year%/%monthnum%/%postname%/`, locale en_US, front page = latest posts.
+- Content: 61 posts, 24 pages, 52 attachments (41 MB uploads), 39 terms, 1 user. Comments: 679 approved (650 comments + 29 pingbacks), 97 pending, ~2145 spam. 341 revisions (not imported).
+- 15 posts and 3 pages use Gutenberg block markup, the rest is classic HTML (needs wpautop). Shortcodes in use: `[gallery ids=…]`, `[paypal-donation]`. Blocks: `foto-slider-lightbox/gallery {"galleryId":791}`, core gallery/image/columns/group/quote/list/code/more.
+- Sidebar-1 widgets: search, block (empty), paypal_donations ("Donate"), text ("Partner Sites"), recent-posts, categories, tag_cloud, archives, meta.
 - Plugins:
-  - **paypal-donations**: Optionen `paypal_donations_options` (account rene@hadler.me, EUR, button large, new_tab …).
-  - **foto-slider-lightbox** (eigenes Plugin, Swiper lokal): CPT `fslb_gallery` 791 mit Meta `_fslb_image_ids` und `_fslb_show_captions`.
-  - Alt-CPT `donation_list`: 53 IPN-Einträge.
-  - Ersetzt bzw. entfällt: akismet → eigenes Plugin; google-sitemap-generator, duplicate-post → Core; wpforms-lite (ungenutzt), ai, analytics → entfallen.
+  - **paypal-donations**: options `paypal_donations_options` (account rene@hadler.me, EUR, button large, new_tab …).
+  - **foto-slider-lightbox** (own plugin, Swiper bundled locally): CPT `fslb_gallery` 791 with meta `_fslb_image_ids` and `_fslb_show_captions`.
+  - Legacy CPT `donation_list`: 53 IPN entries.
+  - Replaced or dropped: akismet → own plugin; google-sitemap-generator, duplicate-post → core; wpforms-lite (unused), ai, analytics → dropped.
 
-**Entscheidungen (mit dir abgestimmt):**
-- Eigener schlanker Editor statt Gutenberg.
-- SQLite embedded.
-- WASM-Plugins via wazero/Extism.
-- Umfang v1: Kommentare + Spamschutz, Twenty Twelve 1:1, SEO/Feeds, Donation-Log (IPN) und ein Akismet-Plugin.
+**Decisions (agreed with the owner):**
+- Own lightweight editor instead of Gutenberg.
+- Embedded SQLite.
+- WASM plugins via wazero/Extism.
+- Scope v1: comments + spam protection, Twenty Twelve 1:1, SEO/feeds, donation log (IPN) and an Akismet plugin.
+- Go 1.27, module `github.com/theinvisible/gopress`.
+- License GPL-2.0-or-later (ports WordPress code, theme CSS/JS).
+- Footer credit: "Proudly powered by GoPress".
+- All repo docs and code comments in English; devlog entries live in `docs/devlog/`.
 
-## Architektur
+## Architecture
 
-- **Single Binary** `gopress` (CGO_ENABLED=0). Alles per `go:embed` eingebettet: Admin-UI, Editor-Bundle, Theme, Bundled-Plugins.
-- **Laufzeitdaten** in `/data`: `gopress.db`, `uploads/`, `plugins/` (hochgeladene Plugins), `themes/` (optionale Overrides).
+- **Single binary** `gopress` (CGO_ENABLED=0). Everything embedded via `go:embed`: admin UI, editor bundle, theme, bundled plugins.
+- **Runtime data** in `/data`: `gopress.db`, `uploads/`, `plugins/` (uploaded plugins), `themes/` (optional overrides).
 - **Stack:**
-  - **Go 1.27**: `go.mod` mit `go 1.27`. Lokal ist noch kein Go installiert, deshalb wird zuerst das Go-1.27-Toolchain eingerichtet. Docker-Build-Stage `golang:1.27`.
-  - Routing: stdlib `net/http` (ServeMux-Patterns).
+  - **Go 1.27**: `go.mod` with `go 1.27`, `toolchain go1.27.3`. Docker build stage `golang:1.27`.
+  - Routing: stdlib `net/http` (ServeMux patterns).
   - Templates: `html/template`.
   - DB: `modernc.org/sqlite` (WAL).
   - Plugins: `github.com/extism/go-sdk` (wazero).
   - Sanitizing: `bluemonday`.
-  - Bilder: `golang.org/x/image/draw`.
-  - Kompression: `andybalholm/brotli`.
-  - Nur für den Import: `go-sql-driver/mysql`.
+  - Images: `golang.org/x/image/draw`.
+  - Compression: `andybalholm/brotli`.
+  - Import only: `go-sql-driver/mysql`.
   - Admin: htmx (embedded). Editor: TipTap (vanilla, esbuild).
 - **Performance:**
-  - Full-Page-Cache im RAM für anonyme GETs, vorkomprimiert mit br/gzip, ETag/304.
-  - Invalidierung über einen globalen Generationszähler bei jedem Write.
-  - Plugin-Calls laufen nur bei Cache-Miss.
-  - Statische Assets mit Content-Hash und `immutable`. Uploads mit langen Cache-Headern.
-  - Ziel: >10k req/s für gecachte Seiten.
+  - In-memory full-page cache for anonymous GETs, pre-compressed with br/gzip, ETag/304.
+  - Invalidation via a global generation counter bumped on every write.
+  - Plugin calls only happen on cache misses.
+  - Static assets with content hash and `immutable`. Uploads with long cache headers.
+  - Target: >10k req/s for cached pages.
 
-### Projektstruktur (`/home/rene/DEV/gopress`)
+### Project layout
 ```
 cmd/gopress/            main: serve | import-wp | user | backup | plugin-pack
-internal/db/            Schema, Migrations, Queries (posts, terms, comments, media, options, users, sessions, plugin_kv)
-internal/content/       Posts/Pages/Terms/Comments/Revisions-Logik, Scheduling, Duplicate
-internal/render/        Shortcode-Parser (WP-kompatibel), wpautop-Port, [gallery]/[caption] built-in, Filter-Pipeline
-internal/media/         Upload, Resize (thumbnail 150, medium 300, medium_large 768, large 1024), srcset
-internal/site/          Public-Handler, Permalink-Router, Feeds, Sitemap, robots.txt, Suche, Archive, Redirects, Page-Cache
-internal/theme/         Theme-Loader, Widgets (search, text, recent posts, categories, tag cloud, archives, meta + Plugin-Widgets), Menüs
-internal/admin/         wp-admin-artige UI (server-rendered + htmx)
-internal/auth/          Sessions, CSRF, argon2id + Verify von WP-Hashes (phpass & WP-6.8-bcrypt "$wp$2y$…"), Rehash beim Login
-internal/antispam/      Honeypot, HMAC-Zeit-Token, Rate-Limit pro IP, Link-Heuristik
-internal/plugins/       Extism-Host, Manifest, Hook-Registry, Instance-Pool, Zip-Install, Host-Funktionen
-internal/wpimport/      MariaDB → SQLite, Block→HTML-Konvertierung, Plugin-Migrations-Hooks
-web/admin/  web/editor/ Admin-Templates/CSS/JS, TipTap-Quellcode → dist (embedded)
-themes/twentytwelve/    Go-Template-Port + Original-CSS (GPL), Open Sans self-hosted
-pdk/go/                 Plugin-SDK für Plugin-Autoren (wrappt extism go-pdk + JSON-ABI)
+internal/db/            schema, migrations, queries (posts, terms, comments, media, options, users, sessions, plugin_kv)
+internal/content/       posts/pages/terms/comments/revisions logic, scheduling, duplicate
+internal/render/        shortcode parser (WP-compatible), wpautop/wptexturize ports, built-in [gallery]/[caption], filter pipeline
+internal/media/         upload, resize (thumbnail 150, medium 300, medium_large 768, large 1024), srcset
+internal/site/          public handlers, permalink router, feeds, sitemap, robots.txt, search, archives, redirects, page cache
+internal/theme/         theme loader, widgets (search, text, recent posts, categories, tag cloud, archives, meta + plugin widgets), menus
+internal/admin/         wp-admin-like UI (server-rendered + htmx)
+internal/auth/          sessions, CSRF, argon2id + verification of WP hashes (phpass & WP 6.8 bcrypt "$wp$2y$…"), rehash on login
+internal/antispam/      honeypot, HMAC time token, per-IP rate limit, link heuristics
+internal/plugins/       Extism host, manifest, hook registry, instance pool, zip install, host functions
+internal/wpimport/      MariaDB → SQLite, block → HTML conversion, plugin data stash
+web/admin/  web/editor/ admin templates/CSS/JS, TipTap sources → dist (embedded)
+themes/twentytwelve/    Go template port + original CSS (GPL), Open Sans self-hosted
+pdk/go/                 plugin SDK for plugin authors (wraps extism go-pdk + JSON ABI)
 plugins/paypal-donations/  plugins/foto-slider-lightbox/  plugins/akismet/
+dev/                    test data fetch, dev MariaDB + reference WordPress, golden generators, parity checker
+docs/devlog/            devlog, one file per session/milestone
 Makefile                editor → plugins (.zip) → embed → binary; Dockerfile (FROM scratch)
 ```
 
-## Komponenten im Detail
+## Components
 
-### 1. Datenmodell & Import (`internal/db`, `internal/wpimport`)
+### 1. Data model & import (`internal/db`, `internal/wpimport`)
 
-**Tabellen:**
-- `posts` (id behalten, type post/page, status, slug, title, content, excerpt, date/gmt, modified, author, parent, menu_order, comment_status, password, featured_media)
-- `post_meta`, `terms` + `term_taxonomy` (category/post_tag), `post_terms`
-- `comments` (Threading, Status approved/pending/spam/trash, IP, UA)
-- `media` (Datei, Größen-JSON, alt, caption, mime)
-- `options` (KV), `users`, `sessions`, `revisions`
-- `plugins` (Name, Version, aktiv)
-- `plugin_kv` (Plugin, Collection, Key, JSON)
+**Tables:**
+- `posts` (ids kept, type post/page, status, slug, title, content, excerpt, local/GMT dates, modified, author, parent, menu_order, comment_status, password, template, featured_media)
+- `post_meta`, `slug_redirects`, `terms` (category/post_tag, hierarchical), `post_terms`
+- `comments` (threading, type comment/pingback, status approved/pending/spam/trash, IP, UA)
+- `media` (file, sizes JSON, alt, caption, mime)
+- `options` (KV), `widgets`, `users`, `sessions`, `revisions`
+- `plugins` (name, version, active), `plugin_kv` (plugin, collection, key, JSON)
+- `import_stash` (plugin-owned WP data for the M4 plugins)
 
-**Import:** `gopress import-wp --dsn … --uploads /data/wordpress/wp-content/uploads`
-- **IDs bleiben gleich.** Damit funktionieren `?p=`, `?page_id=` und Shortcode-IDs weiter.
-- **Block-Content:** Kommentare statischer Core-Blöcke werden entfernt, das HTML bleibt. Dynamische Plugin-Blöcke werden zu Shortcodes, z.B. `foto-slider-lightbox/gallery` → `[fotogalerie id="791"]`.
-- **Klassischer Content:** wird einmalig durch den wpautop-Port in echtes `<p>`-HTML überführt. Das Original bleibt in `post_meta._wp_original_content`.
-- **Uploads:** werden 1:1 nach `/data/uploads` kopiert, inkl. vorhandener Größen. Die Pfade `/wp-content/uploads/YYYY/MM/…` bleiben über eine Route erhalten.
-- **Plugin-Daten:** Der Import ruft für jedes Bundled-Plugin dessen Export `migrate_wordpress` auf. Übergeben werden die zugehörigen CPT-Posts, Meta und Optionen (`fslb_gallery`, `donation_list`, `paypal_donations_options`, `widget_paypal_donations`, `wordpress_api_key`). So bleibt der Core generisch.
-- **Widgets und Theme-Mods** aus `sidebars_widgets`/`widget_*` werden in die eigene Widget-Konfiguration übernommen.
+**Import:** `gopress import-wp --dsn … --uploads …`
+- **IDs stay the same.** `?p=`, `?page_id=` and shortcode IDs keep working.
+- **Block content:** delimiters of static core blocks are stripped, the HTML stays. Dynamic plugin blocks become shortcodes, e.g. `foto-slider-lightbox/gallery` → `[fotogalerie id="791"]`.
+- **Classic content:** converted once into real `<p>` HTML with the wpautop port. The original is kept in `post_meta._wp_original_content`.
+- **Uploads:** copied 1:1 to `/data/uploads` including existing sizes. Paths `/wp-content/uploads/YYYY/MM/…` stay valid via a route.
+- **Plugin data:** plugin-owned CPT posts, meta and options (`fslb_gallery`, `donation_list`, `paypal_donations_options`, `widget_paypal_donations`, `wordpress_api_key`) go into `import_stash`; each bundled plugin migrates its part through its `migrate_wordpress` export. The core stays generic.
+- **Widgets and theme mods** from `sidebars_widgets`/`widget_*` are converted into GoPress' widget configuration.
 
 ### 2. Frontend (`internal/site`, `themes/twentytwelve`)
 
-- **Twenty-Twelve-Port:**
-  - Templates: index, single, page, archive (Kategorie/Tag/Datum/Autor), search, 404.
-  - Comments-Bereich inkl. Formular, Sidebar, Customizer-Werte (Hintergrund, Header-Farbe).
-  - Dazu eine Teilmenge von `wp-block-library` CSS für `wp-block-*`-Klassen (columns, group, image, gallery, quote).
-- **Permalink-Engine** mit WP-Tokens. Außerdem:
-  - Redirects für `?p=`, `?page_id=`, `?cat=`, `?s=`, alte Slugs, Trailing Slash.
-  - Feeds: `/feed/`, `/comments/feed/`, `/category/x/feed/`, `/tag/x/feed/` (RSS2).
-  - `/wp-sitemap.xml` und `/sitemap.xml` (Index + Posts/Pages/Terms), `robots.txt`, canonical, Pagination `/page/N/`.
-- **Kommentare:** Threading, „awaiting moderation“ per Cookie, Gravatar.
-- **Spam-Pipeline:**
-  1. Built-in-Antispam
-  2. Plugin-Filter `comment_pre_save` (Akismet)
-  3. Moderationsregeln aus Settings → Discussion
+- **Twenty Twelve port:**
+  - Templates: index, single, page (+ full width), archive (category/tag/date/author), search, attachment, 404.
+  - Comments section incl. form, sidebar, customizer values (background, header color).
+  - A subset of the `wp-block-library` CSS for `wp-block-*` classes (columns, group, image, gallery, quote).
+- **Permalink engine** with WP tokens, plus:
+  - Redirects for `?p=`, `?page_id=`, `?cat=`, old slugs, trailing slash, 404 slug guessing.
+  - Feeds: `/feed/`, `/comments/feed/`, `/category/x/feed/`, `/tag/x/feed/`, per-post comment feeds (RSS2).
+  - `/wp-sitemap.xml` and `/sitemap.xml` (index + posts/pages/terms), `robots.txt`, canonical, pagination `/page/N/`.
+- **Comments:** threading, "awaiting moderation" via cookie, Gravatar.
+- **Spam pipeline:**
+  1. Built-in antispam
+  2. Plugin filter `comment_pre_save` (Akismet)
+  3. Moderation rules from Settings → Discussion
 
 ### 3. Admin (`internal/admin`, `web/admin`)
 
-- **Look:** wie wp-admin. Dunkles Seitenmenü, Admin-Bar, List-Tables mit Status-Filtern (All/Published/Draft/Trash), Suche, Bulk-Actions, Row-Actions (Edit/Quick Edit/Trash/View/**Duplicate**), Pagination.
-- **Login:** `/admin/` und `/login`. Redirects von `/wp-admin/` und `/wp-login.php`, mit Rate-Limit.
-- **Menüpunkte:**
-  - Dashboard: At a Glance, Activity/Recent Comments, Quick Draft, Plugin-Dashboard-Widgets
+- **Look:** like wp-admin. Dark side menu, admin bar, list tables with status filters (All/Published/Draft/Trash), search, bulk actions, row actions (Edit/Quick Edit/Trash/View/**Duplicate**), pagination.
+- **Login:** `/admin/` and `/login`. Redirects from `/wp-admin/` and `/wp-login.php`, rate-limited.
+- **Menu:**
+  - Dashboard: At a Glance, Activity/Recent Comments, Quick Draft, plugin dashboard widgets
   - Posts: All, Add New, Categories, Tags
-  - Media: Grid/List, Drag&Drop-Upload, Details mit alt/caption
+  - Media: grid/list, drag & drop upload, details with alt/caption
   - Pages
-  - Comments: Approve/Unapprove/Spam/Trash/Reply, Badge-Zähler
-  - Appearance: Widgets (Drag-Order pro Sidebar), Menus, Customize-Lite
-  - Plugins: Liste, Activate/Deactivate, Upload `.zip`, Delete, Settings-Links, Plugin-Admin-Seiten
-  - Users: Profil, Passwort, weitere User mit Rollen admin/editor/author
+  - Comments: Approve/Unapprove/Spam/Trash/Reply, badge counter
+  - Appearance: Widgets (drag order per sidebar), Menus, Customize-lite
+  - Plugins: list, activate/deactivate, upload `.zip`, delete, settings links, plugin admin pages
+  - Users: profile, password, additional users with roles admin/editor/author
   - Settings: General, Writing, Reading, Discussion, Media, Permalinks
-- **Editor-Screen** wie der klassische WP-Editor:
-  - Titel, Permalink-Edit, Content-Editor.
-  - Rechts die Boxen Publish (Status, Sichtbarkeit, Zeitplanung, Preview), Categories, Tags, Featured Image, Excerpt und Discussion.
-  - Autosave, Revisionen mit Restore.
+- **Editor screen** like the classic WP editor:
+  - Title, permalink edit, content editor.
+  - Side boxes: Publish (status, visibility, scheduling, preview), Categories, Tags, Featured Image, Excerpt and Discussion.
+  - Autosave, revisions with restore.
 
-### 4. Schlanker Editor (`web/editor`, TipTap/ProseMirror)
+### 4. Lightweight editor (`web/editor`, TipTap/ProseMirror)
 
-- **Tabs „Visual“/„Text“** wie im WP Classic Editor. Text = HTML-Quelltext.
+- **Tabs "Visual"/"Text"** like the WP classic editor. Text = HTML source.
 - **Toolbar:**
-  - Absatz/H2–H4, Bold/Italic/Strike, Link, Listen, Quote, Code/Pre, Tabelle, Ausrichtung.
-  - „Add Media“ mit dem Media-Library-Modal: Bild mit Größe, Ausrichtung, Caption und Link, sowie Galerie.
-- **Shortcodes und Plugin-Inhalte** erscheinen als nicht-editierbare „Chips“ mit Edit-Popover. Das bestehende HTML (Columns/Group von Gutenberg) bleibt als Raw-HTML-Node erhalten.
-- **Erweiterungs-API** `window.gopress.editor.registerInsert({id, label, icon, onClick})`. Darüber registrieren Plugins z.B. „Fotogalerie einfügen“. `window.gopress.media.pick({multiple})` steht auch für Plugin-Admin-Seiten bereit.
+  - Paragraph/H2–H4, bold/italic/strike, link, lists, quote, code/pre, table, alignment.
+  - "Add Media" with the media library modal: image with size, alignment, caption and link, plus gallery.
+- **Shortcodes and plugin content** appear as non-editable "chips" with an edit popover. Existing HTML (Gutenberg columns/group) is kept as a raw HTML node.
+- **Extension API** `window.gopress.editor.registerInsert({id, label, icon, onClick})`. Plugins register e.g. "Insert photo gallery" through it. `window.gopress.media.pick({multiple})` is also available for plugin admin pages.
 
-### 5. WASM-Plugin-System (`internal/plugins`, `pdk/go`)
+### 5. WASM plugin system (`internal/plugins`, `pdk/go`)
 
-**Paket:** `.zip` mit
-- `plugin.json`: Name, Version, Autor, Beschreibung, Capabilities, erlaubte HTTP-Hosts, Shortcodes, Widgets, Admin-Seiten, Routen, Hooks, Assets, Editor-Scripts
+**Package:** `.zip` with
+- `plugin.json`: name, version, author, description, capabilities, allowed HTTP hosts, shortcodes, widgets, admin pages, routes, hooks, assets, editor scripts
 - `plugin.wasm`
 - `assets/`, `editor/`
 
-Die Plugins sind in der Binary gebündelt, können aber wie in WP deaktiviert und durch Upload ersetzt werden.
+Plugins are bundled in the binary but can be deactivated and replaced by upload, as in WP.
 
-**Guest-Exports** (alle JSON in/out):
-- `render_shortcode`, `render_widget`, `filter` (Hook-Name im Input), `action`
-- `admin_page` (gibt ein Formular-Schema oder HTML zurück), `admin_submit`
+**Guest exports** (all JSON in/out):
+- `render_shortcode`, `render_widget`, `filter` (hook name in the input), `action`
+- `admin_page` (returns a form schema or HTML), `admin_submit`
 - `http_route`, `migrate_wordpress`
 
-**Host-Funktionen:**
-- `kv_get/set/delete/list` (namespaced pro Plugin), `option_get`
+**Host functions:**
+- `kv_get/set/delete/list` (namespaced per plugin), `option_get`
 - `posts_query`, `media_get` (URLs, srcset, alt, caption)
-- `http_request` (nur erlaubte Hosts), `log`, `site_info`
+- `http_request` (allowed hosts only), `log`, `site_info`
 - `comment_get`, `comment_set_status`
 
 **Hooks v1:**
-- `the_content`, `comment_pre_save` (Ergebnis approve/hold/spam/discard)
+- `the_content`, `comment_pre_save` (result approve/hold/spam/discard)
 - `comment_status_changed`, `dashboard_widgets`, `head`/`footer`
 
-**Asset-Handling:** Ein Render-Ergebnis meldet die nötigen Assets. Die Seite bindet sie nur dann ein, wenn sie gebraucht werden (wie bisher beim Foto-Plugin).
+**Assets:** a render result declares the assets it needs; the page includes them only when needed (as the photo plugin does today).
 
 **Runtime:**
-- Kompilierte Module werden gecacht. Pro Plugin gibt es einen Instance-Pool für Parallelität.
-- Pro Call gelten Timeout (Context) und Memory-Limit. Ein Panic deaktiviert nur das Plugin, nicht den Server.
+- Compiled modules are cached. Each plugin has an instance pool for concurrency.
+- Every call has a timeout (context) and a memory limit. A panic disables only the plugin, never the server.
 
-**PDK:** `pdk/go` für Go-Plugins, gebaut mit Standard-Go 1.27 (`GOOS=wasip1 GOARCH=wasm -buildmode=c-shared`, Exports per `//go:wasmexport`). TinyGo ist nur der Fallback, falls die Binaries zu groß werden. `gopress plugin-pack` baut das Zip.
+**PDK:** `pdk/go` for Go plugins, built with standard Go 1.27 (`GOOS=wasip1 GOARCH=wasm -buildmode=c-shared`, exports via `//go:wasmexport`). TinyGo is only the fallback if binaries get too large. `gopress plugin-pack` builds the zip.
 
-### 6. Erste Plugins (`plugins/…`)
+### 6. First plugins (`plugins/…`)
 
-**foto-slider-lightbox** (Port deines PHP-Plugins):
-- **Galerien** in der Collection `galleries` (Titel, image_ids, show_captions). Import von `fslb_gallery` 791 mit gleicher ID.
-- **Admin:** Seite „Foto Galerien“ mit Liste, Neu/Edit, Bildauswahl per Media-Picker, Drag-Reorder und Caption-Toggle.
-- **Ausgabe:** Shortcode `[fotogalerie id=""]`. Das Render-Markup stammt 1:1 aus `includes/render.php`.
-- **Assets:** `view.css`, `view.js` und Swiper werden unverändert übernommen.
-- **Editor:** Insert-Button mit Galerie-Auswahl.
+**foto-slider-lightbox** (port of the existing PHP plugin):
+- **Galleries** in the collection `galleries` (title, image_ids, show_captions). Import of `fslb_gallery` 791 with the same ID.
+- **Admin:** page "Photo galleries" with list, new/edit, image selection via the media picker, drag reorder and caption toggle.
+- **Output:** shortcode `[fotogalerie id=""]`. The markup is taken 1:1 from `includes/render.php`.
+- **Assets:** `view.css`, `view.js` and Swiper are taken over unchanged.
+- **Editor:** insert button with gallery selection.
 
 **paypal-donations:**
-- **Settings-Seite** mit den Feldern aus `Admin.php`: Account, Currency, Page Style, Return Page, Amount, Purpose, Reference, Button small/large/custom, Button-URL, Localization, New Tab, Checkout Language, Return Method, Sandbox, Disable Stats und IPN-Validierung.
-- **Ausgabe:** Shortcode `[paypal-donation purpose reference amount]` mit identischem Form-Markup wie `views/paypal-button.php`, außerdem das Widget „Donate“.
+- **Settings page** with the fields from `Admin.php`: account, currency, page style, return page, amount, purpose, reference, button small/large/custom, button URL, localization, new tab, checkout language, return method, sandbox, disable stats and IPN validation.
+- **Output:** shortcode `[paypal-donation purpose reference amount]` with markup identical to `views/paypal-button.php`, plus the "Donate" widget.
 - **IPN:**
-  - Route `/plugins/paypal-donations/ipn`, die alte URL `/?ppd_paypal_ipn=process` wird gemappt.
-  - Verifikation per Postback an `ipnpb.paypal.com` (http-Allowlist). Danach wird die Spende gespeichert.
-  - Admin-Liste „Donations“ mit Datum, Name, E-Mail, Betrag, Währung, Memo und Status. Import der 53 `donation_list`-Einträge.
+  - Route `/plugins/paypal-donations/ipn`; the old URL `/?ppd_paypal_ipn=process` is mapped.
+  - Verification via postback to `ipnpb.paypal.com` (HTTP allowlist), then the donation is stored.
+  - Admin list "Donations" with date, name, email, amount, currency, memo and status. Import of the 53 `donation_list` entries.
 
 **akismet:**
-- **Settings:** API-Key (Import aus `wordpress_api_key`), „Verify key“ über `/1.1/verify-key`, Option „offensichtlichen Spam verwerfen“.
+- **Settings:** API key (imported from `wordpress_api_key`), "Verify key" via `/1.1/verify-key`, option "discard obvious spam".
 - **Hooks:**
   - `comment_pre_save` → `comment-check`.
   - `comment_status_changed` → `submit-spam`/`submit-ham`.
-- **Dashboard-Widget** mit Zählern.
+- **Dashboard widget** with counters.
 
-## Meilensteine & Checklisten
+## Milestones & checklists
 
-Legende: `[ ]` offen · `[x]` erledigt · `[~]` in Arbeit
+Legend: `[ ]` open · `[x]` done · `[~]` in progress
 
 ### M0 – Setup
-- [x] PLAN.md mit Devlog anlegen
+- [x] Create PLAN.md with devlog
 - [x] `git init`
-- [x] Go-1.27-Toolchain lokal installieren (go1.27.3 in `~/sdk/go1.27.3`)
-- [x] `go mod init` (`go 1.27`), Grundgerüst `cmd/gopress`, Makefile, `.gitignore`
-- [x] Lokale Testdaten: frischer Dump, Uploads, Plugin-/Theme-Quellen (`make testdata`), Dev-MariaDB (`make devdb-up`), Referenzzahlen (`make devdb-counts`)
+- [x] Install Go 1.27 toolchain locally (go1.27.3 in `~/sdk/go1.27.3`)
+- [x] `go mod init` (`go 1.27`), skeleton `cmd/gopress`, Makefile, `.gitignore`
+- [x] Local test data: fresh dump, uploads, plugin/theme sources (`make testdata`), dev MariaDB (`make devdb-up`), reference counts (`make devdb-counts`)
 
-### M1 – Core & Import (*Ergebnis: importierte Seite läuft lokal read-only*)
-- [ ] SQLite-Schema und Migrations (`internal/db`)
-- [ ] `import-wp`: Posts/Pages/Terms/Comments/Users/Options/Media mit gleichen IDs
-- [ ] Block→HTML-Konvertierung, Plugin-Blöcke werden zu Shortcodes
-- [ ] wpautop-Port mit Golden-Tests gegen PHP
-- [ ] Shortcode-Parser (WP-kompatibel), built-in `[gallery]` und `[caption]`
-- [ ] Uploads kopieren, Route `/wp-content/uploads/…`
-- [ ] Twenty-Twelve-Port: index/single/page/archive/search/404, Sidebar-Widgets, Customizer-Werte
-- [ ] Kommentare anzeigen (Threading) und Formular inkl. Antispam
-- [ ] Permalink-Router und Redirects (`?p=`, `?page_id=`, Trailing Slash, alte Slugs)
-- [ ] RSS-Feeds, Sitemap, robots.txt, canonical
-- [ ] Page-Cache (br/gzip, ETag), Lasttest
+### M1 – Core & import (*result: the imported site runs locally, read-only*)
+- [x] Docs in English, devlog moved to `docs/devlog/`, LICENSE (GPL-2.0-or-later)
+- [ ] SQLite schema and migrations (`internal/db`)
+- [ ] PHP unserialize (`internal/phpser`)
+- [ ] `import-wp`: posts/pages/terms/comments/users/options/media/widgets with the same IDs, plugin data stash
+- [ ] Block → HTML conversion, plugin blocks become shortcodes, same-site URLs become root-relative
+- [ ] Render pipeline: wpautop, wptexturize, smilies, shortcode parser, built-in `[gallery]`/`[caption]`, content image filter (srcset), more tag, excerpts
+- [ ] Golden tests against PHP output (reference WP container)
+- [ ] Copy uploads, route `/wp-content/uploads/…`
+- [ ] Twenty Twelve port: index/single/page/full-width/archive/search/attachment/404, sidebar widgets, customizer values
+- [ ] Comments display (threading, pagination) and form incl. antispam
+- [ ] Permalink router and redirects (`?p=`, `?page_id=`, trailing slash, old slugs, slug guessing)
+- [ ] RSS feeds, sitemaps, robots.txt, canonical, search (FTS5)
+- [ ] Page cache (br/gzip, ETag), load test
+- [ ] Parity check against a local reference WordPress (`dev/parity`)
 
 ### M2 – Admin
-- [ ] Auth: Login, Sessions, CSRF, Rate-Limit, WP-Hash-Verify + Rehash
-- [ ] Admin-Layout (Menü, Admin-Bar), Dashboard
-- [ ] Posts/Pages: List-Table, Filter, Bulk/Row-Actions, Duplicate, Quick Edit
-- [ ] Editor-Screen inkl. Seitenboxen, Autosave, Revisionen
-- [ ] TipTap-Editor (Visual/Text, Media-Modal, Shortcode-Chips, Erweiterungs-API)
-- [ ] Media-Library mit Upload und Resizes/srcset
-- [ ] Kommentar-Moderation
-- [ ] Categories/Tags
-- [ ] Appearance: Widgets, Menus, Customize-Lite
-- [ ] Users, Settings (General/Writing/Reading/Discussion/Media/Permalinks)
+- [ ] Auth: login, sessions, CSRF, rate limit, WP hash verification + rehash
+- [ ] Admin layout (menu, admin bar), dashboard
+- [ ] Posts/pages: list table, filters, bulk/row actions, duplicate, quick edit
+- [ ] Editor screen incl. side boxes, autosave, revisions
+- [ ] TipTap editor (visual/text, media modal, shortcode chips, extension API)
+- [ ] Media library with upload and resizes/srcset
+- [ ] Comment moderation
+- [ ] Categories/tags
+- [ ] Appearance: widgets, menus, customize-lite
+- [ ] Users, settings (General/Writing/Reading/Discussion/Media/Permalinks)
 
-### M3 – Plugin-Host
-- [ ] Manifest-Format `plugin.json` und Zip-Install/Delete
-- [ ] Extism-Host: Module-Cache, Instance-Pool, Timeouts, Memory-Limits, Panic-Isolation
-- [ ] Host-Funktionen (kv, option, posts, media, http-Allowlist, log, comments)
-- [ ] Hook-Registry (`the_content`, `comment_pre_save`, `comment_status_changed`, `dashboard_widgets`, `head`/`footer`)
-- [ ] Shortcodes, Widgets, Routen, Admin-Seiten (Form-Schema), Assets bei Bedarf, Editor-Scripts
-- [ ] `pdk/go`, `gopress plugin-pack`, Beispiel-Plugin
-- [ ] Plugins-Admin: Liste, Aktivieren/Deaktivieren, Upload
+### M3 – Plugin host
+- [ ] Manifest format `plugin.json` and zip install/delete
+- [ ] Extism host: module cache, instance pool, timeouts, memory limits, panic isolation
+- [ ] Host functions (kv, option, posts, media, HTTP allowlist, log, comments)
+- [ ] Hook registry (`the_content`, `comment_pre_save`, `comment_status_changed`, `dashboard_widgets`, `head`/`footer`)
+- [ ] Shortcodes, widgets, routes, admin pages (form schema), on-demand assets, editor scripts
+- [ ] `pdk/go`, `gopress plugin-pack`, example plugin
+- [ ] Plugins admin: list, activate/deactivate, upload
 
 ### M4 – Plugins
-- [ ] foto-slider-lightbox: Galerien-Admin, Shortcode, Assets, Editor-Button, Import `fslb_gallery`
-- [ ] paypal-donations: Settings, Shortcode, Widget, IPN + Verifikation, Donations-Liste, Import
-- [ ] akismet: Settings + Verify-Key, comment-check, submit-spam/ham, Dashboard-Widget
+- [ ] foto-slider-lightbox: gallery admin, shortcode, assets, editor button, import of `fslb_gallery`
+- [ ] paypal-donations: settings, shortcode, widget, IPN + verification, donations list, import
+- [ ] akismet: settings + verify key, comment-check, submit-spam/ham, dashboard widget
 
 ### M5 – Deployment
-- [ ] Dockerfile (`golang:1.27` Build → `FROM scratch`), Volume `/data`
-- [ ] `gopress backup` (`VACUUM INTO` + tar der Uploads)
-- [ ] Staging `new.hadler.me` hinter Traefik
-- [ ] URL-Paritäts-Crawl und visueller Vergleich mit Live
-- [ ] Cutover: Router umschalten, WP-Container stoppen (nicht löschen)
+- [ ] Dockerfile (`golang:1.27` build → `FROM scratch`), volume `/data`
+- [ ] `gopress backup` (`VACUUM INTO` + tar of the uploads)
+- [ ] Staging `new.hadler.me` behind Traefik
+- [ ] URL parity crawl and visual comparison with live
+- [ ] Cutover: switch the router, stop (not delete) the WP containers
 
-## Verifikation
+## Verification
 
-- **Unit-/Golden-Tests:**
-  - Shortcode-Parser gegen WP-Regex-Fälle.
-  - wpautop gegen PHP-Ausgaben aus dem Container (Golden-Files).
-  - Permalink-Routing, Block→HTML-Konvertierung.
-  - Passwort-Verify mit echten Hash-Formaten (phpass, `$wp$2y$`).
-- **Import-Test:** `/root/wp-dump-final.sql.gz` in einen lokalen MariaDB-Container laden, `import-wp` laufen lassen und Zählungen prüfen (61/24/52/679…).
-- **URL-Parität:** alle URLs aus der Live-Sitemap von hadler.me gegen lokal/Staging crawlen. Erwartet: 200 bzw. passender 301 und gleicher `<title>`. Dazu ein visueller Vergleich per Screenshot (Startseite, Post, Page mit Galerie, Donate-Seite).
+- **Unit/golden tests:**
+  - Shortcode parser against WP regex cases.
+  - wpautop/wptexturize against PHP output from the reference container (golden files).
+  - Permalink routing, block → HTML conversion.
+  - Password verification with real hash formats (phpass, `$wp$2y$`).
+- **Import test:** import from the dev MariaDB (fresh dump via `make testdata`) and compare counts with `local/reference-counts.txt`.
+- **URL parity:** crawl all URLs from the reference sitemap against GoPress (locally, later staging). Expected: same status/redirect, same `<title>`, same normalized content and sidebar. Plus screenshots (home, post, page with gallery, donate page).
 - **Plugins:**
-  - Galerie: Slider/Lightbox/Keyboard manuell testen.
-  - PayPal: IPN gegen den PayPal-Sandbox-Simulator.
-  - Akismet: mit Testautor `viagra-test-123` bzw. `akismet-guaranteed-spam@example.com`.
-  - Plugin-Zip deaktivieren, erneut hochladen, ein Plugin mit Panic → Server läuft weiter.
-- **Last:** `oha`/`hey` gegen Startseite und Post (gecacht/ungecacht). Ziel >10k req/s gecacht.
-- **Staging-Abnahme auf new.hadler.me** vor dem Cutover.
-
----
-
-## Devlog
-
-Neueste Einträge oben. Jeder Eintrag hat dieselbe Gliederung: Gemacht, Entscheidungen, Offen/Probleme, Nächster Schritt.
-
-### 2026-10-24 – M0 Setup abgeschlossen
-
-**Gemacht**
-- **Go 1.27.3** user-lokal nach `~/sdk/go1.27.3` installiert (sha256 geprüft). Symlinks `~/.local/bin/go` und `~/.local/bin/gofmt`, ohne Änderung an der Shell-Config.
-- **Grundgerüst:**
-  - `go.mod` mit `github.com/theinvisible/gopress`, `go 1.27`, `toolchain go1.27.3`.
-  - `cmd/gopress` mit den Subcommands `serve` (`/healthz`, Platzhalter-Startseite, Graceful Shutdown, slog) und `version`. Die Stubs `import-wp`, `backup`, `user` und `plugin-pack` beenden sich mit Exit-Code 2.
-  - `internal/buildinfo`, `internal/config` (Flags mit Env-Fallback `GOPRESS_ADDR`/`GOPRESS_DATA`).
-- **Build-Tooling:** `Makefile` mit build/run/test/fmt/clean und den Testdaten-Targets. Dazu `.gitignore` und `README.md`.
-- **Testdaten** unter `local/` (gitignored, enthält personenbezogene Daten):
-  - `dev/fetch-testdata.sh` streamt einen frischen `mariadb-dump`; auf dem Server wird nichts geschrieben.
-  - Uploads (41 MB), Plugin-Quellen (paypal-donations, foto-slider-lightbox, akismet) und das Theme twentytwelve per rsync.
-- **Dev-DB:** `dev/compose.yaml` mit MariaDB 11.8 auf `127.0.0.1:33066` (wordpress/wordpress), geseedet mit dem Dump.
-- **Referenzzahlen** in `local/reference-counts.txt` als Soll-Werte für den M1-Import:
-  - Posts: 61 post, 24 page, 52 attachment, 53 donation_list, 1 fslb_gallery.
-  - Kommentare: 650 comment approved, 29 pingback approved, 97 pending, 2145 spam.
-  - Terms: 18 category, 17 post_tag. User: 1.
-
-**Entscheidungen**
-- Statt des alten Dumps vom 13.08. wird immer ein frischer Dump gezogen (`make testdata`). Die alten Dumps auf dem Server sind veraltet.
-- Testdaten bleiben strikt außerhalb von Git (`/local/`, `*.sql.gz`, `*.db`).
-
-**Offen/Probleme**
-- Die „679 approved“ aus der Analyse sind 650 Kommentare + 29 Pingbacks. Der Import muss `comment_type` (pingback) mitnehmen.
-- `wp_global_styles`, `nav_menu_item` (Drafts) und `amn_exact-metrics` werden nicht importiert.
-
-**Nächster Schritt**
-- M1 starten: SQLite-Schema (`internal/db`), danach `import-wp` gegen die Dev-DB.
-
-### 2026-10-24 – Analyse & Planung
-
-**Gemacht**
-- Live-Stack auf `root@hadler.me` nur lesend analysiert:
-  - Container `wp-app` (wordpress:7.1.3-php8.3-apache) und `wp-db` (mariadb:11.8) hinter Traefik v3.7.
-  - Daten: wp-content unter `/data/wordpress/wp-content`, DB im Volume `wordpress_db_mariadb118`.
-- Content-Bestand erhoben (siehe Context):
-  - 61 Posts, 24 Pages, 52 Attachments, 41 MB Uploads.
-  - 679/97/2144 Kommentare (approved/pending/spam).
-  - 87 Posts mit Block-Markup.
-- Plugin-Nutzung ermittelt:
-  - `[paypal-donation]` auf der Donate-Seite (ID 187) und als Widget in sidebar-1.
-  - `foto-slider-lightbox/gallery` (Galerie 791) auf der tiBackup-Seite (ID 149).
-  - `donation_list` hat 53 Alt-Einträge.
-- PLAN.md angelegt, Repo initialisiert.
-
-**Entscheidungen**
-- **Go 1.27**, Single Binary, CGO-frei.
-- **SQLite embedded** (modernc.org/sqlite). Grund: echtes Single-Binary-Deployment, `wp-db` entfällt.
-- **Eigener schlanker Editor** (TipTap) statt Gutenberg. Grund: leichter; Block-Content wird beim Import zu HTML.
-- **WASM-Plugins** über Extism/wazero. Grund: pure Go, sandboxed, Upload zur Laufzeit wie bei WP.
-- **v1-Umfang:** Kommentare + Spamschutz, Twenty Twelve 1:1, SEO/Feeds, Donation-Log (IPN), Akismet-Plugin.
-- Gleiche Post-IDs und Upload-Pfade wie in WP. Grund: Links, Shortcode-IDs und SEO bleiben stabil.
-- Revisionen (341) werden nicht importiert.
-- Entfallen: wpforms-lite (ungenutzt), ai, analytics. Sitemap und Duplicate Post wandern in den Core.
-
-**Offen/Probleme**
-- ~~Go ist lokal nicht installiert~~ → erledigt in M0.
-- Extism go-pdk mit Standard-Go (wasip1, `go:wasmexport`) muss in M3 verifiziert werden. Fallback ist TinyGo.
-- ~~Akismet-API-Key prüfen~~ → `wordpress_api_key` ist gesetzt.
-
-**Nächster Schritt**
-- M0 abschließen: Go 1.27 installieren, Grundgerüst anlegen, Testdaten (Dump + Uploads) lokal bereitstellen.
+  - Gallery: test slider/lightbox/keyboard manually.
+  - PayPal: IPN against the PayPal sandbox simulator.
+  - Akismet: with test author `viagra-test-123` or `akismet-guaranteed-spam@example.com`.
+  - Deactivate a plugin zip, upload it again, a panicking plugin → server keeps running.
+- **Load:** `oha` against home and a post (cached/uncached). Target >10k req/s cached.
+- **Staging acceptance on new.hadler.me** before the cutover.
