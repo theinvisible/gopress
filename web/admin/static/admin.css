@@ -363,8 +363,19 @@ form:has(input[name=mode][value=invite]:checked) .gp-new-password { display: non
 .gp-snippet code { background: none; padding: 0; white-space: pre; }
 .gp-newtoken h3 { margin: 1.2em 0 .4em; font-size: 14px; }
 .gp-scope { display: inline-block; font-family: Consolas, Monaco, monospace; font-size: 12px; background: #f0f0f1; border-radius: 3px; padding: 1px 6px; margin: 1px 0; }
-.gp-scope-option { display: block; margin: 6px 0; }
-.gp-warn { color: #8a4b00; margin-left: 24px; }
+.gp-scope-list { display: grid; gap: 8px; max-width: 640px; }
+.form-table td fieldset.gp-scope-list label.gp-scope-option { display: flex; gap: 12px; align-items: flex-start; margin: 0 !important; padding: 10px 14px;
+	border: 1px solid #dcdcde; border-radius: 4px; background: #fff; cursor: pointer; line-height: 1.5; }
+.gp-scope-option:hover { border-color: #8c8f94; }
+.gp-scope-option:has(input:checked) { border-color: var(--gp-accent, #2271b1); box-shadow: 0 0 0 1px var(--gp-accent, #2271b1); }
+.form-table .gp-scope-option input[type=checkbox] { margin: 3px 0 0; flex: none; }
+.gp-scope-text { display: grid; gap: 3px; min-width: 0; }
+.gp-scope-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.gp-scope-name { font-size: 12px; color: var(--gp-muted); background: #f0f0f1; padding: 1px 6px; border-radius: 3px; }
+.gp-scope-desc { color: #50575e; }
+.gp-scope-warn { display: flex; gap: 4px; color: #8a4b00; font-size: 13px; }
+.gp-scope-warn .dashicons { font-size: 16px; width: 16px; height: 16px; flex: none; margin-top: 1px; }
+.gp-scope-list > .description { margin-top: 2px; }
 .gp-tokens tr.gp-expired td { color: #787c82; }
 .gp-revoke-all { margin-top: 12px; }
 @media screen and (max-width: 782px) {

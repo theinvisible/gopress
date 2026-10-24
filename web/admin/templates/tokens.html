@@ -38,12 +38,20 @@
 			<tr><th><label for="token-name">Name</label></th><td><input type="text" name="name" id="token-name" class="regular-text" maxlength="80" required value="{{.Name}}" placeholder="e.g. Claude Code on my laptop">
 				<p class="description">Shown in this list and in your activity log.</p></td></tr>
 			<tr><th><label for="token-days">Expires after</label></th><td><select name="days" id="token-days">{{range .Days}}<option value="{{.}}"{{if eq . $.FormDays}} selected{{end}}>{{.}} days</option>{{end}}</select></td></tr>
-			<tr><th>Scopes</th><td><fieldset><legend class="screen-reader-text"><span>Scopes</span></legend>
-				<p class="description">Every token can read published content and your own drafts.</p>
+			<tr><th>Scopes</th><td><fieldset class="gp-scope-list"><legend class="screen-reader-text"><span>Scopes</span></legend>
 				{{- range .Scopes}}
-				<label class="gp-scope-option"><input type="checkbox" name="scopes" value="{{.Name}}"{{if .Checked}} checked{{end}}> <code>{{.Name}}</code> – {{.Label}}</label>
-				{{- if eq .Name "content:publish"}}<p class="description gp-warn">Agents with this scope publish without your review. Leave it off to review drafts before they go live.</p>{{end}}
+				<label class="gp-scope-option">
+					<input type="checkbox" name="scopes" value="{{.Name}}"{{if .Checked}} checked{{end}}>
+					<span class="gp-scope-text">
+						<span class="gp-scope-head"><strong>{{.Title}}</strong> <code class="gp-scope-name">{{.Name}}</code></span>
+						<span class="gp-scope-desc">{{.Desc}}</span>
+						{{- if eq .Name "content:publish"}}
+						<span class="gp-scope-warn"><span class="dashicons dashicons-warning" aria-hidden="true"></span> Agents with this scope publish without your review. Leave it off to check drafts before they go live.</span>
+						{{- end}}
+					</span>
+				</label>
 				{{- end}}
+				<p class="description">Every token can read published content and your own drafts.</p>
 			</fieldset></td></tr>
 		</tbody></table>
 		<p class="submit"><input type="submit" class="button button-primary" value="Create Token"{{if ge (len .Tokens) .Max}} disabled title="You have the maximum of {{.Max}} tokens"{{end}}></p>

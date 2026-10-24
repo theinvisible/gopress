@@ -35,8 +35,8 @@ type tokenRow struct {
 }
 
 type scopeOption struct {
-	Name, Label string
-	Checked     bool
+	Name, Title, Desc string
+	Checked           bool
 }
 
 type tokensData struct {
@@ -113,7 +113,7 @@ func (a *Admin) renderTokens(w http.ResponseWriter, r *http.Request, c *reqCtx, 
 	usable := auth.UsableScopes(c.user)
 	for _, sc := range auth.Scopes {
 		if contains(usable, sc.Name) {
-			d.Scopes = append(d.Scopes, scopeOption{Name: sc.Name, Label: sc.Label, Checked: contains(scopes, sc.Name)})
+			d.Scopes = append(d.Scopes, scopeOption{Name: sc.Name, Title: sc.Title, Desc: sc.Desc, Checked: contains(scopes, sc.Name)})
 		}
 	}
 	var err error

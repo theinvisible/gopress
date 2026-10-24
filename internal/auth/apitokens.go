@@ -30,12 +30,12 @@ const (
 	ScopeTerms   = "terms:manage"
 )
 
-// Scopes lists the scopes with a description, in display order.
-var Scopes = []struct{ Name, Label string }{
-	{ScopeWrite, "Write drafts: create posts and pages as drafts or for review, edit own unpublished ones"},
-	{ScopePublish, "Publish: publish and schedule, edit own published posts and pages"},
-	{ScopeMedia, "Upload media"},
-	{ScopeTerms, "Create categories"},
+// Scopes lists the scopes with a title and description, in display order.
+var Scopes = []struct{ Name, Title, Desc string }{
+	{ScopeWrite, "Write drafts", "Create posts and pages as drafts or for review, and edit your unpublished ones."},
+	{ScopePublish, "Publish", "Publish and schedule posts and pages, and edit your published ones."},
+	{ScopeMedia, "Upload media", "Upload images and PDF files and list the media library."},
+	{ScopeTerms, "Create categories", "Add new categories. Tags are created with posts anyway."},
 }
 
 var scopeCaps = map[string][]string{
