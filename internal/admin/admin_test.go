@@ -159,7 +159,7 @@ func (e *testEnv) do(method, target string, cur *auth.Current, form url.Values, 
 }
 
 var adminPages = []string{"/admin/", "/admin/posts/", "/admin/posts/new", "/admin/posts/10/edit", "/admin/pages/",
-	"/admin/pages/new", "/admin/comments/", "/admin/profile", "/admin/profile/security", "/admin/settings/email"}
+	"/admin/pages/new", "/admin/comments/", "/admin/profile", "/admin/profile/security", "/admin/profile/tokens", "/admin/settings/email"}
 
 func TestRequiresLogin(t *testing.T) {
 	e := newEnv(t)

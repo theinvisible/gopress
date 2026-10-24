@@ -52,9 +52,15 @@
 		{{- if .MailReady}}
 		<form method="post" action="/admin/users/{{.Edit.ID}}/security/send-reset">{{template "csrf" .CSRF}}<button type="submit" class="button">Send password reset link</button></form>
 		{{- end}}
-		<form method="post" action="/admin/users/{{.Edit.ID}}/security/end-sessions">{{template "csrf" .CSRF}}<button type="submit" class="button"{{if not .Sessions}} disabled{{end}}>Log out everywhere</button></form>
+		<form method="post" action="/admin/users/{{.Edit.ID}}/security/end-sessions">{{template "csrf" .CSRF}}<button type="submit" class="button"{{if not (or .Sessions .Tokens)}} disabled{{end}}>Log out everywhere{{if .Tokens}} and revoke access tokens{{end}}</button></form>
 		<form method="post" action="/admin/users/{{.Edit.ID}}/security/unlock">{{template "csrf" .CSRF}}<button type="submit" class="button">Lift login locks</button></form>
 	</div>
+
+	{{- if .Tokens}}
+	<h2 id="tokens">Access Tokens</h2>
+	<p>Tokens the user created for AI agents (MCP interface). You can revoke them; only the user can create new ones.</p>
+	{{template "token-table" .}}
+	{{- end}}
 
 	{{- if .Activity}}
 	<h2>Recent Activity</h2>

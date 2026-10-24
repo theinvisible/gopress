@@ -72,20 +72,21 @@ type userListRow struct {
 }
 
 var userMessages = map[string]notice{
-	"roles":   {"success", "Roles changed."},
-	"deleted": {"success", "Users deleted."},
-	"saved":   {"success", "User updated."},
-	"created": {"success", "User created."},
-	"2fa":     {"success", "Two-factor authentication was reset. The user sets it up again with the setup code below."},
-	"code":    {"success", "New setup code created."},
-	"ended":   {"success", "All sessions of the user were logged out."},
-	"unlock":  {"success", "Login locks lifted."},
-	"reset":   {"success", "A password reset link was sent to the user."},
-	"invite":  {"success", "New invitation created."},
-	"self":    {"error", "You cannot change your own role or delete your own account here."},
-	"last":    {"error", "The site needs at least one administrator."},
-	"nomail":  {"error", "Email is not configured (Settings › Email)."},
-	"content": {"error", "Choose a user who gets the content of the deleted users."},
+	"roles":        {"success", "Roles changed."},
+	"deleted":      {"success", "Users deleted."},
+	"saved":        {"success", "User updated."},
+	"created":      {"success", "User created."},
+	"2fa":          {"success", "Two-factor authentication was reset. The user sets it up again with the setup code below."},
+	"code":         {"success", "New setup code created."},
+	"ended":        {"success", "All sessions of the user were logged out and their access tokens revoked."},
+	"tokenrevoked": {"success", "Access token revoked."},
+	"unlock":       {"success", "Login locks lifted."},
+	"reset":        {"success", "A password reset link was sent to the user."},
+	"invite":       {"success", "New invitation created."},
+	"self":         {"error", "You cannot change your own role or delete your own account here."},
+	"last":         {"error", "The site needs at least one administrator."},
+	"nomail":       {"error", "Email is not configured (Settings › Email)."},
+	"content":      {"error", "Choose a user who gets the content of the deleted users."},
 }
 
 const usersPerPage = 20
@@ -260,6 +261,7 @@ type userFormData struct {
 	OneTimeLink string
 	SetupCode   string
 	Activity    []activityRow
+	Tokens      []tokenRow
 }
 
 func roleOptions(selected string) []option {
@@ -452,6 +454,9 @@ func (a *Admin) renderUserEdit(w http.ResponseWriter, r *http.Request, c *reqCtx
 	}
 	d.Sessions = len(sessions)
 	d.Invited, _ = db.HasUserToken(ctx, a.db.R, u.ID, auth.TokenInvite, time.Now().Unix())
+	if d.Tokens, err = a.tokenRows(ctx, c, u.ID, "/admin/users/"+strconv.FormatInt(u.ID, 10)+"/tokens/"); err != nil {
+		return err
+	}
 	entries, err := db.AuditLog(ctx, a.db.R, u.ID, 10, 0)
 	if err != nil {
 		return err

@@ -1,0 +1,63 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-tokens-page">
+	<h1>Access Tokens</h1>
+	<p>Access tokens let AI agents such as Claude Code write posts for you through the MCP interface. An agent can only do what the token's scopes allow, never more than your role, and only with your own posts. Content from agents is always filtered (no scripts or embedded code).</p>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+
+	{{- with .New}}
+	<div class="notice notice-warning gp-onetime gp-newtoken">
+		<p><strong>Your new access token “{{.Name}}”</strong> – shown only now. Store it like a password.</p>
+		<p><input type="text" class="large-text code" readonly value="{{.Token}}" data-select-all> <button type="button" class="button" data-copy="{{.Token}}">Copy</button></p>
+		<h3>Claude Code</h3>
+		<p>Add the server for your user (the token is stored in your Claude Code user settings, not in a project):</p>
+		<pre class="gp-snippet"><code>claude mcp add --transport http --scope user gopress {{$.Endpoint}} \
+  --header "Authorization: Bearer {{.Token}}"</code></pre>
+		<p>Or share the server with a project in <code>.mcp.json</code> and keep the token in the environment variable <code>GOPRESS_TOKEN</code>. Never commit the token.</p>
+		<pre class="gp-snippet"><code>{
+  "mcpServers": {
+    "gopress": {
+      "type": "http",
+      "url": "{{$.Endpoint}}",
+      "headers": { "Authorization": "Bearer ${GOPRESS_TOKEN}" }
+    }
+  }
+}</code></pre>
+		<h3>Other MCP clients</h3>
+		<p>Transport “Streamable HTTP”, URL <code>{{$.Endpoint}}</code>, header <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+	</div>
+	{{- end}}
+
+	{{- if not .Enabled}}
+	<div class="notice notice-info inline"><p>The MCP interface is turned off.{{if .CanManage}} Turn it on under <a href="/admin/settings/writing">Settings › Writing</a>.{{else}} An administrator can turn it on.{{end}}</p></div>
+	{{- else}}
+	<h2>Create a token</h2>
+	{{- if not .Reauth}}<div class="notice notice-info inline"><p>Creating a token asks you to confirm your identity first.</p></div>{{end}}
+	<form method="post" action="/admin/profile/tokens" class="gp-token-form">
+		{{template "csrf" .CSRF}}
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th><label for="token-name">Name</label></th><td><input type="text" name="name" id="token-name" class="regular-text" maxlength="80" required value="{{.Name}}" placeholder="e.g. Claude Code on my laptop">
+				<p class="description">Shown in this list and in your activity log.</p></td></tr>
+			<tr><th><label for="token-days">Expires after</label></th><td><select name="days" id="token-days">{{range .Days}}<option value="{{.}}"{{if eq . $.FormDays}} selected{{end}}>{{.}} days</option>{{end}}</select></td></tr>
+			<tr><th>Scopes</th><td><fieldset><legend class="screen-reader-text"><span>Scopes</span></legend>
+				<p class="description">Every token can read published content and your own drafts.</p>
+				{{- range .Scopes}}
+				<label class="gp-scope-option"><input type="checkbox" name="scopes" value="{{.Name}}"{{if .Checked}} checked{{end}}> <code>{{.Name}}</code> – {{.Label}}</label>
+				{{- if eq .Name "content:publish"}}<p class="description gp-warn">Agents with this scope publish without your review. Leave it off to review drafts before they go live.</p>{{end}}
+				{{- end}}
+			</fieldset></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Create Token"{{if ge (len .Tokens) .Max}} disabled title="You have the maximum of {{.Max}} tokens"{{end}}></p>
+	</form>
+	{{- end}}
+
+	<h2>Your tokens</h2>
+	{{- if .Tokens}}
+	{{template "token-table" .}}
+	<form method="post" action="/admin/profile/tokens/revoke-all" data-confirm="Revoke all your access tokens? Agents using them lose access immediately." class="gp-revoke-all">
+		{{template "csrf" .CSRF}}<button type="submit" class="button button-link-delete">Revoke all tokens</button>
+	</form>
+	{{- else}}
+	<p>You have no access tokens.</p>
+	{{- end}}
+</div>
+{{template "admin-bottom" .}}{{end}}

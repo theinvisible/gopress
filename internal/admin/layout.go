@@ -152,10 +152,14 @@ func (a *Admin) menu(u *db.User, screen string, pending int) []menuItem {
 		}
 		m = append(m, menuItem{ID: "settings", Label: "Settings", Icon: "admin-settings", URL: "/admin/settings/general", Sub: sub})
 	}
-	m = append(m, menuItem{ID: "profile", Label: "Profile", Icon: "id", URL: "/admin/profile", Sub: []subItem{
+	profile := []subItem{
 		{ID: "profile", Label: "Profile", URL: "/admin/profile"},
 		{ID: "security", Label: "Security", URL: "/admin/profile/security"},
-	}})
+	}
+	if auth.CanUseTokens(u) {
+		profile = append(profile, subItem{ID: "tokens", Label: "Access Tokens", URL: "/admin/profile/tokens"})
+	}
+	m = append(m, menuItem{ID: "profile", Label: "Profile", Icon: "id", URL: "/admin/profile", Sub: profile})
 	for i := range m {
 		it := &m[i]
 		for j := range it.Sub {

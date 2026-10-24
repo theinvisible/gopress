@@ -139,6 +139,7 @@ var optionDefaults = map[string]string{
 	"medium_size_h": "300", "large_size_w": "1024", "large_size_h": "1024", "uploads_use_yearmonth_folders": "1",
 	"upload_max_size": strconv.Itoa(64 << 20), "wp_attachment_pages_enabled": "1",
 	"permalink_structure": "/%year%/%monthnum%/%postname%/", "category_base": "", "tag_base": "",
+	"mcp_enabled": "0",
 }
 
 var optionsMessages = map[string]notice{
@@ -440,6 +441,11 @@ func (a *Admin) optionsSave(screen string) handler {
 				f.fail("Please choose a category.")
 			}
 			f.vals["default_category"] = strconv.FormatInt(id, 10)
+			// Opening the site to AI agents is a security decision.
+			if f.check("mcp_enabled"); f.vals["mcp_enabled"] == "1" && !c.settings.MCPEnabled && f.err == "" &&
+				a.needReauth(w, r, c, "/admin/settings/writing") {
+				return nil
+			}
 		case "reading":
 			front := f.choice("show_on_front", "posts", "page")
 			pof, pfp := atoi64(f.raw("page_on_front")), atoi64(f.raw("page_for_posts"))

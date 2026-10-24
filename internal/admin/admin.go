@@ -111,6 +111,7 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	a.registerPosts(mux)
 	a.registerComments(mux)
 	a.registerProfile(mux)
+	a.registerTokens(mux)
 	a.registerSettings(mux)
 	a.registerOptions(mux)
 	a.registerUsers(mux)

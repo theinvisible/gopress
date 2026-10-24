@@ -357,3 +357,13 @@ form:has(input[name=mode][value=invite]:checked) .gp-new-password { display: non
 .gp-customize-preview iframe.is-mobile { width: 375px; }
 .gp-customize [hidden] { display: none !important; }
 @media (max-width: 960px) { .gp-customize { grid-template-columns: 1fr; } .gp-customize-panel { max-height: none; } }
+
+/* Access tokens */
+.gp-snippet { background: #f6f7f7; border: 1px solid #dcdcde; padding: 8px 12px; overflow-x: auto; max-width: 900px; }
+.gp-snippet code { background: none; padding: 0; white-space: pre; }
+.gp-newtoken h3 { margin: 1.2em 0 .4em; font-size: 14px; }
+.gp-scope { display: inline-block; font-family: Consolas, Monaco, monospace; font-size: 12px; background: #f0f0f1; border-radius: 3px; padding: 1px 6px; margin: 1px 0; }
+.gp-scope-option { display: block; margin: 6px 0; }
+.gp-warn { color: #8a4b00; margin-left: 24px; }
+.gp-tokens tr.gp-expired td { color: #787c82; }
+.gp-revoke-all { margin-top: 12px; }

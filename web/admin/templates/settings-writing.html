@@ -8,6 +8,10 @@
 			<tr><th scope="row"><label for="default_category">Default Post Category</label></th><td><select name="default_category" id="default_category" class="postform">
 				{{- $c := index .V "default_category"}}{{range .Cats}}<option value="{{.Value}}"{{if eq .Value $c}} selected{{end}}>{{range $i := iterate .Level}}&nbsp;&nbsp;&nbsp;{{end}}{{.Label}}</option>{{end}}
 			</select><p class="description">Posts without a category get this one. It cannot be deleted.</p></td></tr>
+			<tr><th scope="row">AI agents (MCP)</th><td><fieldset><legend class="screen-reader-text"><span>AI agents (MCP)</span></legend>
+				<label for="mcp_enabled"><input name="mcp_enabled" type="checkbox" id="mcp_enabled" value="1"{{if eq (index .V "mcp_enabled") "1"}} checked{{end}}> Allow AI agents to write posts through the MCP interface</label>
+				<p class="description">Agents such as Claude Code connect to <code>{{.Home}}/mcp</code> with a personal access token, which every author creates under <a href="/admin/profile/tokens">Profile › Access Tokens</a>. Tokens are limited to the author's own posts; content from agents is always filtered like for authors without the right to post unfiltered HTML.{{if ne (index .V "mcp_enabled") "1"}} Turning this on asks you to confirm your identity.{{end}}</p>
+			</fieldset></td></tr>
 		</tbody></table>
 		<p class="submit"><input type="submit" class="button button-primary" value="Save Changes"></p>
 	</form>

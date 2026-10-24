@@ -116,3 +116,18 @@
 {{end}}
 
 {{define "csrf"}}<input type="hidden" name="_csrf" value="{{.}}">{{end}}
+{{define "token-table"}}<table class="wp-list-table widefat striped gp-tokens">
+	<thead><tr><th>Name</th><th>Token</th><th>Scopes</th><th>Created</th><th>Expires</th><th>Last used</th><th><span class="screen-reader-text">Actions</span></th></tr></thead>
+	<tbody>
+	{{- range .Tokens}}
+	<tr{{if .Expired}} class="gp-expired"{{end}}>
+		<td>{{.Name}}</td><td><code>{{.Prefix}}…</code></td>
+		<td>{{range .Scopes}}<span class="gp-scope">{{.}}</span> {{else}}read only{{end}}</td>
+		<td>{{.Created}}</td><td>{{if .Expired}}<span class="gp-badge gp-badge-warn">Expired</span> {{end}}{{.Expires}}</td>
+		<td>{{.LastUse}}{{if .LastIP}}<br><span class="description">{{.LastIP}}</span>{{end}}</td>
+		<td><form method="post" action="{{.RevokeURL}}" data-confirm="Revoke the access token “{{.Name}}”? Agents using it lose access immediately.">
+			<input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="button-link button-link-delete">Revoke</button></form></td>
+	</tr>
+	{{- end}}
+	</tbody>
+</table>{{end}}
