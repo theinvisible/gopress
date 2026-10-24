@@ -7,13 +7,14 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"net/netip"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/theinvisible/gopress/internal/httpx"
 )
 
 // Form field names added to the comment form.
@@ -88,7 +89,7 @@ func (g *Guard) Check(form url.Values, postID int64, ip string, now time.Time) s
 		return Expired
 	}
 
-	key := clientKey(ip)
+	key := httpx.NetKey(ip)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if _, ok := g.used[sig]; ok {
@@ -126,21 +127,6 @@ func prune(ts []time.Time, now time.Time) []time.Time {
 		}
 	}
 	return out
-}
-
-// clientKey groups IPv6 clients by /64 (one customer network), IPv4 by
-// address.
-func clientKey(ip string) string {
-	addr, err := netip.ParseAddr(ip)
-	if err != nil {
-		return ip
-	}
-	addr = addr.Unmap()
-	if addr.Is6() {
-		p, _ := addr.Prefix(64)
-		return p.String()
-	}
-	return addr.String()
 }
 
 var reLink = regexp.MustCompile(`(?i)<a [^>]*href`)

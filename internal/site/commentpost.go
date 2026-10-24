@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"net"
 	"net/http"
 	"net/mail"
-	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -17,6 +15,7 @@ import (
 
 	"github.com/theinvisible/gopress/internal/antispam"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/httpx"
 	"github.com/theinvisible/gopress/internal/render"
 )
 
@@ -29,59 +28,6 @@ type CommentFilter func(r *http.Request, c *db.Comment, post *db.Post) string
 
 // SetCommentFilter installs the comment filter (used by the plugin host).
 func (s *Site) SetCommentFilter(f CommentFilter) { s.commentFilter = f }
-
-// clientIP returns the visitor address. X-Real-Ip/X-Forwarded-For are only
-// trusted when the direct peer is a configured proxy (e.g. Traefik), so
-// clients reaching the server directly cannot fake their address.
-func (s *Site) clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	peer, err := netip.ParseAddr(host)
-	if err != nil {
-		return host
-	}
-	peer = peer.Unmap()
-	trusted := false
-	for _, p := range s.opts.TrustedProxies {
-		if p.Contains(peer) {
-			trusted = true
-			break
-		}
-	}
-	if !trusted {
-		return peer.String()
-	}
-	if ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-Ip"))); err == nil {
-		return ip.Unmap().String()
-	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		if ip, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1])); err == nil {
-			return ip.Unmap().String()
-		}
-	}
-	return peer.String()
-}
-
-// sameOrigin rejects cross-site form posts (another site making visitors'
-// browsers submit comments): Sec-Fetch-Site must not be cross-site and an
-// Origin header, if present, must be the site itself.
-func (s *Site) sameOrigin(r *http.Request, home string) bool {
-	if sfs := r.Header.Get("Sec-Fetch-Site"); sfs == "cross-site" {
-		return false
-	}
-	origin := r.Header.Get("Origin")
-	if origin == "" || origin == "null" && r.Header.Get("Sec-Fetch-Site") == "" {
-		return true // old browsers and non-browser clients
-	}
-	h, err := url.Parse(home)
-	if err != nil {
-		return false
-	}
-	return origin == h.Scheme+"://"+h.Host || origin == "https://"+r.Host || origin == "http://"+r.Host
-}
 
 // commentError renders a wp_die()-style error page.
 func commentError(w http.ResponseWriter, status int, msg string) {
@@ -127,7 +73,7 @@ func (s *Site) postComment(w http.ResponseWriter, r *http.Request) {
 		commentError(w, http.StatusInternalServerError, "Please try again later.")
 		return
 	}
-	if !s.sameOrigin(r, st.s.Home) {
+	if !httpx.SameOrigin(r, st.s.Home) {
 		commentError(w, http.StatusForbidden, "Comments must be posted from this site.")
 		return
 	}
@@ -143,7 +89,7 @@ func (s *Site) postComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := s.clientIP(r)
+	ip := httpx.ClientIP(r, s.opts.TrustedProxies)
 	switch reason := s.guard.Check(f, postID, ip, time.Now()); reason {
 	case antispam.OK:
 	case antispam.RateLimited:

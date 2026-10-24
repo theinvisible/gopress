@@ -1,0 +1,106 @@
+// Package httpx holds HTTP helpers shared by the public site and the admin:
+// client addresses behind reverse proxies, same-origin checks and cache
+// headers.
+package httpx
+
+import (
+	"net"
+	"net/http"
+	"net/netip"
+	"net/url"
+	"strings"
+)
+
+// ClientIP returns the visitor address. X-Real-Ip/X-Forwarded-For are only
+// trusted when the direct peer is one of the trusted proxies (e.g. Traefik),
+// so clients reaching the server directly cannot fake their address.
+func ClientIP(r *http.Request, trusted []netip.Prefix) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	peer, err := netip.ParseAddr(host)
+	if err != nil {
+		return host
+	}
+	peer = peer.Unmap()
+	ok := false
+	for _, p := range trusted {
+		if p.Contains(peer) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return peer.String()
+	}
+	if ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-Ip"))); err == nil {
+		return ip.Unmap().String()
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		if ip, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1])); err == nil {
+			return ip.Unmap().String()
+		}
+	}
+	return peer.String()
+}
+
+// NetKey groups IPv6 clients by /64 (one customer network), IPv4 by address.
+// Rate limits are keyed by it.
+func NetKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	addr = addr.Unmap()
+	if addr.Is6() {
+		p, _ := addr.Prefix(64)
+		return p.String()
+	}
+	return addr.String()
+}
+
+// SameOrigin rejects cross-site form posts (another site making visitors'
+// browsers submit forms): Sec-Fetch-Site must not be cross-site and an
+// Origin header, if present, must be the site itself.
+func SameOrigin(r *http.Request, home string) bool {
+	if sfs := r.Header.Get("Sec-Fetch-Site"); sfs == "cross-site" {
+		return false
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" || origin == "null" && r.Header.Get("Sec-Fetch-Site") == "" {
+		return true // old browsers and non-browser clients
+	}
+	return originMatches(r, origin, home)
+}
+
+// StrictSameOrigin is SameOrigin for the admin: requests from other sites,
+// including same-site subdomains, and opaque ("null") origins are rejected.
+// Requests without these headers (non-browser clients) still need a valid
+// CSRF token.
+func StrictSameOrigin(r *http.Request, home string) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "", "same-origin", "none":
+	default:
+		return false
+	}
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	return originMatches(r, origin, home)
+}
+
+func originMatches(r *http.Request, origin, home string) bool {
+	h, err := url.Parse(home)
+	if err != nil {
+		return false
+	}
+	return origin == h.Scheme+"://"+h.Host || origin == "https://"+r.Host || origin == "http://"+r.Host
+}
+
+// NoStore marks a response as personal and uncacheable.
+func NoStore(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+}

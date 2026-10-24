@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,9 +26,10 @@ func TestOpenMigratesIdempotently(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		files, _ := fs.Glob(migrations, "migrations/*.sql")
 		var n int
-		if err := d.R.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil || n != 1 {
-			t.Fatalf("schema_migrations = %d, %v", n, err)
+		if err := d.R.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil || n != len(files) {
+			t.Fatalf("schema_migrations = %d, %v; want %d", n, err, len(files))
 		}
 		d.Close()
 	}
