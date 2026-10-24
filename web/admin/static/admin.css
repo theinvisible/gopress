@@ -209,3 +209,11 @@ body.gp-error-page { background: #f0f0f1; font-family: -apple-system, BlinkMacSy
 .gp-security > h2 { margin-top: 2em; }
 .gp-revision-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .gp-revision-head form { margin: 0; }
+.gp-indent { margin-left: 24px; }
+.gp-user-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 2em; }
+.gp-user-actions form { margin: 0; }
+.gp-onetime input[readonly] { max-width: 640px; }
+.users .column-posts, .users .column-role { width: 10%; }
+.users .column-2fa, .users .column-lastlogin { width: 14%; }
+.users .column-username img { float: left; margin: 2px 10px 0 0; border-radius: 50%; }
+.gp-settings fieldset[disabled] { opacity: .6; }

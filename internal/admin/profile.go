@@ -56,7 +56,7 @@ func (a *Admin) renderProfile(w http.ResponseWriter, r *http.Request, c *reqCtx,
 	d := &profileData{basePage: a.base(ctx, c, "Profile", "profile"), Schemes: colorSchemes, Error: errMsg, PwError: pwErr,
 		Login: u.Login, Email: u.Email, URL: u.URL, Display: u.DisplayName, Bio: u.Description}
 	d.Reauth = a.auth.RecentlyAuthenticated(c.cur)
-	d.Nickname, _ = db.UserMeta(ctx, a.db.R, c.user.ID, "nickname")
+	d.Nickname, _ = db.UserMeta(ctx, a.db.R, u.ID, "nickname")
 	d.Scripts = []string{"profile.js"}
 	if msg, ok := profileMessages[r.URL.Query().Get("msg")]; ok && errMsg == "" && pwErr == "" {
 		if d.Notice == nil {
@@ -69,38 +69,73 @@ func (a *Admin) renderProfile(w http.ResponseWriter, r *http.Request, c *reqCtx,
 	return a.render(w, "profile", d)
 }
 
+// readProfileForm reads the profile fields shared by the profile and the
+// user edit screen into a copy of u. It returns the nickname, the
+// submitted email address and an error message for the user.
+func readProfileForm(r *http.Request, u *db.User) (out db.User, nickname, email, errMsg string) {
+	out = *u
+	out.DisplayName = strings.TrimSpace(render.SanitizeText(r.PostFormValue("display_name")))
+	out.Description = strings.TrimSpace(render.SanitizeText(r.PostFormValue("description")))
+	out.URL = strings.TrimSpace(r.PostFormValue("url"))
+	email = strings.TrimSpace(r.PostFormValue("email"))
+	nickname = strings.TrimSpace(render.SanitizeText(r.PostFormValue("nickname")))
+	if out.DisplayName == "" {
+		out.DisplayName = out.Login
+	}
+	if len(out.DisplayName) > 250 || len(nickname) > 250 || len(out.Description) > 5000 || len(out.URL) > 200 {
+		return out, nickname, email, "A field is too long."
+	}
+	if out.URL != "" {
+		pu, err := url.Parse(out.URL)
+		if err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Host == "" {
+			return out, nickname, email, "The website must be an http(s) URL."
+		}
+	}
+	if !validEmail(email) {
+		return out, nickname, email, "Please enter a valid email address."
+	}
+	return out, nickname, email, ""
+}
+
+func validEmail(s string) bool {
+	addr, err := mail.ParseAddress(s)
+	return err == nil && addr.Address == s && addr.Name == "" && len(s) <= 100 && !strings.ContainsAny(s, "\r\n")
+}
+
+// emailTaken reports whether email is the login or email of another user.
+func (a *Admin) emailTaken(ctx context.Context, email string, except int64) (bool, error) {
+	if taken, err := db.LoginTaken(ctx, a.db.R, "email", email, except); err != nil || taken {
+		return taken, err
+	}
+	return db.LoginTaken(ctx, a.db.R, "login", email, except)
+}
+
+// notifyEmailChanged tells the old address that the account's email
+// address was changed (someone with access could otherwise take over
+// password resets unnoticed).
+func (a *Admin) notifyEmailChanged(ctx context.Context, u *db.User, oldEmail string) {
+	if err := a.mail.Enqueue(ctx, oldEmail, "email_changed", map[string]any{"Login": u.Login, "Email": u.Email}); err != nil {
+		a.log.Warn("email change notice", "err", err)
+	}
+}
+
 // POST /admin/profile
 func (a *Admin) profileSave(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 	ctx := r.Context()
-	u := *c.user
-	u.DisplayName = strings.TrimSpace(render.SanitizeText(r.PostFormValue("display_name")))
-	u.Description = strings.TrimSpace(render.SanitizeText(r.PostFormValue("description")))
-	u.URL = strings.TrimSpace(r.PostFormValue("url"))
-	email := strings.TrimSpace(r.PostFormValue("email"))
-	nickname := strings.TrimSpace(render.SanitizeText(r.PostFormValue("nickname")))
+	u, nickname, email, errMsg := readProfileForm(r, c.user)
+	if errMsg != "" {
+		return a.renderProfile(w, r, c, &u, errMsg, "")
+	}
 	color := r.PostFormValue("admin_color")
-	if u.DisplayName == "" {
-		u.DisplayName = u.Login
-	}
-	if len(u.DisplayName) > 250 || len(nickname) > 250 || len(u.Description) > 5000 {
-		return a.renderProfile(w, r, c, &u, "A field is too long.", "")
-	}
-	if u.URL != "" {
-		pu, err := url.Parse(u.URL)
-		if err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Host == "" {
-			return a.renderProfile(w, r, c, &u, "The website must be an http(s) URL.", "")
-		}
-	}
 	if !strings.EqualFold(email, c.user.Email) {
-		addr, err := mail.ParseAddress(email)
-		if err != nil || addr.Address != email {
-			return a.renderProfile(w, r, c, &u, "Please enter a valid email address.", "")
-		}
 		// Changing the email (a login name) is a sensitive change.
 		if !a.auth.RecentlyAuthenticated(c.cur) {
 			return seeOther(w, r, "/admin/reauth?next="+url.QueryEscape("/admin/profile"))
 		}
-		if other, err := db.UserByLogin(ctx, a.db.R, email); err == nil && other.ID != u.ID {
+		if taken, err := a.emailTaken(ctx, email, u.ID); err != nil || taken {
+			if err != nil {
+				return err
+			}
 			return a.renderProfile(w, r, c, &u, "This email address is already used by another account.", "")
 		}
 		u.Email = email
@@ -119,6 +154,9 @@ func (a *Admin) profileSave(w http.ResponseWriter, r *http.Request, c *reqCtx) e
 		}
 	}
 	a.auth.Audit(ctx, r, u.ID, auth.ActProfileUpdate, "user", u.ID, map[string]any{"email_changed": u.Email != c.user.Email})
+	if u.Email != c.user.Email {
+		a.notifyEmailChanged(ctx, &u, c.user.Email)
+	}
 	a.site.Invalidate() // author names appear on the site
 	return seeOther(w, r, "/admin/profile?msg=saved")
 }

@@ -107,6 +107,15 @@
 			navigator.clipboard.writeText(codes).then(function () { copy.textContent = 'Copied'; });
 		});
 	}
+	// One-time links and codes: copy buttons and select-on-focus fields.
+	document.addEventListener('click', function (ev) {
+		var b = ev.target.closest('[data-copy]');
+		if (!b || !navigator.clipboard) { return; }
+		navigator.clipboard.writeText(b.getAttribute('data-copy')).then(function () { b.textContent = 'Copied'; });
+	});
+	document.querySelectorAll('[data-select-all]').forEach(function (el) {
+		el.addEventListener('focus', function () { el.select(); });
+	});
 	var print = document.querySelector('[data-print]');
 	if (print) { print.addEventListener('click', function () { window.print(); }); }
 

@@ -1,0 +1,87 @@
+{{define "page"}}{{template "admin-top" .}}
+{{- $d := .}}
+<div class="wrap">
+	<h1 class="wp-heading-inline">Users</h1>
+	{{- if .CanAdd}} <a href="/admin/users/new" class="page-title-action">Add User</a>{{end}}
+	{{- if .Search}}<span class="subtitle">Search results for: <strong>{{.Search}}</strong></span>{{end}}
+	<hr class="wp-header-end">
+
+	<ul class="subsubsub">
+		{{- range $i, $v := .Views}}
+		<li>{{if $i}} | {{end}}<a href="{{$v.URL}}"{{if $v.Current}} class="current" aria-current="page"{{end}}>{{$v.Label}} <span class="count">({{$v.Count}})</span></a></li>
+		{{- end}}
+	</ul>
+	<form method="get" action="/admin/users/">
+		<p class="search-box">
+			<label class="screen-reader-text" for="user-search-input">Search Users:</label>
+			<input type="search" id="user-search-input" name="s" value="{{.Search}}">
+			{{- if .Role}}<input type="hidden" name="role" value="{{.Role}}">{{end}}
+			<input type="submit" class="button" value="Search Users">
+		</p>
+	</form>
+
+	<form method="post" action="/admin/users/bulk">
+		{{template "csrf" .CSRF}}
+		<div class="tablenav top">
+			<div class="alignleft actions bulkactions">
+				<label for="bulk-action-selector-top" class="screen-reader-text">Select bulk action</label>
+				<select name="action" id="bulk-action-selector-top">
+					<option value="">Bulk actions</option>
+					{{- if .CanDel}}<option value="delete">Delete</option>{{end}}
+					<option value="role">Change role</option>
+				</select>
+				<label class="screen-reader-text" for="new_role">Change role to…</label>
+				<select name="new_role" id="new_role">
+					<option value="">Change role to…</option>
+					{{- range .Roles}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+				</select>
+				<input type="submit" class="button action" value="Apply" data-bulk-apply>
+			</div>
+			{{template "pagination" .}}
+			<br class="clear">
+		</div>
+		<table class="wp-list-table widefat fixed striped table-view-list users">
+			<thead>{{template "user-columns" .}}</thead>
+			<tbody id="the-list">
+			{{- range .Rows}}
+				<tr id="user-{{.ID}}">
+					<th scope="row" class="check-column">{{if ne .ID $d.SelfID}}<input type="checkbox" name="users[]" id="user_{{.ID}}" value="{{.ID}}"><label for="user_{{.ID}}"><span class="screen-reader-text">Select {{.Login}}</span></label>{{end}}</th>
+					<td class="username column-username has-row-actions column-primary" data-colname="Username">
+						<img src="{{avatar .Email 64}}" class="avatar avatar-32 photo" width="32" height="32" alt="">
+						<strong>{{if eq .ID $d.SelfID}}<a href="/admin/profile">{{.Login}}</a>{{else}}<a href="/admin/users/{{.ID}}/edit">{{.Login}}</a>{{end}}</strong>
+						<div class="row-actions">
+							{{- if eq .ID $d.SelfID}}<span class="edit"><a href="/admin/profile">Edit</a></span>
+							{{- else}}<span class="edit"><a href="/admin/users/{{.ID}}/edit">Edit</a></span>{{if $d.CanDel}} | <span class="delete"><a class="submitdelete" href="/admin/users/delete?ids={{.ID}}">Delete</a></span>{{end}}{{end}}
+						</div>
+						<button type="button" class="toggle-row"><span class="screen-reader-text">Show more details</span></button>
+					</td>
+					<td class="name column-name" data-colname="Name">{{.DisplayName}}</td>
+					<td class="email column-email" data-colname="Email"><a href="mailto:{{.Email}}">{{.Email}}</a></td>
+					<td class="role column-role" data-colname="Role">{{.RoleLabel}}</td>
+					<td class="posts column-posts num" data-colname="Posts">{{if .Posts}}<a href="/admin/posts/?author={{.ID}}" class="edit">{{.Posts}}</a>{{else}}0{{end}}</td>
+					<td class="column-2fa" data-colname="Two-factor">{{if .Factors}}<span class="dashicons dashicons-yes-alt gp-ok" aria-hidden="true"></span> {{.Factors}}{{else if .Invited}}<span class="gp-badge">Invited</span>{{else}}<span class="gp-badge gp-badge-warn">Not set up</span>{{end}}</td>
+					<td class="column-lastlogin" data-colname="Last login">{{if .LastLogin}}{{.LastLogin}}{{else}}&#8212;{{end}}</td>
+				</tr>
+			{{- else}}
+				<tr class="no-items"><td colspan="8">No users found.</td></tr>
+			{{- end}}
+			</tbody>
+			<tfoot>{{template "user-columns" .}}</tfoot>
+		</table>
+	</form>
+	<div class="tablenav bottom">{{template "pagination" .}}<br class="clear"></div>
+</div>
+{{template "admin-bottom" .}}{{end}}
+
+{{define "user-columns"}}
+<tr>
+	<td class="manage-column column-cb check-column"><input class="cb-select-all" type="checkbox"><label><span class="screen-reader-text">Select All</span></label></td>
+	<th scope="col" class="manage-column column-username column-primary sortable"><a href="{{call .SortURL "login"}}"><span>Username</span></a></th>
+	<th scope="col" class="manage-column column-name sortable"><a href="{{call .SortURL "name"}}"><span>Name</span></a></th>
+	<th scope="col" class="manage-column column-email sortable"><a href="{{call .SortURL "email"}}"><span>Email</span></a></th>
+	<th scope="col" class="manage-column column-role">Role</th>
+	<th scope="col" class="manage-column column-posts num sortable"><a href="{{call .SortURL "posts"}}"><span>Posts</span></a></th>
+	<th scope="col" class="manage-column column-2fa">Two-factor</th>
+	<th scope="col" class="manage-column column-lastlogin">Last login</th>
+</tr>
+{{end}}

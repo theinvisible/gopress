@@ -1,0 +1,66 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-profile">
+	<h1 class="wp-heading-inline">Edit User {{.Edit.Login}}</h1> <a href="/admin/users/new" class="page-title-action">Add User</a>
+	<hr class="wp-header-end">
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	{{- if .OneTimeLink}}
+	<div class="notice notice-warning gp-onetime"><p><strong>Invitation link</strong> – shown only now. It is valid for 72 hours and works once.</p>
+		<p><input type="text" class="large-text code" readonly value="{{.OneTimeLink}}" data-select-all> <button type="button" class="button" data-copy="{{.OneTimeLink}}">Copy</button></p></div>
+	{{- end}}
+	{{- if .SetupCode}}
+	<div class="notice notice-warning gp-onetime"><p><strong>Setup code for two-factor authentication</strong> – shown only now. Pass it on together with the password; it is valid for 72 hours and works once.</p>
+		<p><code class="gp-code">{{.SetupCode}}</code> <button type="button" class="button" data-copy="{{.SetupCode}}">Copy</button></p></div>
+	{{- end}}
+	{{- if not .Reauth}}<div class="notice notice-info inline"><p>Changes to other accounts ask you to confirm your identity first.</p></div>{{end}}
+	<p><a href="/admin/users/">&larr; Back to Users</a></p>
+
+	<form method="post" action="/admin/users/{{.Edit.ID}}/edit" id="your-profile">
+		{{template "csrf" .CSRF}}
+		<h2>Name</h2>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th><label for="user_login">Username</label></th><td><input type="text" id="user_login" value="{{.Edit.Login}}" disabled class="regular-text"> <span class="description">Usernames cannot be changed.</span></td></tr>
+			<tr><th><label for="role">Role</label></th><td>{{if .CanPromote}}<select name="role" id="role">{{range .Roles}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>{{else}}{{.Edit.Role}}{{end}}</td></tr>
+			<tr><th><label for="nickname">Nickname</label></th><td><input type="text" name="nickname" id="nickname" value="{{.Nickname}}" class="regular-text"></td></tr>
+			<tr><th><label for="display_name">Display name publicly as</label></th><td><input type="text" name="display_name" id="display_name" value="{{.Display}}" class="regular-text"></td></tr>
+		</tbody></table>
+		<h2>Contact Info</h2>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th><label for="email">Email <span class="description">(required)</span></label></th><td><input type="email" name="email" id="email" value="{{.Email}}" class="regular-text ltr" required>
+				<p class="description">The old address is notified of a change; pending links stop working.</p></td></tr>
+			<tr><th><label for="url">Website</label></th><td><input type="url" name="url" id="url" value="{{.URL}}" class="regular-text code"></td></tr>
+		</tbody></table>
+		<h2>About the user</h2>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th><label for="description">Biographical Info</label></th><td><textarea name="description" id="description" rows="5" cols="30">{{.Bio}}</textarea></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Update User"></p>
+	</form>
+
+	<h2 id="security">Account Security</h2>
+	<table class="form-table" role="presentation"><tbody>
+		<tr><th>Two-factor authentication</th><td>{{if .Factors}}{{.Factors}}{{if .CodesLeft}}; {{.CodesLeft}} recovery codes left{{end}}{{else if .Invited}}Invitation pending{{else}}<strong>Not set up yet</strong>{{end}}</td></tr>
+		<tr><th>Sessions</th><td>{{.Sessions}} active</td></tr>
+		<tr><th>Last login</th><td>{{if .LastLogin}}{{.LastLogin}}{{else}}&#8212;{{end}}</td></tr>
+	</tbody></table>
+	<div class="gp-user-actions">
+		{{- if .HasFactor}}
+		<form method="post" action="/admin/users/{{.Edit.ID}}/security/reset-2fa" data-confirm="Remove all second factors of {{.Edit.Login}} and log them out? They set up two-factor authentication again with a new setup code.">{{template "csrf" .CSRF}}<button type="submit" class="button">Reset two-factor authentication</button></form>
+		{{- else}}
+		<form method="post" action="/admin/users/{{.Edit.ID}}/security/invite">{{template "csrf" .CSRF}}<input type="hidden" name="send_mail" value="{{if .MailReady}}1{{end}}"><button type="submit" class="button">New invitation link{{if .MailReady}} (also by email){{end}}</button></form>
+		<form method="post" action="/admin/users/{{.Edit.ID}}/security/setup-code">{{template "csrf" .CSRF}}<button type="submit" class="button">New setup code</button></form>
+		{{- end}}
+		{{- if .MailReady}}
+		<form method="post" action="/admin/users/{{.Edit.ID}}/security/send-reset">{{template "csrf" .CSRF}}<button type="submit" class="button">Send password reset link</button></form>
+		{{- end}}
+		<form method="post" action="/admin/users/{{.Edit.ID}}/security/end-sessions">{{template "csrf" .CSRF}}<button type="submit" class="button"{{if not .Sessions}} disabled{{end}}>Log out everywhere</button></form>
+		<form method="post" action="/admin/users/{{.Edit.ID}}/security/unlock">{{template "csrf" .CSRF}}<button type="submit" class="button">Lift login locks</button></form>
+	</div>
+
+	{{- if .Activity}}
+	<h2>Recent Activity</h2>
+	<table class="wp-list-table widefat fixed striped"><thead><tr><th>When</th><th>Activity</th><th>IP address</th></tr></thead><tbody>
+		{{- range .Activity}}<tr><td>{{.When}}</td><td>{{.Action}}</td><td>{{.IP}}</td></tr>{{end}}
+	</tbody></table>
+	{{- end}}
+</div>
+{{template "admin-bottom" .}}{{end}}

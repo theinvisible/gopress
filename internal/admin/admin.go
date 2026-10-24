@@ -111,6 +111,7 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	a.registerComments(mux)
 	a.registerProfile(mux)
 	a.registerSettings(mux)
+	a.registerUsers(mux)
 
 	mux.Handle("/admin/", a.page(auth.CapRead, func(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 		return errNotFound

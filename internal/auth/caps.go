@@ -32,6 +32,10 @@ const (
 	CapEditUsers           = "edit_users"
 	CapEditThemeOptions    = "edit_theme_options"
 	CapActivatePlugins     = "activate_plugins"
+	CapCreateUsers         = "create_users"
+	CapDeleteUsers         = "delete_users"
+	CapPromoteUsers        = "promote_users"
+	CapRemoveUsers         = "remove_users"
 )
 
 // Roles (WordPress names).
@@ -61,7 +65,8 @@ var (
 		CapDeleteOthersPages, CapDeletePublishedPage, CapEditPrivatePages, CapReadPrivatePages,
 		CapModerateComments, CapManageCategories, CapUnfilteredHTML)
 	adminCaps = append(editorCaps[:len(editorCaps):len(editorCaps)],
-		CapManageOptions, CapListUsers, CapEditUsers, CapEditThemeOptions, CapActivatePlugins)
+		CapManageOptions, CapListUsers, CapEditUsers, CapEditThemeOptions, CapActivatePlugins,
+		CapCreateUsers, CapDeleteUsers, CapPromoteUsers, CapRemoveUsers)
 
 	roleCaps = map[string]map[string]bool{
 		RoleAdministrator: set(adminCaps...),
@@ -71,6 +76,25 @@ var (
 		RoleSubscriber:    set(CapRead),
 	}
 )
+
+// Roles lists the roles from most to least privileged with their labels.
+var Roles = []struct{ Name, Label string }{
+	{RoleAdministrator, "Administrator"}, {RoleEditor, "Editor"}, {RoleAuthor, "Author"},
+	{RoleContributor, "Contributor"}, {RoleSubscriber, "Subscriber"},
+}
+
+// ValidRole reports whether role is a known role.
+func ValidRole(role string) bool { _, ok := roleCaps[role]; return ok }
+
+// RoleLabel returns the display name of a role.
+func RoleLabel(role string) string {
+	for _, r := range Roles {
+		if r.Name == role {
+			return r.Label
+		}
+	}
+	return role
+}
 
 // Can reports whether user has a capability through its role.
 func Can(u *db.User, capability string) bool {

@@ -108,12 +108,19 @@ func (a *Admin) menu(u *db.User, screen string, pending int) []menuItem {
 		m = append(m, menuItem{ID: "comments", Label: "Comments", Icon: "admin-comments", URL: "/admin/comments/", Badge: pending})
 	}
 	m = append(m, menuItem{Separator: true})
+	if auth.Can(u, auth.CapListUsers) {
+		sub := []subItem{{ID: "users-all", Label: "All Users", URL: "/admin/users/"}}
+		if auth.Can(u, auth.CapCreateUsers) {
+			sub = append(sub, subItem{ID: "users-new", Label: "Add User", URL: "/admin/users/new"})
+		}
+		m = append(m, menuItem{ID: "users", Label: "Users", Icon: "admin-users", URL: "/admin/users/", Sub: sub})
+	}
 	if auth.Can(u, auth.CapManageOptions) {
 		m = append(m, menuItem{ID: "settings", Label: "Settings", Icon: "admin-settings", URL: "/admin/settings/email", Sub: []subItem{
 			{ID: "settings-email", Label: "Email", URL: "/admin/settings/email"},
 		}})
 	}
-	m = append(m, menuItem{ID: "profile", Label: "Profile", Icon: "admin-users", URL: "/admin/profile", Sub: []subItem{
+	m = append(m, menuItem{ID: "profile", Label: "Profile", Icon: "id", URL: "/admin/profile", Sub: []subItem{
 		{ID: "profile", Label: "Profile", URL: "/admin/profile"},
 		{ID: "security", Label: "Security", URL: "/admin/profile/security"},
 	}})

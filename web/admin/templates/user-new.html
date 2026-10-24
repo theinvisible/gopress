@@ -1,0 +1,32 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-user-new">
+	<h1>Add User</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	{{- if not .Reauth}}<div class="notice notice-info inline"><p>Adding a user asks you to confirm your identity first.</p></div>{{end}}
+	<form method="post" action="/admin/users/new" autocomplete="off">
+		{{template "csrf" .CSRF}}
+		<table class="form-table" role="presentation"><tbody>
+			<tr class="form-required"><th><label for="user_login">Username <span class="description">(required)</span></label></th>
+				<td><input type="text" name="user_login" id="user_login" value="{{.Login}}" class="regular-text" maxlength="60" autocapitalize="none" autocorrect="off" required></td></tr>
+			<tr class="form-required"><th><label for="email">Email <span class="description">(required)</span></label></th>
+				<td><input type="email" name="email" id="email" value="{{.Email}}" class="regular-text ltr" required></td></tr>
+			<tr><th><label for="display_name">Display name</label></th>
+				<td><input type="text" name="display_name" id="display_name" value="{{.Display}}" class="regular-text"></td></tr>
+			<tr><th><label for="role">Role</label></th>
+				<td><select name="role" id="role">{{range .Roles}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></td></tr>
+			<tr><th scope="row">Account setup</th>
+				<td><fieldset>
+					<p><label><input type="radio" name="mode" value="invite"{{if ne .Mode "password"}} checked{{end}}> <strong>Invitation link</strong> (recommended): the user chooses a password and sets up two-factor authentication with a one-time link (valid 72 hours).</label></p>
+					<p class="gp-indent"><label><input type="checkbox" name="send_mail" value="1"{{if .MailReady}} checked{{else}} disabled{{end}}> Send the link by email</label>{{if not .MailReady}} <span class="description">(email is not configured; you get the link to pass on)</span>{{end}}</p>
+					<p><label><input type="radio" name="mode" value="password"{{if eq .Mode "password"}} checked{{end}}> <strong>Set a password now</strong> and pass it on together with a one-time setup code for the two-factor setup.</label></p>
+				</fieldset></td></tr>
+			<tr class="gp-new-password"><th><label for="pass1">Password</label></th><td>
+				<div class="wp-pwd"><input type="password" name="pass1" id="pass1" class="regular-text" autocomplete="new-password" maxlength="256">
+				<button type="button" class="button wp-hide-pw" data-toggle-password="pass1" aria-label="Show password"><span class="dashicons dashicons-visibility" aria-hidden="true"></span></button></div>
+				<p class="description">Only for “Set a password now”. At least 12 characters.</p></td></tr>
+			<tr class="gp-new-password"><th><label for="pass2">Repeat password</label></th><td><input type="password" name="pass2" id="pass2" class="regular-text" autocomplete="new-password" maxlength="256"></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Add User"></p>
+	</form>
+</div>
+{{template "admin-bottom" .}}{{end}}

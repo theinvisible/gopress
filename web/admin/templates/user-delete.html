@@ -1,0 +1,21 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap">
+	<h1>Delete Users</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	{{- if .HasSelf}}<div class="notice notice-warning inline"><p>Your own account is not deleted.</p></div>{{end}}
+	<form method="post" action="/admin/users/delete">
+		{{template "csrf" .CSRF}}
+		<input type="hidden" name="ids" value="{{.IDs}}">
+		<p>You have specified {{if eq (len .Users) 1}}this user{{else}}these users{{end}} for deletion:</p>
+		<ul>{{range .Users}}<li>ID #{{.ID}}: <strong>{{.Login}}</strong> ({{.Email}})</li>{{end}}</ul>
+		{{- if .Content}}
+		<fieldset><p><legend>What should be done with the content ({{.Content}} {{plural .Content "item" "items"}}) of {{if eq (len .Users) 1}}this user{{else}}these users{{end}}?</legend></p>
+			<p><label for="reassign_user">Attribute all content to:</label>
+			<select name="reassign_user" id="reassign_user">{{range .Others}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></p>
+			<p class="description">Content is never deleted with a user.</p>
+		</fieldset>
+		{{- end}}
+		<p class="submit"><input type="submit" class="button button-primary" value="Confirm Deletion"> <a href="/admin/users/" class="button">Cancel</a></p>
+	</form>
+</div>
+{{template "admin-bottom" .}}{{end}}
