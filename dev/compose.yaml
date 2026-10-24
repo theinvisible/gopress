@@ -1,0 +1,22 @@
+# Local MariaDB seeded with the live WordPress dump; import source for `gopress import-wp`.
+name: gopress-dev
+services:
+  wpdb:
+    image: mariadb:11.8
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: wordpress
+    ports:
+      - "127.0.0.1:33066:3306"
+    volumes:
+      - gopress-devdb:/var/lib/mysql
+      - ../local/wp-dump.sql.gz:/docker-entrypoint-initdb.d/wp-dump.sql.gz:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+volumes:
+  gopress-devdb:

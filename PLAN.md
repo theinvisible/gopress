@@ -194,9 +194,9 @@ Legende: `[ ]` offen · `[x]` erledigt · `[~]` in Arbeit
 ### M0 – Setup
 - [x] PLAN.md mit Devlog anlegen
 - [x] `git init`
-- [ ] Go-1.27-Toolchain lokal installieren
-- [ ] `go mod init` (`go 1.27`), Grundgerüst `cmd/gopress`, Makefile, `.gitignore`
-- [ ] Lokale MariaDB mit `/root/wp-dump-final.sql.gz` und eine Kopie der Uploads als Testdaten
+- [x] Go-1.27-Toolchain lokal installieren (go1.27.3 in `~/sdk/go1.27.3`)
+- [x] `go mod init` (`go 1.27`), Grundgerüst `cmd/gopress`, Makefile, `.gitignore`
+- [x] Lokale Testdaten: frischer Dump, Uploads, Plugin-/Theme-Quellen (`make testdata`), Dev-MariaDB (`make devdb-up`), Referenzzahlen (`make devdb-counts`)
 
 ### M1 – Core & Import (*Ergebnis: importierte Seite läuft lokal read-only*)
 - [ ] SQLite-Schema und Migrations (`internal/db`)
@@ -267,6 +267,35 @@ Legende: `[ ]` offen · `[x]` erledigt · `[~]` in Arbeit
 
 Neueste Einträge oben. Jeder Eintrag hat dieselbe Gliederung: Gemacht, Entscheidungen, Offen/Probleme, Nächster Schritt.
 
+### 2026-10-24 – M0 Setup abgeschlossen
+
+**Gemacht**
+- **Go 1.27.3** user-lokal nach `~/sdk/go1.27.3` installiert (sha256 geprüft). Symlinks `~/.local/bin/go` und `~/.local/bin/gofmt`, ohne Änderung an der Shell-Config.
+- **Grundgerüst:**
+  - `go.mod` mit `github.com/theinvisible/gopress`, `go 1.27`, `toolchain go1.27.3`.
+  - `cmd/gopress` mit den Subcommands `serve` (`/healthz`, Platzhalter-Startseite, Graceful Shutdown, slog) und `version`. Die Stubs `import-wp`, `backup`, `user` und `plugin-pack` beenden sich mit Exit-Code 2.
+  - `internal/buildinfo`, `internal/config` (Flags mit Env-Fallback `GOPRESS_ADDR`/`GOPRESS_DATA`).
+- **Build-Tooling:** `Makefile` mit build/run/test/fmt/clean und den Testdaten-Targets. Dazu `.gitignore` und `README.md`.
+- **Testdaten** unter `local/` (gitignored, enthält personenbezogene Daten):
+  - `dev/fetch-testdata.sh` streamt einen frischen `mariadb-dump`; auf dem Server wird nichts geschrieben.
+  - Uploads (41 MB), Plugin-Quellen (paypal-donations, foto-slider-lightbox, akismet) und das Theme twentytwelve per rsync.
+- **Dev-DB:** `dev/compose.yaml` mit MariaDB 11.8 auf `127.0.0.1:33066` (wordpress/wordpress), geseedet mit dem Dump.
+- **Referenzzahlen** in `local/reference-counts.txt` als Soll-Werte für den M1-Import:
+  - Posts: 61 post, 24 page, 52 attachment, 53 donation_list, 1 fslb_gallery.
+  - Kommentare: 650 comment approved, 29 pingback approved, 97 pending, 2145 spam.
+  - Terms: 18 category, 17 post_tag. User: 1.
+
+**Entscheidungen**
+- Statt des alten Dumps vom 13.08. wird immer ein frischer Dump gezogen (`make testdata`). Die alten Dumps auf dem Server sind veraltet.
+- Testdaten bleiben strikt außerhalb von Git (`/local/`, `*.sql.gz`, `*.db`).
+
+**Offen/Probleme**
+- Die „679 approved“ aus der Analyse sind 650 Kommentare + 29 Pingbacks. Der Import muss `comment_type` (pingback) mitnehmen.
+- `wp_global_styles`, `nav_menu_item` (Drafts) und `amn_exact-metrics` werden nicht importiert.
+
+**Nächster Schritt**
+- M1 starten: SQLite-Schema (`internal/db`), danach `import-wp` gegen die Dev-DB.
+
 ### 2026-10-24 – Analyse & Planung
 
 **Gemacht**
@@ -294,9 +323,9 @@ Neueste Einträge oben. Jeder Eintrag hat dieselbe Gliederung: Gemacht, Entschei
 - Entfallen: wpforms-lite (ungenutzt), ai, analytics. Sitemap und Duplicate Post wandern in den Core.
 
 **Offen/Probleme**
-- Go ist lokal nicht installiert, Go 1.27 muss eingerichtet werden.
+- ~~Go ist lokal nicht installiert~~ → erledigt in M0.
 - Extism go-pdk mit Standard-Go (wasip1, `go:wasmexport`) muss in M3 verifiziert werden. Fallback ist TinyGo.
-- Akismet-API-Key: prüfen, ob `wordpress_api_key` in der WP-DB gesetzt ist.
+- ~~Akismet-API-Key prüfen~~ → `wordpress_api_key` ist gesetzt.
 
 **Nächster Schritt**
 - M0 abschließen: Go 1.27 installieren, Grundgerüst anlegen, Testdaten (Dump + Uploads) lokal bereitstellen.

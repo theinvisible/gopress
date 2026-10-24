@@ -1,0 +1,14 @@
+# build output
+/bin/
+dist/
+node_modules/
+
+# local test data: contains personal data (emails, IPs, donor data) - never commit
+/local/
+*.db
+*.db-wal
+*.db-shm
+*.sql.gz
+
+# IDE
+/.idea/
