@@ -275,3 +275,7 @@ form:has(input[name=mode][value=invite]:checked) .gp-new-password { display: non
 	.gp-media-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
 }
 .gp-media [hidden], .gp-media-details [hidden] { display: none !important; }
+.gp-settings input[data-format-preview] { width: 9em; }
+.gp-settings .available-structure-tags ul { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+.gp-settings .available-structure-tags li { margin: 0; }
+.gp-settings .available-structure-tags .button { min-height: 26px; line-height: 2; padding: 0 6px; font-size: 12px; }
