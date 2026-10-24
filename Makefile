@@ -25,6 +25,7 @@ clean:
 
 # --- local test data (gitignored, see dev/) ---
 
+# Needs WP_HOST=user@server (see dev/fetch-testdata.sh for more settings).
 testdata:
 	dev/fetch-testdata.sh
 
@@ -50,9 +51,11 @@ wpref-up: devdb-up
 wpref-down:
 	$(COMPOSE) stop wpref
 
-# Regenerate golden files for the render package from the reference WordPress.
+# Regenerate golden files for the render tests from the reference WordPress:
+# the generic corpus (committed) and the imported site's content (local only).
 golden: wpref-up
-	$(COMPOSE) exec -T wpref php /golden/gen.php > internal/render/testdata/golden.json
+	$(COMPOSE) exec -T wpref php /golden/gen.php edge > internal/render/testdata/golden.json
+	$(COMPOSE) exec -T wpref php /golden/gen.php site > local/golden-site.json
 
 # Import the dev database into ./local/data (replaces it).
 import: build
@@ -62,9 +65,10 @@ import: build
 serve:
 	dev/serve-local.sh
 
-# Compare GoPress (8080) with the reference WordPress (8081).
+# Compare GoPress (8080) with the reference WordPress (8081). Set SITE_HOST
+# to the original site's host name (absolute links in the content).
 parity: wpref-up serve
-	go run ./dev/parity
+	go run ./dev/parity -site-host "$(SITE_HOST)"
 
 vulncheck:
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...

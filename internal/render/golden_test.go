@@ -26,15 +26,26 @@ var wpShortcodes = map[string]bool{
 	"video": true, "embed": true, "fotogalerie": true, "paypal-donation": true,
 }
 
+// goldenFiles are the committed generic corpus and, if present, golden
+// data generated from the locally imported site (make golden).
+var goldenFiles = []string{"testdata/golden.json", "../../local/golden-site.json"}
+
 func loadGolden(t *testing.T) []goldenCase {
 	t.Helper()
-	raw, err := os.ReadFile("testdata/golden.json")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var cases []goldenCase
-	if err := json.Unmarshal(raw, &cases); err != nil {
-		t.Fatal(err)
+	for i, f := range goldenFiles {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			if i == 0 {
+				t.Fatal(err)
+			}
+			continue
+		}
+		var c []goldenCase
+		if err := json.Unmarshal(raw, &c); err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+		cases = append(cases, c...)
 	}
 	return cases
 }

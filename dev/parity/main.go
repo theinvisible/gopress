@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -32,6 +32,7 @@ var (
 	out     = flag.String("out", "local/parity", "report directory")
 	only    = flag.String("only", "", "only check paths containing this string")
 	verbose = flag.Bool("v", false, "print every URL")
+	site    = flag.String("site-host", os.Getenv("SITE_HOST"), "host name of the original site; absolute links to it in content are compared as root-relative (env SITE_HOST)")
 )
 
 var client = &http.Client{
@@ -210,9 +211,22 @@ func compare(path string) ([]string, error) {
 	return diffs, nil
 }
 
-var hostRE = regexp.MustCompile(`https?://(127\.0\.0\.1:808[01]|hadler\.me|www\.hadler\.me)`)
+var hostRE *regexp.Regexp
 
+// normURL strips the reference, GoPress and original-site hosts.
 func normURL(u string) string {
+	if hostRE == nil {
+		hosts := []string{}
+		for _, b := range []string{*ref, *got} {
+			if pu, err := url.Parse(b); err == nil {
+				hosts = append(hosts, regexp.QuoteMeta(pu.Host))
+			}
+		}
+		if *site != "" {
+			hosts = append(hosts, regexp.QuoteMeta(*site), `www\.`+regexp.QuoteMeta(*site))
+		}
+		hostRE = regexp.MustCompile(`https?://(` + strings.Join(hosts, "|") + `)`)
+	}
 	u = hostRE.ReplaceAllString(u, "")
 	if u == "" {
 		return ""

@@ -186,9 +186,8 @@ func (rq *request) customBackgroundCSS() string {
 		fmt.Fprintf(&b, " background-color: #%s;", strings.TrimPrefix(color, "#"))
 	}
 	if image != "" {
-		image = strings.Replace(image, "https://hadler.me", s.Home, 1) // relativize the stored absolute URL
-		if u, ok := rq.relativeHome(image); ok {
-			image = s.Home + u
+		if strings.HasPrefix(image, "/") && !strings.HasPrefix(image, "//") {
+			image = s.Home + image // stored root-relative by the importer
 		}
 		posX := s.ThemeMod("background_position_x")
 		if posX == "" {
@@ -215,19 +214,6 @@ func (rq *request) customBackgroundCSS() string {
 	}
 	b.WriteString(" }")
 	return b.String()
-}
-
-// relativeHome returns the path of an absolute URL on any http(s) host if
-// it points into wp-content.
-func (rq *request) relativeHome(u string) (string, bool) {
-	for _, prefix := range []string{"https://", "http://"} {
-		if rest, ok := strings.CutPrefix(u, prefix); ok {
-			if i := strings.Index(rest, "/wp-content/"); i >= 0 {
-				return rest[i:], true
-			}
-		}
-	}
-	return "", false
 }
 
 // cssURL makes a URL safe inside url("...").

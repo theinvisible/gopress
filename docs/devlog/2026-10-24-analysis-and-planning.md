@@ -1,16 +1,15 @@
 # 2026-10-24 – Analysis & planning
 
 ## Done
-- Analyzed the live stack on `root@hadler.me` read-only:
+- Analyzed the reference site's live stack read-only:
   - Containers `wp-app` (wordpress:7.1.3-php8.3-apache) and `wp-db` (mariadb:11.8) behind Traefik v3.7.
-  - Data: wp-content under `/data/wordpress/wp-content`, DB in the volume `wordpress_db_mariadb118`.
 - Content inventory (see PLAN.md context):
   - 61 posts, 24 pages, 52 attachments, 41 MB uploads.
   - 679/97/2144 comments (approved/pending/spam).
   - Block markup in 15 posts and 3 pages (the first rough count of 87 included revisions).
 - Plugin usage:
-  - `[paypal-donation]` on the Donate page (ID 187) and as a widget in sidebar-1.
-  - `foto-slider-lightbox/gallery` (gallery 791) on the tiBackup page (ID 149).
+  - `[paypal-donation]` on one page and as a widget in sidebar-1.
+  - `foto-slider-lightbox/gallery` (one gallery) on one page.
   - `donation_list` holds 53 legacy entries.
 - Created PLAN.md, initialized the repo.
 

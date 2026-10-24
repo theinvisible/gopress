@@ -1,25 +1,26 @@
-# GoPress – a single-binary WordPress replacement in Go for hadler.me
+# GoPress – a single-binary WordPress replacement in Go
 
 Devlog: [docs/devlog/](docs/devlog/README.md)
 
 ## Context
 
-hadler.me ("Bits and Bytes") runs on `root@hadler.me` as a Docker stack: `wp-app` (wordpress:7.1.3-php8.3-apache) + `wp-db` (mariadb:11.8) behind Traefik.
-Goal: a fast single binary in Go that is operated like WordPress in the admin, loads plugins as WASM and replaces the existing site without a visible break (same URLs, same look).
+Goal: a fast single binary in Go that is operated like WordPress in the admin, loads plugins as WASM and replaces an existing WordPress site without a visible break (same URLs, same look).
 
-**Current state (read from the live site):**
-- Theme **Twenty Twelve**. Theme mods: background `#e6e6e6` with image `uploads/2014/04/IMG_0485.jpg`, fixed/repeat, header text color `#515151`. No nav menus (default page list).
+The first migration target (the *reference site*) is a WordPress 7.1 site running as a Docker stack (WordPress + MariaDB behind Traefik). Its setup drives the v1 scope:
+
+**Reference site (read from the live installation):**
+- Theme **Twenty Twelve** with a custom background (color + image) and header text color. No nav menus (default page list).
 - Permalinks `/%year%/%monthnum%/%postname%/`, locale en_US, front page = latest posts.
 - Content: 61 posts, 24 pages, 52 attachments (41 MB uploads), 39 terms, 1 user. Comments: 679 approved (650 comments + 29 pingbacks), 97 pending, ~2145 spam. 341 revisions (not imported).
 - 15 posts and 3 pages use Gutenberg block markup, the rest is classic HTML (needs wpautop). Shortcodes in use: `[gallery ids=…]`, `[paypal-donation]`. Blocks: `foto-slider-lightbox/gallery {"galleryId":791}`, core gallery/image/columns/group/quote/list/code/more.
-- Sidebar-1 widgets: search, block (empty), paypal_donations ("Donate"), text ("Partner Sites"), recent-posts, categories, tag_cloud, archives, meta.
+- Sidebar-1 widgets: search, block (empty), paypal_donations, text, recent-posts, categories, tag_cloud, archives, meta.
 - Plugins:
-  - **paypal-donations**: options `paypal_donations_options` (account rene@hadler.me, EUR, button large, new_tab …).
-  - **foto-slider-lightbox** (own plugin, Swiper bundled locally): CPT `fslb_gallery` 791 with meta `_fslb_image_ids` and `_fslb_show_captions`.
+  - **paypal-donations**: options `paypal_donations_options` (account, currency, button style, new tab, …).
+  - **foto-slider-lightbox** (Swiper bundled locally): CPT `fslb_gallery` with meta `_fslb_image_ids` and `_fslb_show_captions`.
   - Legacy CPT `donation_list`: 53 IPN entries.
   - Replaced or dropped: akismet → own plugin; google-sitemap-generator, duplicate-post → core; wpforms-lite (unused), ai, analytics → dropped.
 
-**Decisions (agreed with the owner):**
+**Decisions:**
 - Own lightweight editor instead of Gutenberg.
 - Embedded SQLite.
 - WASM plugins via wazero/Extism.
@@ -286,7 +287,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 ### M5 – Deployment
 - [ ] Dockerfile (`golang:1.27` build → `FROM scratch`), volume `/data`
 - [ ] `gopress backup` (`VACUUM INTO` + tar of the uploads)
-- [ ] Staging `new.hadler.me` behind Traefik
+- [ ] Staging hostname behind Traefik
 - [ ] URL parity crawl and visual comparison with live
 - [ ] Hardening: non-root, read-only rootfs, secrets in data dir, `govulncheck`
 - [ ] Cutover: switch the router, stop (not delete) the WP containers
@@ -306,4 +307,4 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
   - Akismet: with test author `viagra-test-123` or `akismet-guaranteed-spam@example.com`.
   - Deactivate a plugin zip, upload it again, a panicking plugin → server keeps running.
 - **Load:** `oha` against home and a post (cached/uncached). Target >10k req/s cached.
-- **Staging acceptance on new.hadler.me** before the cutover.
+- **Staging acceptance** before the cutover.

@@ -202,7 +202,15 @@ func (im *importer) importOptions(ctx context.Context) error {
 			}
 			im.rep.add("options", 1)
 		case name == "theme_mods_"+template:
-			if err := db.SetOption(ctx, im.tx, "theme_mods", phpser.Maybe(value)); err != nil {
+			mods := phpser.Maybe(value)
+			if m, ok := mods.(map[string]any); ok {
+				for _, k := range []string{"background_image", "header_image"} {
+					if u, ok := m[k].(string); ok {
+						m[k] = relativeURL(u, opts["home"])
+					}
+				}
+			}
+			if err := db.SetOption(ctx, im.tx, "theme_mods", mods); err != nil {
 				return err
 			}
 		case hasAnyPrefix(name, pluginOptionPrefixes):

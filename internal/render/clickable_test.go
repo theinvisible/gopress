@@ -14,11 +14,11 @@ func TestMakeClickable(t *testing.T) {
 		{"www.example.org, mail me@example.org", `<a href="http://www.example.org" rel="nofollow">http://www.example.org</a>, mail <a href="mailto:me@example.org">me@example.org</a>`},
 		{`<a href="https://a.b">https://a.b</a>`, `<a href="https://a.b">https://a.b</a>`},
 		{"<code>http://x.y</code>", "<code>http://x.y</code>"},
-		{"https://hadler.me/x", `<a href="https://hadler.me/x">https://hadler.me/x</a>`},
+		{"https://my.example/x", `<a href="https://my.example/x">https://my.example/x</a>`},
 		{`javascript://%0aalert(1)`, `javascript://%0aalert(1)`},
 	}
 	for _, tt := range tests {
-		if got := MakeClickable(tt.in, "hadler.me"); got != tt.want {
+		if got := MakeClickable(tt.in, "my.example"); got != tt.want {
 			t.Errorf("MakeClickable(%q) =\n%q\nwant\n%q", tt.in, got, tt.want)
 		}
 	}

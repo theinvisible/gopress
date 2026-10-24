@@ -326,6 +326,20 @@ func parseDelimiter(c string) (name string, attrs map[string]any, closing, selfC
 	return name, attrs, closing, selfClosing, true
 }
 
+// relativeURL makes a same-site absolute URL root-relative.
+func relativeURL(u, homeURL string) string {
+	host := strings.TrimPrefix(strings.TrimPrefix(strings.TrimRight(homeURL, "/"), "https://"), "http://")
+	if host == "" {
+		return u
+	}
+	for _, prefix := range []string{"https://" + host + "/", "http://" + host + "/"} {
+		if rest, ok := strings.CutPrefix(u, prefix); ok {
+			return "/" + rest
+		}
+	}
+	return u
+}
+
 // relativizeURLs makes same-site absolute URLs inside tags root-relative,
 // so content works under any host. Link texts are left alone.
 func relativizeURLs(content, homeURL string) string {

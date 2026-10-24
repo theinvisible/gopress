@@ -42,13 +42,20 @@ func TestConvertClassicAndURLs(t *testing.T) {
 // TestBlocksGolden compares the block conversion with do_blocks() output of
 // the reference WordPress (internal/render/testdata/golden.json).
 func TestBlocksGolden(t *testing.T) {
-	raw, err := os.ReadFile("../render/testdata/golden.json")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var cases []struct{ Name, In, Blocks string }
-	if err := json.Unmarshal(raw, &cases); err != nil {
-		t.Fatal(err)
+	for i, f := range []string{"../render/testdata/golden.json", "../../local/golden-site.json"} {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			if i == 0 {
+				t.Fatal(err)
+			}
+			continue // site golden data is optional (local only)
+		}
+		var c []struct{ Name, In, Blocks string }
+		if err := json.Unmarshal(raw, &c); err != nil {
+			t.Fatal(err)
+		}
+		cases = append(cases, c...)
 	}
 	norm := regexp.MustCompile(` wp-container-[\w-]+-is-layout-[0-9a-f]+| wp-block-gallery-\d+`)
 	for _, c := range cases {
@@ -60,6 +67,18 @@ func TestBlocksGolden(t *testing.T) {
 		got = norm.ReplaceAllString(got, "")
 		if got != want {
 			t.Errorf("%s:\n--- got\n%s\n--- want\n%s", c.Name, got, want)
+		}
+	}
+}
+
+func TestRelativeURL(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://example.org/wp-content/uploads/a.jpg": "/wp-content/uploads/a.jpg",
+		"http://example.org/x":                         "/x",
+		"https://other.example/a.jpg":                  "https://other.example/a.jpg",
+	} {
+		if got := relativeURL(in, "https://example.org"); got != want {
+			t.Errorf("relativeURL(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
