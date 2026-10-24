@@ -367,3 +367,12 @@ form:has(input[name=mode][value=invite]:checked) .gp-new-password { display: non
 .gp-warn { color: #8a4b00; margin-left: 24px; }
 .gp-tokens tr.gp-expired td { color: #787c82; }
 .gp-revoke-all { margin-top: 12px; }
+@media screen and (max-width: 782px) {
+	.gp-tokens thead { display: none; }
+	.gp-tokens, .gp-tokens tbody, .gp-tokens tr, .gp-tokens td { display: block; width: auto; }
+	.gp-tokens tr { padding: 8px 12px; border-bottom: 1px solid #dcdcde; }
+	.gp-tokens td { padding: 3px 0; }
+	table.wp-list-table.gp-tokens tr td[data-label]:not(.column-primary)::before { content: attr(data-label); position: static; display: inline-block;
+		width: auto; min-width: 6.5em; color: var(--gp-muted); }
+	.gp-tokens td.gp-token-actions { padding-top: 6px; }
+}

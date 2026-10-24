@@ -121,11 +121,11 @@
 	<tbody>
 	{{- range .Tokens}}
 	<tr{{if .Expired}} class="gp-expired"{{end}}>
-		<td>{{.Name}}</td><td><code>{{.Prefix}}…</code></td>
-		<td>{{range .Scopes}}<span class="gp-scope">{{.}}</span> {{else}}read only{{end}}</td>
-		<td>{{.Created}}</td><td>{{if .Expired}}<span class="gp-badge gp-badge-warn">Expired</span> {{end}}{{.Expires}}</td>
-		<td>{{.LastUse}}{{if .LastIP}}<br><span class="description">{{.LastIP}}</span>{{end}}</td>
-		<td><form method="post" action="{{.RevokeURL}}" data-confirm="Revoke the access token “{{.Name}}”? Agents using it lose access immediately.">
+		<td data-label="Name"><strong>{{.Name}}</strong></td><td data-label="Token"><code>{{.Prefix}}…</code></td>
+		<td data-label="Scopes">{{range .Scopes}}<span class="gp-scope">{{.}}</span> {{else}}read only{{end}}</td>
+		<td data-label="Created">{{.Created}}</td><td data-label="Expires">{{if .Expired}}<span class="gp-badge gp-badge-warn">Expired</span> {{end}}{{.Expires}}</td>
+		<td data-label="Last used">{{.LastUse}}{{if .LastIP}}<br><span class="description">{{.LastIP}}</span>{{end}}</td>
+		<td class="gp-token-actions"><form method="post" action="{{.RevokeURL}}" data-confirm="Revoke the access token “{{.Name}}”? Agents using it lose access immediately.">
 			<input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="button-link button-link-delete">Revoke</button></form></td>
 	</tr>
 	{{- end}}
