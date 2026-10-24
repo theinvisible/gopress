@@ -3,6 +3,7 @@ package render
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -62,5 +63,33 @@ func TestGoldenAutop(t *testing.T) {
 func TestGoldenShortcodeUnautop(t *testing.T) {
 	runGolden(t, "unautop", func(c goldenCase) (string, string) {
 		return ShortcodeUnautop(Autop(c.In), wpShortcodes), c.Unautop
+	})
+}
+
+func TestGoldenTexturize(t *testing.T) {
+	runGolden(t, "texturize", func(c goldenCase) (string, string) { return Texturize(c.In, wpShortcodes), c.Texturize })
+}
+
+func TestGoldenSmilies(t *testing.T) {
+	runGolden(t, "smilies", func(c goldenCase) (string, string) { return ConvertSmilies(c.In), c.Smilies })
+}
+
+func TestGoldenDangit(t *testing.T) {
+	runGolden(t, "dangit", func(c goldenCase) (string, string) { return CapitalPDangit(c.In), c.Dangit })
+}
+
+func TestGoldenExcerptWords(t *testing.T) {
+	reg := map[string]ShortcodeFunc{}
+	for k := range wpShortcodes {
+		reg[k] = func(*Env, *Shortcode) string { return "" }
+	}
+	// excerpt_remove_blocks() drops some block types (e.g. lists) from
+	// excerpts; block markup is gone after import, so only classic content
+	// is comparable.
+	runGolden(t, "excerpt", func(c goldenCase) (string, string) {
+		if strings.Contains(c.In, "<!-- wp:") {
+			return "", ""
+		}
+		return TrimWords(StripShortcodes(c.In, reg), 55, ExcerptMore), c.Excerpt
 	})
 }
