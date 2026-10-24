@@ -523,6 +523,64 @@ await step('toolbar on the site for logged-in users', async () => {
 	assert.doesNotMatch(await fetchPage('/'), /wpadminbar/, 'no toolbar for visitors');
 });
 
+await step('MCP: token in the profile, an agent writes a draft, revoke', async () => {
+	// Re-authentication when the login was a while ago; returns whether it
+	// happened (the form has to be sent again).
+	const reauth = async () => {
+		if (!page.url().includes('/admin/reauth')) return false;
+		await page.type('#pwd', PASSWORD);
+		await page.type('#code', await freshTOTP(secret));
+		await submit('form[action="/admin/reauth"] button[type=submit]');
+		return true;
+	};
+	const enable = async () => {
+		await go('/admin/settings/writing');
+		if (await page.$eval('#mcp_enabled', (i) => i.checked)) return;
+		await page.click('#mcp_enabled');
+		await submit('form[action="/admin/settings/writing"] input[type=submit]');
+	};
+	await enable();
+	if (await reauth()) await enable();
+	await go('/admin/settings/writing');
+	assert.ok(await page.$eval('#mcp_enabled', (i) => i.checked), 'MCP enabled');
+
+	const create = async () => {
+		await go('/admin/profile/tokens');
+		await page.type('#token-name', 'E2E agent');
+		await submit('.gp-token-form input[type=submit]');
+	};
+	await create();
+	if (await reauth()) await create();
+	const token = await page.$eval('.gp-newtoken input[readonly]', (i) => i.value);
+	assert.match(token, /^gpat_[A-Za-z0-9_-]{43}$/);
+	assert.match(await text('.gp-newtoken'), /claude mcp add --transport http/);
+
+	let id = 0;
+	const rpc = async (method, params) => {
+		const r = await fetch(BASE + '/mcp', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
+			headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: 'Bearer ' + token } });
+		return { status: r.status, body: r.status === 200 ? await r.json() : null };
+	};
+	let r = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } });
+	assert.equal(r.status, 200);
+	r = await rpc('tools/list', {});
+	assert.deepEqual(r.body.result.tools.map((t) => t.name).sort(), ['create_post', 'get_post', 'get_site_info', 'list_posts', 'list_terms', 'update_post']);
+	r = await rpc('tools/call', { name: 'create_post', arguments: { title: 'E2E Agent Release', content: 'Release **notes**\n\n<script>alert(1)</script>' } });
+	const post = r.body.result.structuredContent;
+	assert.equal(post.status, 'draft', JSON.stringify(r.body));
+	assert.match(post.content, /<strong>notes<\/strong>/);
+	assert.doesNotMatch(post.content, /script/);
+	assert.equal(await page.evaluate(async (u) => (await fetch(u, { credentials: 'omit' })).status, BASE + '/?p=' + post.id), 404, 'draft is private');
+	await go(new URL(post.edit_url).pathname);
+	assert.equal(await page.$eval('#title', (i) => i.value), 'E2E Agent Release');
+
+	await go('/admin/profile/tokens');
+	assert.match(await text('.gp-tokens'), /E2E agent/);
+	await submit('.gp-tokens form button[type=submit]');
+	r = await rpc('tools/list', {});
+	assert.equal(r.status, 401, 'revoked token');
+});
+
 await step('scheduled post is published by the scheduler', async () => {
 	await go('/admin/posts/new');
 	await page.waitForSelector('.gp-content');
