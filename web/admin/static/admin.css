@@ -190,3 +190,22 @@ body.gp-error-page { background: #f0f0f1; font-family: -apple-system, BlinkMacSy
 #postdivrich { margin-bottom: 20px; }
 .post-revisions li { margin: 4px 0; }
 .gp-post-form [hidden] { display: none !important; }
+.gp-in-reply { color: var(--gp-muted); font-size: 12px; margin-bottom: 4px; }
+.gp-quick-comment-form textarea, .gp-reply-form textarea { width: 100%; margin: 6px 0 10px; }
+.gp-field-label { font-weight: 600; font-size: 12px; color: #3c434a; }
+.comments .row-actions .button-link { font-size: 13px; }
+.comments .row-actions .approve .button-link { color: #007017; }
+.comments .row-actions .unapprove .button-link { color: #996800; }
+.comments .row-actions .delete .button-link, .comments .row-actions .trash .button-link, .comments .row-actions .spam .button-link { color: #b32d2e; }
+#postdiv textarea.wp-editor-area { width: 100%; }
+.misc-pub-comment-status.gp-visibility::before { display: none; }
+.comments .column-author a { word-break: break-all; }
+.gp-schemes { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.gp-schemes label { text-transform: capitalize; }
+.gp-inline-form { display: inline; margin: 0 6px 0 0; }
+.gp-row-buttons { white-space: nowrap; text-align: right; }
+.gp-ok { color: #00a32a; }
+.gp-security .gp-card table { margin-bottom: 12px; }
+.gp-security > h2 { margin-top: 2em; }
+.gp-revision-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.gp-revision-head form { margin: 0; }

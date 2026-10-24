@@ -179,27 +179,3 @@
 </template>
 {{end}}
 
-{{define "pagination"}}
-<div class="tablenav-pages{{if le .Pages 1}} one-page{{end}}">
-	<span class="displaying-num">{{.Total}} {{plural .Total "item" "items"}}</span>
-	{{- if gt .Pages 1}}
-	<span class="pagination-links">
-		{{- if gt .Paged 1}}
-		<a class="first-page button" href="{{call .PageURL 1}}"><span class="screen-reader-text">First page</span><span aria-hidden="true">&laquo;</span></a>
-		<a class="prev-page button" href="{{call .PageURL (add .Paged -1)}}"><span class="screen-reader-text">Previous page</span><span aria-hidden="true">&lsaquo;</span></a>
-		{{- else}}
-		<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&laquo;</span>
-		<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&lsaquo;</span>
-		{{- end}}
-		<span class="screen-reader-text">Current Page</span><span class="paging-input"><span class="tablenav-paging-text">{{.Paged}} of <span class="total-pages">{{.Pages}}</span></span></span>
-		{{- if lt .Paged .Pages}}
-		<a class="next-page button" href="{{call .PageURL (add .Paged 1)}}"><span class="screen-reader-text">Next page</span><span aria-hidden="true">&rsaquo;</span></a>
-		<a class="last-page button" href="{{call .PageURL .Pages}}"><span class="screen-reader-text">Last page</span><span aria-hidden="true">&raquo;</span></a>
-		{{- else}}
-		<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&rsaquo;</span>
-		<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&raquo;</span>
-		{{- end}}
-	</span>
-	{{- end}}
-</div>
-{{end}}

@@ -1,0 +1,54 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-profile">
+	<h1>Profile</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	<form method="post" action="/admin/profile" id="your-profile">
+		{{template "csrf" .CSRF}}
+		<h2>Personal Options</h2>
+		<table class="form-table" role="presentation"><tbody>
+			<tr class="user-admin-color-wrap"><th scope="row">Admin Color Scheme</th>
+				<td><fieldset id="color-picker" class="scheme-list gp-schemes">
+					{{- range .Schemes}}<label><input type="radio" name="admin_color" value="{{.}}"{{if eq . $.Color}} checked{{end}}> {{.}}</label>{{end}}
+				</fieldset></td></tr>
+		</tbody></table>
+
+		<h2>Name</h2>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th><label for="user_login">Username</label></th><td><input type="text" id="user_login" value="{{.Login}}" disabled class="regular-text"> <span class="description">Usernames cannot be changed.</span></td></tr>
+			<tr><th><label for="nickname">Nickname</label></th><td><input type="text" name="nickname" id="nickname" value="{{.Nickname}}" class="regular-text"></td></tr>
+			<tr><th><label for="display_name">Display name publicly as</label></th><td><input type="text" name="display_name" id="display_name" value="{{.Display}}" class="regular-text"></td></tr>
+		</tbody></table>
+
+		<h2>Contact Info</h2>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th><label for="email">Email <span class="description">(required)</span></label></th><td><input type="email" name="email" id="email" value="{{.Email}}" class="regular-text ltr" required autocomplete="email">
+				{{- if not .Reauth}}<p class="description">Changing the email address asks you to confirm your identity.</p>{{end}}</td></tr>
+			<tr><th><label for="url">Website</label></th><td><input type="url" name="url" id="url" value="{{.URL}}" class="regular-text code"></td></tr>
+		</tbody></table>
+
+		<h2>About Yourself</h2>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th><label for="description">Biographical Info</label></th><td><textarea name="description" id="description" rows="5" cols="30">{{.Bio}}</textarea></td></tr>
+			<tr><th>Profile Picture</th><td><img src="{{avatar .Email 96}}" width="96" height="96" alt="" class="avatar"><p class="description">You can change your profile picture on <a href="https://gravatar.com/" rel="noopener" target="_blank">Gravatar</a>.</p></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Update Profile"></p>
+	</form>
+
+	<h2 id="password">Account Management</h2>
+	{{- if .PwError}}<div class="notice notice-error inline"><p>{{.PwError}}</p></div>{{end}}
+	<form method="post" action="/admin/profile/password" class="gp-password-form">
+		{{template "csrf" .CSRF}}
+		<input type="text" name="username" value="{{.Login}}" autocomplete="username" hidden>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th><label for="pass1">New Password</label></th><td>
+				<div class="wp-pwd"><input type="password" name="pass1" id="pass1" class="regular-text" autocomplete="new-password" minlength="12" maxlength="256" required aria-describedby="pass-hint">
+				<button type="button" class="button wp-hide-pw" data-toggle-password="pass1" aria-label="Show password"><span class="dashicons dashicons-visibility" aria-hidden="true"></span></button></div>
+				<p class="description" id="pass-hint">At least 12 characters. Long passphrases are best; common passwords are rejected.</p>
+			</td></tr>
+			<tr><th><label for="pass2">Repeat New Password</label></th><td><input type="password" name="pass2" id="pass2" class="regular-text" autocomplete="new-password" required></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button" value="Set New Password"> {{if not .Reauth}}<span class="description">You will be asked to confirm your identity first.</span>{{end}}</p>
+	</form>
+	<p><a href="/admin/profile/security" class="button">Two-factor authentication &amp; sessions &rarr;</a></p>
+</div>
+{{template "admin-bottom" .}}{{end}}

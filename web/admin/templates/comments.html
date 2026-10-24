@@ -1,0 +1,128 @@
+{{define "page"}}{{template "admin-top" .}}
+{{- $d := .}}
+<div class="wrap">
+	<h1 class="wp-heading-inline">{{if .Post}}Comments on “{{title .Post.Title}}”{{else}}Comments{{end}}</h1>
+	{{- if .Search}}<span class="subtitle">Search results for: <strong>{{.Search}}</strong></span>{{end}}
+	<hr class="wp-header-end">
+
+	<ul class="subsubsub">
+		{{- range $i, $v := .Views}}
+		<li>{{if $i}} | {{end}}<a href="{{$v.URL}}"{{if $v.Current}} class="current" aria-current="page"{{end}}>{{$v.Label}}{{if ge $v.Count 0}} <span class="count">(<span class="gp-count-{{$v.Label | lower}}">{{$v.Count}}</span>)</span>{{end}}</a></li>
+		{{- end}}
+	</ul>
+
+	<form id="comments-form" method="get" action="/admin/comments/">
+		<p class="search-box">
+			<label class="screen-reader-text" for="comment-search-input">Search Comments:</label>
+			<input type="search" id="comment-search-input" name="s" value="{{.Search}}">
+			{{- if .Status}}<input type="hidden" name="comment_status" value="{{.Status}}">{{end}}
+			{{- if .PostID}}<input type="hidden" name="p" value="{{.PostID}}">{{end}}
+			<input type="submit" class="button" value="Search Comments">
+		</p>
+	</form>
+
+	<form method="post" action="/admin/comments/bulk">
+		{{template "csrf" .CSRF}}
+		<input type="hidden" name="redirect" value="/admin/comments/?comment_status={{.Status}}{{if .PostID}}&amp;p={{.PostID}}{{end}}">
+		<div class="tablenav top">
+			<div class="alignleft actions bulkactions">
+				<label for="bulk-action-selector-top" class="screen-reader-text">Select bulk action</label>
+				<select name="action" id="bulk-action-selector-top">
+					<option value="">Bulk actions</option>
+					{{- range .BulkOpts}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+				</select>
+				<input type="submit" class="button action" value="Apply" data-bulk-apply>
+			</div>
+			{{- if .CanEmpty}}
+			<div class="alignleft actions">
+				<button type="submit" class="button apply" formaction="/admin/comments/empty" name="status" value="{{.Status}}" data-confirm-click="Permanently delete all comments in {{.EmptyWhat}}?">Empty {{.EmptyWhat}}</button>
+			</div>
+			{{- end}}
+			{{template "pagination" .}}
+			<br class="clear">
+		</div>
+
+		<table class="wp-list-table widefat fixed striped table-view-list comments">
+			<thead>{{template "comment-columns" .}}</thead>
+			<tbody id="the-comment-list">
+			{{- range .Rows}}
+				<tr id="comment-{{.ID}}" class="comment {{if eq .Status "pending"}}unapproved{{else}}{{.Status}}{{end}}" data-comment-id="{{.ID}}" data-status="{{.Status}}">
+					<th scope="row" class="check-column"><input id="cb-select-{{.ID}}" type="checkbox" name="comment[]" value="{{.ID}}"><label for="cb-select-{{.ID}}"><span class="screen-reader-text">Select comment</span></label></th>
+					<td class="author column-author" data-colname="Author">
+						<strong><img alt="" src="{{.Avatar}}" class="avatar avatar-32 photo" height="32" width="32" loading="lazy"> {{.Author}}</strong>
+						{{- if .AuthorURL}}<br><a href="{{.AuthorURL}}" rel="noopener noreferrer nofollow" target="_blank" title="{{.AuthorURL}}">{{urlLabel .AuthorURL}}</a>{{end}}
+						{{- if .AuthorEmail}}<br><a href="mailto:{{.AuthorEmail}}">{{.AuthorEmail}}</a>{{end}}
+						{{- if .AuthorIP}}<br><a href="/admin/comments/?s={{.AuthorIP}}">{{.AuthorIP}}</a>{{end}}
+					</td>
+					<td class="comment column-comment has-row-actions column-primary" data-colname="Comment">
+						{{- if .ParentID}}<div class="gp-in-reply">In reply to <a href="{{.PostViewURL}}#comment-{{.ParentID}}">comment #{{.ParentID}}</a>.</div>{{end}}
+						{{- if eq .Type "pingback"}}<p><strong>[Pingback]</strong></p>{{end}}
+						<div class="comment-text-preview gp-comment-text">{{.Text}}</div>
+						<div class="row-actions" data-comment-actions data-id="{{.ID}}">
+						{{- if eq .Status "trash"}}
+							<span class="untrash"><button type="button" class="button-link" data-moderate="untrash">Restore</button> | </span>
+							<span class="delete"><button type="button" class="button-link delete" data-moderate="delete" data-confirm="Delete this comment permanently?">Delete Permanently</button></span>
+						{{- else if eq .Status "spam"}}
+							<span class="unspam"><button type="button" class="button-link" data-moderate="unspam">Not Spam</button> | </span>
+							<span class="delete"><button type="button" class="button-link delete" data-moderate="delete" data-confirm="Delete this comment permanently?">Delete Permanently</button></span>
+						{{- else}}
+							{{- if eq .Status "pending"}}<span class="approve"><button type="button" class="button-link" data-moderate="approve">Approve</button> | </span>{{else}}<span class="unapprove"><button type="button" class="button-link" data-moderate="unapprove">Unapprove</button> | </span>{{end}}
+							<span class="reply"><button type="button" class="button-link" data-comment-reply aria-expanded="false">Reply</button> | </span>
+							<span class="quickedit"><button type="button" class="button-link" data-comment-edit aria-expanded="false" data-edit="{{json (dict "author" .Author "email" .AuthorEmail "url" .AuthorURL "content" .Content)}}">Quick&nbsp;Edit</button> | </span>
+							<span class="edit"><a href="/admin/comments/{{.ID}}/edit">Edit</a> | </span>
+							<span class="spam"><button type="button" class="button-link" data-moderate="spam">Spam</button> | </span>
+							<span class="trash"><button type="button" class="button-link delete" data-moderate="trash">Trash</button></span>
+						{{- end}}
+						</div>
+					</td>
+					<td class="response column-response" data-colname="In response to">
+						<div class="response-links">
+							<a href="{{.PostEditURL}}" class="comments-edit-item-link">{{.PostTitle}}</a>
+							{{- if .PostViewURL}}<a href="{{.PostViewURL}}" class="comments-view-item-link">View Post</a>{{end}}
+							<span class="post-com-count-wrapper"><a href="/admin/comments/?p={{.PostID}}" class="gp-post-comments">All comments</a></span>
+						</div>
+					</td>
+					<td class="date column-date" data-colname="Submitted on"><div class="submitted-on">{{if .PostViewURL}}<a href="{{.PostViewURL}}#comment-{{.ID}}">{{.When}}</a>{{else}}{{.When}}{{end}}</div></td>
+				</tr>
+			{{- else}}
+				<tr class="no-items"><td class="colspanchange" colspan="5">No comments found.</td></tr>
+			{{- end}}
+			</tbody>
+			<tfoot>{{template "comment-columns" .}}</tfoot>
+		</table>
+	</form>
+	<div class="tablenav bottom">{{template "pagination" .}}<br class="clear"></div>
+
+	<template id="gp-comment-reply">
+		<tr class="gp-inline-edit gp-reply-row"><td colspan="5">
+			<form class="gp-reply-form">
+				<label><span class="gp-field-label">Reply to Comment</span><textarea name="content" rows="5" required></textarea></label>
+				<div class="gp-actions"><button type="submit" class="button button-primary">Reply</button><button type="button" class="button cancel">Cancel</button><span class="spinner"></span><span class="gp-error" role="alert"></span></div>
+			</form>
+		</td></tr>
+	</template>
+	<template id="gp-comment-edit">
+		<tr class="gp-inline-edit"><td colspan="5">
+			<form class="gp-quick-comment-form">
+				<fieldset>
+					<label>Name <input type="text" name="author"></label>
+					<label>Email <input type="email" name="email"></label>
+					<label>URL <input type="url" name="url"></label>
+				</fieldset>
+				<label><span class="gp-field-label">Comment</span><textarea name="content" rows="6" required></textarea></label>
+				<div class="gp-actions"><button type="submit" class="button button-primary">Update Comment</button><button type="button" class="button cancel">Cancel</button><span class="spinner"></span><span class="gp-error" role="alert"></span></div>
+			</form>
+		</td></tr>
+	</template>
+</div>
+{{template "admin-bottom" .}}{{end}}
+
+{{define "comment-columns"}}
+<tr>
+	<td class="manage-column column-cb check-column"><input class="cb-select-all" type="checkbox"><label><span class="screen-reader-text">Select All</span></label></td>
+	<th scope="col" class="manage-column column-author">Author</th>
+	<th scope="col" class="manage-column column-comment column-primary">Comment</th>
+	<th scope="col" class="manage-column column-response">In response to</th>
+	<th scope="col" class="manage-column column-date">Submitted on</th>
+</tr>
+{{end}}

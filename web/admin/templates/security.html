@@ -1,0 +1,88 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-security">
+	<h1>Security</h1>
+	<p>Every login needs your password and a second factor, or a passkey alone.
+		{{- if not .Reauth}} Changes on this page ask you to confirm your identity first.{{end}}</p>
+
+	<div class="gp-cards">
+		<section class="gp-card">
+			<h2><span class="dashicons dashicons-admin-network" aria-hidden="true"></span> Passkeys</h2>
+			{{- if .Passkeys}}
+			<table class="widefat striped gp-passkeys">
+				<thead><tr><th>Name</th><th>Added</th><th>Last used</th><th><span class="screen-reader-text">Actions</span></th></tr></thead>
+				<tbody>
+				{{- range .Passkeys}}
+				<tr>
+					<td>{{.Name}}</td><td>{{.Created}}</td><td>{{.LastUsed}}</td>
+					<td class="gp-row-buttons">
+						<form method="post" action="/admin/profile/security/rename-passkey" class="gp-inline-form" data-rename>
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}">
+							<button type="submit" class="button-link">Rename</button>
+						</form>
+						<form method="post" action="/admin/profile/security/remove-passkey" class="gp-inline-form" data-confirm="Remove the passkey “{{.Name}}”?">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+							<button type="submit" class="button-link button-link-delete">Remove</button>
+						</form>
+					</td>
+				</tr>
+				{{- end}}
+				</tbody>
+			</table>
+			{{- else}}
+			<p>No passkeys yet. Passkeys let you sign in with your fingerprint, face or device PIN, without a password.</p>
+			{{- end}}
+			<p><a href="/admin/setup-2fa" class="button">Add a passkey</a></p>
+		</section>
+
+		<section class="gp-card">
+			<h2><span class="dashicons dashicons-smartphone" aria-hidden="true"></span> Authenticator app</h2>
+			{{- if .HasTOTP}}
+			<p><span class="dashicons dashicons-yes-alt gp-ok" aria-hidden="true"></span> Set up.</p>
+			<form method="post" action="/admin/profile/security/remove-totp" data-confirm="Remove the authenticator app?">
+				{{template "csrf" .CSRF}}
+				<button type="submit" class="button button-link-delete"{{if le .FactorCount 1}} disabled title="Add another factor before removing your last one"{{end}}>Remove authenticator app</button>
+			</form>
+			{{- else}}
+			<p>Use time-based one-time codes from an app on your phone.</p>
+			<p><a href="/admin/setup-2fa" class="button">Set up authenticator app</a></p>
+			{{- end}}
+		</section>
+
+		<section class="gp-card">
+			<h2><span class="dashicons dashicons-shield" aria-hidden="true"></span> Recovery codes</h2>
+			<p>{{if .CodesLeft}}<strong>{{.CodesLeft}}</strong> unused {{plural .CodesLeft "code" "codes"}} left.{{else}}<span class="gp-badge gp-badge-warn">None left</span>{{end}}
+				Each code signs you in once if you lose your passkey or phone.</p>
+			<form method="post" action="/admin/profile/security/regenerate-codes" data-confirm="Generate new recovery codes? The old ones stop working.">
+				{{template "csrf" .CSRF}}
+				<button type="submit" class="button">Generate new codes</button>
+			</form>
+		</section>
+	</div>
+
+	<h2>Sessions</h2>
+	<table class="widefat striped gp-session-list">
+		<thead><tr><th>Device</th><th>IP address</th><th>Last active</th><th>Signed in</th><th><span class="screen-reader-text">Actions</span></th></tr></thead>
+		<tbody>
+		{{- range .Sessions}}
+		<tr>
+			<td>{{.Device}}{{if .Remember}} <span class="description">(remembered)</span>{{end}}</td><td>{{.IP}}</td><td>{{.LastSeen}}</td><td>{{.Created}}</td>
+			<td>{{if .Current}}<span class="gp-current-session">This session</span>{{else}}
+				<form method="post" action="/admin/profile/security/logout-session" class="gp-inline-form"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button type="submit" class="button-link">Log out</button></form>{{end}}</td>
+		</tr>
+		{{- end}}
+		</tbody>
+	</table>
+	{{- if gt (len .Sessions) 1}}
+	<form method="post" action="/admin/profile/security/logout-others" style="margin-top: 10px">
+		{{template "csrf" .CSRF}}
+		<button type="submit" class="button">Log out everywhere else</button>
+	</form>
+	{{- end}}
+
+	<h2>Recent Activity</h2>
+	<table class="widefat striped">
+		<thead><tr><th>When</th><th>What</th><th>IP address</th></tr></thead>
+		<tbody>{{range .Activity}}<tr><td>{{.When}}</td><td>{{.Action}}</td><td>{{.IP}}</td></tr>{{else}}<tr><td colspan="3">No activity recorded.</td></tr>{{end}}</tbody>
+	</table>
+</div>
+{{template "admin-bottom" .}}{{end}}

@@ -1,0 +1,36 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap">
+	<h1 class="long-header">Compare Revisions of “<a href="{{.PT.Base}}{{.Post.ID}}/edit">{{title .Post.Title}}</a>”</h1>
+	<p><a href="{{.PT.Base}}{{.Post.ID}}/edit">&larr; Go to editor</a></p>
+	<div class="gp-revisions">
+		<nav aria-label="Revisions">
+			<ul>
+			{{- range $i, $r := .Rows}}
+				<li{{if eq $r.ID $.Selected.ID}} class="current"{{end}}><a href="{{$.PT.Base}}{{$.Post.ID}}/revisions?revision={{$r.ID}}">{{$r.When}}<br><small>{{$r.Author}}{{if eq $i 0}} · current{{end}}</small></a></li>
+			{{- end}}
+			</ul>
+		</nav>
+		<div>
+			<div class="gp-revision-head">
+				<p><strong>{{.When}}</strong>{{if .Prev}} compared with the previous revision{{else}} (first revision){{end}}</p>
+				{{- if not .Current}}
+				<form method="post" action="{{.PT.Base}}{{.Post.ID}}/restore-revision" data-confirm="Restore this revision? The current content is kept as a revision.">
+					{{template "csrf" .CSRF}}<input type="hidden" name="revision" value="{{.Selected.ID}}">
+					<button type="submit" class="button button-primary">Restore This Revision</button>
+				</form>
+				{{- end}}
+			</div>
+			<table class="gp-diff">
+				<colgroup><col style="width:50%"><col style="width:50%"></colgroup>
+				{{- range .Diff}}
+					{{- if .Header}}<tr><th colspan="2">{{.Header}}</th></tr>
+					{{- else if eq .Kind "same-all"}}<tr class="skip"><td colspan="2">No changes.</td></tr>
+					{{- else if eq .Kind "skip"}}<tr class="skip"><td colspan="2">…</td></tr>
+					{{- else}}<tr class="{{.Kind}}"><td class="left">{{.Left}}</td><td class="right">{{.Right}}</td></tr>
+					{{- end}}
+				{{- end}}
+			</table>
+		</div>
+	</div>
+</div>
+{{template "admin-bottom" .}}{{end}}

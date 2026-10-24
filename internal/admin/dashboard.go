@@ -49,6 +49,7 @@ type commentRow struct {
 func (a *Admin) dashboard(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 	ctx := r.Context()
 	d := &dashboardData{basePage: a.base(ctx, c, "Dashboard", "dashboard")}
+	d.Scripts = []string{"comments.js"}
 	d.CanPost = auth.CanEditType(c.user, db.TypePost)
 	d.CanModerate = auth.Can(c.user, auth.CapModerateComments)
 	if pc, err := db.PostStatusCounts(ctx, a.db.R, db.TypePost, 0); err == nil {

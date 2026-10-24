@@ -39,6 +39,7 @@ func loadTemplates(as *assets) (*templates, error) {
 		"plural":   plural,
 		"title":    escTitle,
 		"lower":    strings.ToLower,
+		"urlLabel": urlLabel,
 		"iterate":  func(n int) []int { return make([]int, max(n, 0)) },
 		"add":      func(a, b int) int { return a + b },
 		"query":    withQuery,
@@ -131,6 +132,16 @@ var reEscapedEntity = regexp.MustCompile(`&amp;(#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-
 // existing entities (titles are stored as HTML) are not encoded twice.
 func escTitle(s string) template.HTML {
 	return template.HTML(reEscapedEntity.ReplaceAllString(html.EscapeString(s), "&$1;"))
+}
+
+// urlLabel shortens a URL for display (host and path, without scheme).
+func urlLabel(u string) string {
+	s := strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://")
+	s = strings.TrimPrefix(strings.TrimSuffix(s, "/"), "www.")
+	if r := []rune(s); len(r) > 40 {
+		s = string(r[:39]) + "…"
+	}
+	return s
 }
 
 func plural(n int, one, many string) string {
