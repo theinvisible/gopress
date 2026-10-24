@@ -14,6 +14,7 @@ type AdminPostQuery struct {
 	Search     string // title or content contains
 	Month      string // "YYYYMM" of the local date
 	CategoryID int64
+	TagID      int64
 	AuthorID   int64
 	OrderBy    string // "date" (default), "title", "comments", "menu_order"
 	Ascending  bool
@@ -42,6 +43,10 @@ func (aq AdminPostQuery) where() (string, []any) {
 	if aq.CategoryID > 0 {
 		conds = append(conds, "id IN (SELECT post_id FROM post_terms WHERE term_id = ?)")
 		args = append(args, aq.CategoryID)
+	}
+	if aq.TagID > 0 {
+		conds = append(conds, "id IN (SELECT post_id FROM post_terms WHERE term_id = ?)")
+		args = append(args, aq.TagID)
 	}
 	if aq.AuthorID > 0 {
 		conds = append(conds, "author_id = ?")

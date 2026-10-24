@@ -1,0 +1,118 @@
+{{define "page"}}{{template "admin-top" .}}
+{{- $d := .}}
+<div class="wrap nosubsub">
+	<h1 class="wp-heading-inline">{{.Tx.Plural}}</h1>
+	{{- if .Search}}<span class="subtitle">Search results for: <strong>{{.Search}}</strong></span>{{end}}
+	<hr class="wp-header-end">
+	<form class="search-form wp-clearfix" method="get" action="{{.Tx.Base}}">
+		<p class="search-box">
+			<label class="screen-reader-text" for="tag-search-input">Search {{.Tx.Plural}}:</label>
+			<input type="search" id="tag-search-input" name="s" value="{{.Search}}">
+			<input type="submit" class="button" value="Search {{.Tx.Plural}}">
+		</p>
+	</form>
+	<div id="col-container" class="wp-clearfix">
+		<div id="col-left"><div class="col-wrap"><div class="form-wrap">
+			<h2>Add {{.Tx.Singular}}</h2>
+			{{- if .Error}}<div class="notice notice-error inline"><p>{{.Error}}</p></div>{{end}}
+			<form id="addtag" method="post" action="{{.Tx.Base}}" class="validate">
+				{{template "csrf" .CSRF}}
+				<div class="form-field form-required term-name-wrap">
+					<label for="tag-name">Name</label>
+					<input name="tag-name" id="tag-name" type="text" value="{{.Form.Name}}" size="40" maxlength="200" required>
+					<p>The name is how it appears on your site.</p>
+				</div>
+				<div class="form-field term-slug-wrap">
+					<label for="tag-slug">Slug</label>
+					<input name="slug" id="tag-slug" type="text" value="{{.Form.Slug}}" size="40" maxlength="200">
+					<p>The “slug” is the URL-friendly version of the name. It is usually all lowercase and contains only letters, numbers, and hyphens.</p>
+				</div>
+				{{- if .Tx.Hierarchical}}
+				<div class="form-field term-parent-wrap">
+					<label for="parent">Parent Category</label>
+					<select name="parent" id="parent" class="postform">
+						<option value="0">None</option>
+						{{- range .Parents}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{range $i := iterate .Level}}&nbsp;&nbsp;&nbsp;{{end}}{{.Label}}</option>{{end}}
+					</select>
+					<p>Assign a parent term to create a hierarchy. The term Jazz, for example, would be the parent of Bebop and Big Band.</p>
+				</div>
+				{{- end}}
+				<div class="form-field term-description-wrap">
+					<label for="tag-description">Description</label>
+					<textarea name="description" id="tag-description" rows="5" cols="40">{{.Form.Description}}</textarea>
+					<p>The description is not prominent by default; however, some themes may show it.</p>
+				</div>
+				<p class="submit"><input type="submit" class="button button-primary" value="Add New {{.Tx.Singular}}"></p>
+			</form>
+		</div></div></div>
+
+		<div id="col-right"><div class="col-wrap">
+			<form method="post" action="{{.Tx.Base}}bulk">
+				{{template "csrf" .CSRF}}
+				<div class="tablenav top">
+					<div class="alignleft actions bulkactions">
+						<label for="bulk-action-selector-top" class="screen-reader-text">Select bulk action</label>
+						<select name="action" id="bulk-action-selector-top"><option value="">Bulk actions</option><option value="delete">Delete</option></select>
+						<input type="submit" class="button action" value="Apply" data-bulk-apply>
+					</div>
+					{{template "pagination" .}}
+					<br class="clear">
+				</div>
+				<table class="wp-list-table widefat fixed striped table-view-list tags">
+					<thead>{{template "term-columns" .}}</thead>
+					<tbody id="the-list" data-base="{{.Tx.Base}}">
+					{{- range .Rows}}
+						<tr id="tag-{{.ID}}" class="level-{{.Level}}" data-name="{{.Name}}" data-slug="{{.Slug}}">
+							<th scope="row" class="check-column">{{if not .IsDefault}}<input type="checkbox" name="delete_tags[]" value="{{.ID}}" id="cb-select-{{.ID}}"><label for="cb-select-{{.ID}}"><span class="screen-reader-text">Select {{.Name}}</span></label>{{end}}</th>
+							<td class="name column-name has-row-actions column-primary" data-colname="Name">
+								<strong>{{if gt .Level 0}}{{range $i := iterate .Level}}— {{end}}{{end}}<a class="row-title" href="{{$d.Tx.Base}}{{.ID}}/edit">{{.Name}}</a>{{if .IsDefault}} — <span class="post-state">Default</span>{{end}}</strong>
+								<div class="row-actions">
+									<span class="edit"><a href="{{$d.Tx.Base}}{{.ID}}/edit">Edit</a> | </span>
+									<span class="inline hide-if-no-js"><button type="button" class="button-link editinline" data-quick-term>Quick&nbsp;Edit</button> | </span>
+									{{- if not .IsDefault}}<span class="delete"><button type="submit" class="button-link delete-tag" formaction="{{$d.Tx.Base}}{{.ID}}/delete" data-confirm-click="Delete “{{.Name}}”? Posts keep their other {{lower $d.Tx.Plural}}.">Delete</button> | </span>{{end}}
+									<span class="view"><a href="{{.ViewURL}}">View</a></span>
+									{{- if and $d.Tx.Hierarchical (not .IsDefault) $d.CanDflt}} | <span class="make-default"><button type="submit" class="button-link" formaction="{{$d.Tx.Base}}{{.ID}}/default">Make default</button></span>{{end}}
+								</div>
+								<button type="button" class="toggle-row"><span class="screen-reader-text">Show more details</span></button>
+							</td>
+							<td class="description column-description" data-colname="Description">{{if .Description}}{{.Description}}{{else}}<span aria-hidden="true">&#8212;</span>{{end}}</td>
+							<td class="slug column-slug" data-colname="Slug">{{.Slug}}</td>
+							<td class="posts column-posts" data-colname="Count"><a href="{{.PostsURL}}">{{.Count}}</a></td>
+						</tr>
+					{{- else}}
+						<tr class="no-items"><td class="colspanchange" colspan="5">No {{lower .Tx.Plural}} found.</td></tr>
+					{{- end}}
+					</tbody>
+					<tfoot>{{template "term-columns" .}}</tfoot>
+				</table>
+			</form>
+			<div class="tablenav bottom">{{template "pagination" .}}<br class="clear"></div>
+			{{- if .Tx.Hierarchical}}
+			<div class="form-wrap edit-term-notes"><p><strong>Note:</strong> Deleting a category does not delete the posts in that category. Posts that were only assigned to the deleted category get the default category. The default category cannot be deleted.</p></div>
+			{{- end}}
+		</div></div>
+	</div>
+</div>
+<template id="gp-quick-term">
+	<tr class="inline-edit-row gp-inline-edit"><td colspan="5">
+		<form class="gp-quick-term-form">
+			<fieldset>
+				<label>Name <input type="text" name="tag-name" maxlength="200" required></label>
+				<label>Slug <input type="text" name="slug" maxlength="200"></label>
+			</fieldset>
+			<p class="gp-quick-error notice notice-error inline" role="alert" hidden></p>
+			<p class="submit inline-edit-save"><button type="submit" class="button button-primary save">Update</button> <button type="button" class="button cancel">Cancel</button></p>
+		</form>
+	</td></tr>
+</template>
+{{template "admin-bottom" .}}{{end}}
+
+{{define "term-columns"}}
+<tr>
+	<td class="manage-column column-cb check-column"><input class="cb-select-all" type="checkbox"><label><span class="screen-reader-text">Select All</span></label></td>
+	<th scope="col" class="manage-column column-name column-primary sortable"><a href="{{call .SortURL "name"}}"><span>Name</span></a></th>
+	<th scope="col" class="manage-column column-description sortable"><a href="{{call .SortURL "description"}}"><span>Description</span></a></th>
+	<th scope="col" class="manage-column column-slug sortable"><a href="{{call .SortURL "slug"}}"><span>Slug</span></a></th>
+	<th scope="col" class="manage-column column-posts num sortable"><a href="{{call .SortURL "count"}}"><span>Count</span></a></th>
+</tr>
+{{end}}

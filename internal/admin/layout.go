@@ -97,6 +97,11 @@ func (a *Admin) menu(u *db.User, screen string, pending int) []menuItem {
 			{ID: "posts-all", Label: "All Posts", URL: "/admin/posts/"},
 			{ID: "posts-new", Label: "Add Post", URL: "/admin/posts/new"},
 		}})
+		if auth.Can(u, auth.CapManageCategories) {
+			m[len(m)-1].Sub = append(m[len(m)-1].Sub,
+				subItem{ID: "posts-categories", Label: "Categories", URL: "/admin/categories/"},
+				subItem{ID: "posts-tags", Label: "Tags", URL: "/admin/tags/"})
+		}
 	}
 	if auth.CanEditType(u, db.TypePage) {
 		m = append(m, menuItem{ID: "pages", Label: "Pages", Icon: "admin-page", URL: "/admin/pages/", Sub: []subItem{

@@ -243,6 +243,9 @@ func (rq *request) pathRoute(rt *route) *response {
 					return redirect(rq.withSuffix(st.links.TermURL(c), rt))
 				}
 			}
+			if c := st.ix.oldTermSlugs[db.TaxCategory+"/"+segs[len(segs)-1]]; c != nil {
+				return redirect(rq.withSuffix(st.links.TermURL(c), rt))
+			}
 			return rq.notFound()
 		}
 		if rt.feed != "" {
@@ -252,6 +255,9 @@ func (rq *request) pathRoute(rt *route) *response {
 	case segs[0] == st.s.TagBase && len(segs) == 2:
 		t := st.ix.tagBySlug[segs[1]]
 		if t == nil {
+			if t = st.ix.oldTermSlugs[db.TaxTag+"/"+segs[1]]; t != nil {
+				return redirect(rq.withSuffix(st.links.TermURL(t), rt))
+			}
 			return rq.notFound()
 		}
 		if rt.feed != "" {

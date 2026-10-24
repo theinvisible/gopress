@@ -217,7 +217,8 @@ func (a *Admin) postList(w http.ResponseWriter, r *http.Request, c *reqCtx, pt p
 		}
 	}
 
-	aq := db.AdminPostQuery{Type: pt.Type, Status: d.Status, Search: d.Search, Month: d.Month, CategoryID: d.Cat,
+	tagID, _ := strconv.ParseInt(q.Get("tag"), 10, 64)
+	aq := db.AdminPostQuery{Type: pt.Type, Status: d.Status, Search: d.Search, Month: d.Month, CategoryID: d.Cat, TagID: tagID,
 		AuthorID: authorID, OrderBy: d.OrderBy, Ascending: d.Order == "asc", Limit: perPage, Offset: (d.Paged - 1) * perPage}
 	var posts []db.Post
 	levels := map[int64]int{}

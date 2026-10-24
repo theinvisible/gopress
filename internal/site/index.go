@@ -24,6 +24,8 @@ type contentIndex struct {
 	tagBySlug map[string]*db.Term
 	cats      []*db.Term // name order
 	tags      []*db.Term
+	// oldTermSlugs maps "taxonomy/old-slug" to the renamed term.
+	oldTermSlugs map[string]*db.Term
 
 	users       map[int64]*db.User
 	userByNice  map[string]*db.User
@@ -107,6 +109,18 @@ func buildIndex(ctx context.Context, q db.Querier) (*contentIndex, error) {
 	byName(ix.tags)
 	for _, t := range ix.cats {
 		ix.catByPath[ix.termPath(t)] = t
+	}
+	ix.oldTermSlugs = map[string]*db.Term{}
+	for _, tax := range []string{db.TaxCategory, db.TaxTag} {
+		old, err := db.TermSlugRedirects(ctx, q, tax)
+		if err != nil {
+			return nil, err
+		}
+		for slug, id := range old {
+			if t := ix.terms[id]; t != nil {
+				ix.oldTermSlugs[tax+"/"+slug] = t
+			}
+		}
 	}
 
 	users, err := db.Users(ctx, q)

@@ -60,6 +60,7 @@ func (s *Service) As(user *db.User, r *http.Request) *Editor {
 var (
 	ErrForbidden = errors.New("Sorry, you are not allowed to do that.")
 	ErrInvalid   = errors.New("invalid input")
+	ErrNotFound  = errors.New("not found")
 )
 
 // ValidationError is a user-facing input problem.

@@ -1,0 +1,27 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap">
+	<h1>Edit {{.Tx.Singular}}</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	<p><a href="{{.Tx.Base}}">&larr; Go to {{.Tx.Plural}}</a> · <a href="{{.ViewURL}}">View archive</a></p>
+	<form method="post" action="{{.Tx.Base}}{{.Term.ID}}/edit" class="validate">
+		{{template "csrf" .CSRF}}
+		<table class="form-table" role="presentation"><tbody>
+			<tr class="form-field form-required term-name-wrap"><th scope="row"><label for="name">Name</label></th>
+				<td><input name="tag-name" id="name" type="text" value="{{.Form.Name}}" size="40" maxlength="200" required>
+				<p class="description">The name is how it appears on your site.</p></td></tr>
+			<tr class="form-field term-slug-wrap"><th scope="row"><label for="slug">Slug</label></th>
+				<td><input name="slug" id="slug" type="text" value="{{.Form.Slug}}" size="40" maxlength="200">
+				<p class="description">The old address keeps working and redirects to the new one.</p></td></tr>
+			{{- if .Tx.Hierarchical}}
+			<tr class="form-field term-parent-wrap"><th scope="row"><label for="parent">Parent Category</label></th>
+				<td><select name="parent" id="parent" class="postform"><option value="0">None</option>
+					{{- range .Parents}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{range $i := iterate .Level}}&nbsp;&nbsp;&nbsp;{{end}}{{.Label}}</option>{{end}}
+				</select></td></tr>
+			{{- end}}
+			<tr class="form-field term-description-wrap"><th scope="row"><label for="description">Description</label></th>
+				<td><textarea name="description" id="description" rows="5" cols="50" class="large-text">{{.Form.Description}}</textarea></td></tr>
+		</tbody></table>
+		<div class="edit-tag-actions"><input type="submit" class="button button-primary" value="Update"></div>
+	</form>
+</div>
+{{template "admin-bottom" .}}{{end}}
