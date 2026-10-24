@@ -1,0 +1,25 @@
+{
+	"name": "tester", "version": "1.0.0", "title": "Tester", "api": 1,
+	"permissions": {
+		"http": ["api.example.org"],
+		"routes": ["/ping"],
+		"legacy_routes": [{"query": {"tester_ping": "1"}, "route": "/ping"}],
+		"hooks": ["the_content", "comment_pre_save", "comment_status_changed"],
+		"data": ["posts:read", "media:read", "comments:moderate", "import:post:tester_item"],
+		"frontend_assets": ["assets/hello.css", "assets/hello.js"]
+	},
+	"shortcodes": [{"name": "hello", "assets": ["assets/hello.css", "assets/hello.js"]}, {"name": "evil"}, {"name": "loop"},
+		{"name": "panic"}, {"name": "alloc"}, {"name": "big"}, {"name": "fail"}, {"name": "op"}],
+	"widgets": [{"type": "tester_widget", "title": "Tester", "fields": [{"name": "text", "label": "Text"}]}],
+	"admin": [
+		{"id": "settings", "title": "Tester", "menu": "settings", "capability": "manage_options", "kind": "settings",
+		 "fields": [{"name": "greeting", "label": "Greeting", "default": "Hello", "max_length": 50},
+		            {"name": "count", "label": "Count", "type": "number", "min": 1, "max": 10, "default": 3},
+		            {"name": "images", "label": "Images", "type": "media_list"}]},
+		{"id": "items", "title": "Tester items", "menu": "plugin", "capability": "edit_posts", "kind": "table",
+		 "columns": [{"name": "name", "label": "Name"}]},
+		{"id": "app", "title": "Tester app", "menu": "tools", "capability": "manage_options", "kind": "iframe", "file": "admin/app.html"}
+	],
+	"editor": [{"id": "insert", "label": "Insert hello", "shortcode": "hello", "fields": [{"name": "name", "label": "Name"}]}],
+	"dashboard": [{"id": "stats", "title": "Tester stats", "capability": "manage_options"}]
+}

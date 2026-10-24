@@ -50,34 +50,42 @@ func TestManifest(t *testing.T) {
 		t.Fatalf("valid manifest: %v", err)
 	}
 	bad := map[string]func(m map[string]any){
-		"unknown key":          func(m map[string]any) { m["permisions"] = map[string]any{} },
-		"name upper":           func(m map[string]any) { m["name"] = "Hello" },
-		"name path":            func(m map[string]any) { m["name"] = "../x" },
-		"version":              func(m map[string]any) { m["version"] = "1.0" },
-		"api":                  func(m map[string]any) { m["api"] = 2 },
-		"title control":        func(m map[string]any) { m["title"] = "a\nb" },
-		"http url":             func(m map[string]any) { perms(m)["http"] = []any{"https://x.org"} },
-		"http ip":              func(m map[string]any) { perms(m)["http"] = []any{"10.0.0.1"} },
-		"http localhost":       func(m map[string]any) { perms(m)["http"] = []any{"localhost"} },
-		"http port":            func(m map[string]any) { perms(m)["http"] = []any{"x.org:8080"} },
-		"http internal":        func(m map[string]any) { perms(m)["http"] = []any{"db.internal"} },
-		"route dotdot":         func(m map[string]any) { perms(m)["routes"] = []any{"/../admin"} },
-		"route no slash":       func(m map[string]any) { perms(m)["routes"] = []any{"ping"} },
-		"legacy core var":      func(m map[string]any) { perms(m)["legacy_routes"] = []any{map[string]any{"query": map[string]any{"p": "1"}, "route": "/ping"}} },
-		"legacy unknown route": func(m map[string]any) { perms(m)["legacy_routes"] = []any{map[string]any{"query": map[string]any{"x": "1"}, "route": "/nope"}} },
-		"hook":                 func(m map[string]any) { perms(m)["hooks"] = []any{"init"} },
-		"data":                 func(m map[string]any) { perms(m)["data"] = []any{"users:read"} },
-		"asset html":           func(m map[string]any) { perms(m)["frontend_assets"] = []any{"assets/x.html"} },
-		"asset outside":        func(m map[string]any) { perms(m)["frontend_assets"] = []any{"admin/x.js"} },
-		"asset dotdot":         func(m map[string]any) { perms(m)["frontend_assets"] = []any{"assets/../plugin.js"} },
-		"duplicate perm":       func(m map[string]any) { perms(m)["hooks"] = []any{"head", "head"} },
-		"core shortcode":       func(m map[string]any) { m["shortcodes"] = []any{map[string]any{"name": "gallery"}} },
-		"undeclared asset":     func(m map[string]any) { m["shortcodes"] = []any{map[string]any{"name": "hello", "assets": []any{"assets/other.js"}}} },
-		"admin capability":     func(m map[string]any) { m["admin"].([]any)[0].(map[string]any)["capability"] = "read" },
-		"iframe file":          func(m map[string]any) { m["admin"].([]any)[1].(map[string]any)["file"] = "assets/app.html" },
-		"field type":           func(m map[string]any) { m["widgets"].([]any)[0].(map[string]any)["fields"] = []any{map[string]any{"name": "x", "label": "X", "type": "html"}} },
-		"insert other code":    func(m map[string]any) { m["editor"].([]any)[0].(map[string]any)["shortcode"] = "gallery" },
-		"insert no iframe":     func(m map[string]any) { m["editor"].([]any)[0].(map[string]any)["page"] = "settings" },
+		"unknown key":    func(m map[string]any) { m["permisions"] = map[string]any{} },
+		"name upper":     func(m map[string]any) { m["name"] = "Hello" },
+		"name path":      func(m map[string]any) { m["name"] = "../x" },
+		"version":        func(m map[string]any) { m["version"] = "1.0" },
+		"api":            func(m map[string]any) { m["api"] = 2 },
+		"title control":  func(m map[string]any) { m["title"] = "a\nb" },
+		"http url":       func(m map[string]any) { perms(m)["http"] = []any{"https://x.org"} },
+		"http ip":        func(m map[string]any) { perms(m)["http"] = []any{"10.0.0.1"} },
+		"http localhost": func(m map[string]any) { perms(m)["http"] = []any{"localhost"} },
+		"http port":      func(m map[string]any) { perms(m)["http"] = []any{"x.org:8080"} },
+		"http internal":  func(m map[string]any) { perms(m)["http"] = []any{"db.internal"} },
+		"route dotdot":   func(m map[string]any) { perms(m)["routes"] = []any{"/../admin"} },
+		"route no slash": func(m map[string]any) { perms(m)["routes"] = []any{"ping"} },
+		"legacy core var": func(m map[string]any) {
+			perms(m)["legacy_routes"] = []any{map[string]any{"query": map[string]any{"p": "1"}, "route": "/ping"}}
+		},
+		"legacy unknown route": func(m map[string]any) {
+			perms(m)["legacy_routes"] = []any{map[string]any{"query": map[string]any{"x": "1"}, "route": "/nope"}}
+		},
+		"hook":           func(m map[string]any) { perms(m)["hooks"] = []any{"init"} },
+		"data":           func(m map[string]any) { perms(m)["data"] = []any{"users:read"} },
+		"asset html":     func(m map[string]any) { perms(m)["frontend_assets"] = []any{"assets/x.html"} },
+		"asset outside":  func(m map[string]any) { perms(m)["frontend_assets"] = []any{"admin/x.js"} },
+		"asset dotdot":   func(m map[string]any) { perms(m)["frontend_assets"] = []any{"assets/../plugin.js"} },
+		"duplicate perm": func(m map[string]any) { perms(m)["hooks"] = []any{"head", "head"} },
+		"core shortcode": func(m map[string]any) { m["shortcodes"] = []any{map[string]any{"name": "gallery"}} },
+		"undeclared asset": func(m map[string]any) {
+			m["shortcodes"] = []any{map[string]any{"name": "hello", "assets": []any{"assets/other.js"}}}
+		},
+		"admin capability": func(m map[string]any) { m["admin"].([]any)[0].(map[string]any)["capability"] = "read" },
+		"iframe file":      func(m map[string]any) { m["admin"].([]any)[1].(map[string]any)["file"] = "assets/app.html" },
+		"field type": func(m map[string]any) {
+			m["widgets"].([]any)[0].(map[string]any)["fields"] = []any{map[string]any{"name": "x", "label": "X", "type": "html"}}
+		},
+		"insert other code": func(m map[string]any) { m["editor"].([]any)[0].(map[string]any)["shortcode"] = "gallery" },
+		"insert no iframe":  func(m map[string]any) { m["editor"].([]any)[0].(map[string]any)["page"] = "settings" },
 	}
 	for name, f := range bad {
 		if _, err := ParseManifest(mutate(t, f)); err == nil {
