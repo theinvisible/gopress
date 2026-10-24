@@ -79,11 +79,12 @@
 	{{- if .Pending}}
 	<li id="wp-admin-bar-comments"><a class="ab-item" href="/admin/comments/?comment_status=pending"><span class="ab-icon" aria-hidden="true"></span><span class="ab-label awaiting-mod pending-count count-{{.Pending}}" aria-hidden="true">{{.Pending}}</span><span class="screen-reader-text">{{.Pending}} {{plural .Pending "Comment" "Comments"}} in moderation</span></a></li>
 	{{- end}}
-	<li id="wp-admin-bar-new-content" class="menupop"><a class="ab-item" href="/admin/posts/new"><span class="ab-icon" aria-hidden="true"></span><span class="ab-label">New</span></a>
+	{{- if .NewItems}}
+	<li id="wp-admin-bar-new-content" class="menupop"><a class="ab-item" href="{{(index .NewItems 0).URL}}"><span class="ab-icon" aria-hidden="true"></span><span class="ab-label">New</span></a>
 		<div class="ab-sub-wrapper"><ul class="ab-submenu">
-			<li id="wp-admin-bar-new-post"><a class="ab-item" href="/admin/posts/new">Post</a></li>
-			<li id="wp-admin-bar-new-page"><a class="ab-item" href="/admin/pages/new">Page</a></li>
+			{{- range .NewItems}}<li id="wp-admin-bar-new-{{.ID}}"><a class="ab-item" href="{{.URL}}">{{.Label}}</a></li>{{end}}
 		</ul></div></li>
+	{{- end}}
 </ul>
 <ul id="wp-admin-bar-top-secondary" class="ab-top-secondary ab-top-menu">
 	<li id="wp-admin-bar-my-account" class="menupop with-avatar"><a class="ab-item" href="/admin/profile">Howdy, <span class="display-name">{{.User.DisplayName}}</span><img alt="" src="{{avatar .User.Email 26}}" class="avatar avatar-26 photo" height="26" width="26"></a>

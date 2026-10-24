@@ -22,6 +22,7 @@ type basePage struct {
 	CSRF      string
 	Color     string // admin color scheme
 	Menu      []menuItem
+	NewItems  []subItem // the toolbar's "New" menu (by capability)
 	Pending   int // comments awaiting moderation
 	Notice    *notice
 	Assets    *assets
@@ -78,6 +79,17 @@ func (a *Admin) base(ctx context.Context, c *reqCtx, title, screen string) baseP
 			}
 		}
 		p.Menu = a.menu(c.user, screen, p.Pending)
+		for _, it := range []struct {
+			cap string
+			sub subItem
+		}{{auth.CapEditPosts, subItem{ID: "post", Label: "Post", URL: "/admin/posts/new"}},
+			{auth.CapUploadFiles, subItem{ID: "media", Label: "Media", URL: "/admin/media/"}},
+			{auth.CapEditPages, subItem{ID: "page", Label: "Page", URL: "/admin/pages/new"}},
+			{auth.CapCreateUsers, subItem{ID: "user", Label: "User", URL: "/admin/users/new"}}} {
+			if auth.Can(c.user, it.cap) {
+				p.NewItems = append(p.NewItems, it.sub)
+			}
+		}
 		// Failed second-factor attempts since the last login: someone
 		// else may know the password.
 		if n, _ := db.UserMeta(ctx, a.db.R, c.user.ID, metaMFAWarning); n != "" && n != "0" {
