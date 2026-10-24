@@ -33,6 +33,16 @@ export function collectAttrs(el) {
 	return any ? out : null;
 }
 
+function plainAttr(def) {
+	return {
+		default: def,
+		keepOnSplit: true,
+		parseHTML: (el) => !Array.from(el.children).some((c) => c.nodeName === 'P') &&
+			!Array.from(el.childNodes).every((c) => c.nodeType === 3 && !c.textContent.trim()),
+		renderHTML: (attrs) => (attrs.plain ? { 'data-gp-plain': '1' } : {}),
+	};
+}
+
 const BLOCK_TYPES = ['paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList', 'listItem',
 	'table', 'tableRow', 'tableCell', 'tableHeader', 'horizontalRule', 'pre'];
 
@@ -52,18 +62,13 @@ const HTMLAttrs = Extension.create({
 				},
 			},
 		}, {
-			// <li>text</li> and <blockquote>text</blockquote> without <p>:
-			// remembered so the export writes them back the same way.
-			types: ['listItem', 'blockquote'],
-			attributes: {
-				plain: {
-					default: false,
-					keepOnSplit: true,
-					parseHTML: (el) => !Array.from(el.children).some((c) => c.nodeName === 'P') &&
-						!Array.from(el.childNodes).every((c) => c.nodeType === 3 && !c.textContent.trim()),
-					renderHTML: (attrs) => (attrs.plain ? { 'data-gp-plain': '1' } : {}),
-				},
-			},
+			// <li>text</li> without <p>: remembered so the export writes it
+			// back the same way. New items are plain too (WordPress style).
+			types: ['listItem'],
+			attributes: { plain: plainAttr(true) },
+		}, {
+			types: ['blockquote'],
+			attributes: { plain: plainAttr(false) },
 		}];
 	},
 });

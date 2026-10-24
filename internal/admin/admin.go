@@ -74,6 +74,7 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /wp-login.php", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusFound)
 	})
+	mux.HandleFunc("/wp-login.php", http.NotFound) // any other method
 	mux.HandleFunc("GET /wp-admin/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/", http.StatusFound)
 	})

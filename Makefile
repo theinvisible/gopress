@@ -84,11 +84,10 @@ editor:
 admin-assets:
 	dev/admin-assets.sh $(WP_CORE)
 
-# End-to-end tests of the admin with the local Chrome against a running
-# server (BASE_URL=http://localhost:8080 dev/serve-local.sh), credentials
-# in local/e2e-credentials.json.
+# End-to-end tests of the admin with the local Chrome against a throwaway
+# copy of local/data served on localhost:8090 (dev/e2e/run.sh).
 e2e:
-	cd dev/e2e && npm ci --no-audit --no-fund && node e2e.mjs
+	dev/e2e/run.sh
 
 # Editor round trip over all local posts: no content loss, same rendering.
 roundtrip:

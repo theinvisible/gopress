@@ -429,7 +429,12 @@ function toolbar(api) {
 }
 
 function bubbleMenu(api) {
-	const e = api.editor;
+	// The menu is created before the editor (it is passed to it), so the
+	// editor is looked up when a button is used.
+	const e = new Proxy({}, { get: (t, k) => {
+		const v = api.editor[k];
+		return typeof v === 'function' ? v.bind(api.editor) : v;
+	} });
 	const b = (name, label, run, active) => {
 		const el = h('button', { type: 'button', class: 'gp-bm', 'aria-label': label, title: label, onmousedown: (ev) => ev.preventDefault(), onclick: run }, icon(name));
 		el._active = active;
@@ -446,7 +451,7 @@ function bubbleMenu(api) {
 		b('editor-quote', 'Quote', () => e.chain().focus().toggleBlockquote().run(), () => e.isActive('blockquote')),
 	];
 	const el = h('div', { class: 'gp-bubble', role: 'toolbar', 'aria-label': 'Text formatting' }, ...items);
-	el.gpUpdate = () => items.forEach((i) => i._active && i.classList.toggle('is-active', i._active()));
+	el.gpUpdate = () => api.editor && items.forEach((i) => i._active && i.classList.toggle('is-active', i._active()));
 	return el;
 }
 
