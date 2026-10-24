@@ -826,7 +826,7 @@ gopress.editor = Object.assign(gopress.editor || {}, {
 	registerShortcodeView(name, fn) { gopress.editor.shortcodeViews[name] = fn; },
 	mount,
 	// For the round-trip test (web/editor/test/roundtrip.mjs).
-	_test: { importHTML, exportHTML, canonical, debugParse },
+	_test: { importHTML, exportHTML, canonical, debugParse, shortcodeText },
 });
 gopress.media = Object.assign(gopress.media || {}, {
 	pick: (opts) => pick({ url: '/admin/api/media', ...opts }),

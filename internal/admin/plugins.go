@@ -379,7 +379,7 @@ func (a *Admin) renderPluginPage(w http.ResponseWriter, r *http.Request, c *reqC
 			}
 		}
 	case "iframe":
-		d.Frame = "/plugin-ui/" + name + "/" + pg.File
+		d.Frame = "/plugin-ui/" + name + "/" + strings.TrimPrefix(pg.File, "admin/")
 		d.APIURL = "/admin/api/plugins/" + name + "/" + pg.ID
 		d.Scripts, d.Styles = []string{"upload.js", "editor/editor.js", "plugin-bridge.js"}, []string{"editor/editor.css"}
 	}

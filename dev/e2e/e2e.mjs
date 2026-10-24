@@ -581,6 +581,88 @@ await step('MCP: token in the profile, an agent writes a draft, revoke', async (
 	assert.equal(r.status, 401, 'revoked token');
 });
 
+await step('plugins: upload hello, approve, settings, editor button, board page, route, deactivate', async () => {
+	const reauth = async () => {
+		if (!page.url().includes('/admin/reauth')) return false;
+		await page.type('#pwd', PASSWORD);
+		await page.type('#code', await freshTOTP(secret));
+		await submit('form[action="/admin/reauth"] button[type=submit]');
+		return true;
+	};
+	const upload = async () => {
+		await go('/admin/plugins/');
+		await page.click('[data-toggle="#gp-plugin-upload"]');
+		const input = await page.$('#pluginzip');
+		await input.uploadFile(process.env.E2E_HELLO_ZIP);
+		await submit('.wp-upload-form input[type=submit]');
+	};
+	await upload();
+	if (await reauth()) await upload();
+	assert.match(page.url(), /\/admin\/plugins\/hello\/activate/);
+	assert.match(await text('.gp-permission-list'), /Answer requests to \/plugins\/…\/stats/);
+	await submit('form[action="/admin/plugins/hello/activate"] button[type=submit]');
+	if (await reauth()) await submit('form[action="/admin/plugins/hello/activate"] button[type=submit]');
+	assert.match(await text('.notice'), /Plugin activated/);
+
+	// Settings page in Settings › Hello.
+	await go('/admin/plugin/hello/settings');
+	await page.$eval('#f-greeting', (i) => { i.value = 'Servus'; });
+	await page.click('input[name=signature]');
+	await submit('.gp-plugin-page input[type=submit]');
+	assert.match(await text('.notice'), /Settings saved/);
+
+	// Editor button: a dialog that inserts the shortcode.
+	await go('/admin/posts/new');
+	await page.waitForSelector('.gp-content');
+	await page.type('#title', 'E2E Plugin Post');
+	await page.click('.gp-content');
+	const btn = await page.waitForSelector('xpath/.//div[contains(@class,"gp-editor-header")]//button[contains(., "Greeting")]');
+	await btn.click();
+	await page.waitForSelector('dialog.gp-dialog input[name=name]');
+	await page.$eval('dialog.gp-dialog input[name=name]', (i) => { i.value = 'E2E friend'; });
+	await page.click('dialog.gp-dialog footer .button-primary');
+	await page.waitForFunction(() => /\[hello name="E2E friend"\]/.test(document.querySelector('.gp-content').textContent));
+	// Values cannot break out of the shortcode.
+	assert.equal(await page.evaluate(() => window.gopress.editor._test.shortcodeText('x', { a: 'q"]<b>[y]', bad_: 1, 'no pe': 2 })),
+		'[x a="q&quot;&#93;<b>&#91;y&#93;" bad_="1"]');
+	await submit('#publish');
+	const id = page.url().match(/posts\/(\d+)\/edit/)[1];
+	const html = await fetchPage('/?p=' + id);
+	assert.match(html, /<p class="hello-greeting" data-hits="\d+">Servus, E2E friend!<\/p>/);
+	assert.match(html, /<link rel='stylesheet' id='plugin-hello-hello-css' href='\/plugins\/hello\/assets\/hello\.css\?v=/);
+	assert.match(html, /<script src="\/plugins\/hello\/assets\/hello\.js\?v=/);
+	assert.match(html, /hello-signature/);
+	// The asset script runs on the public page.
+	await go('/?p=' + id);
+	await page.waitForFunction(() => document.querySelector('.hello-greeting.hello-wave'), { timeout: 5000 });
+
+	// The board page: a sandboxed iframe talking through the bridge.
+	await go('/admin/plugin/hello/board');
+	const frameEl = await page.waitForSelector('iframe[data-plugin-frame]');
+	const frame = await frameEl.contentFrame();
+	await frame.waitForFunction(() => document.getElementById('hits').textContent !== '…', { timeout: 5000 });
+	assert.match(await frame.$eval('#hits', (e) => e.textContent), /^\d+$/);
+	assert.equal(await frame.evaluate(() => { try { return document.cookie; } catch (e) { return 'blocked'; } }), 'blocked', 'the frame has no cookies');
+	assert.equal(await frame.evaluate(() => { try { return String(window.parent.document.title); } catch (e) { return 'isolated'; } }), 'isolated');
+	await frame.click('#pick');
+	await page.waitForSelector('.gp-media-dialog li[role=option]');
+	await page.click('.gp-media-dialog li[role=option]');
+	await page.click('.gp-media-frame footer .button-primary');
+	await frame.waitForSelector('#pinned li img');
+	await frame.click('#reset');
+	await page.waitForSelector('.notice-success');
+	assert.match(await text('.notice-success'), /Counter reset/);
+
+	// Route.
+	const stats = await page.evaluate(async (u) => (await fetch(u, { credentials: 'omit' })).json(), BASE + '/plugins/hello/stats');
+	assert.equal(typeof stats.hits, 'number');
+
+	// Deactivate: the greeting is gone, the shortcode stays text.
+	await go('/admin/plugins/');
+	await submit('form[action="/admin/plugins/hello/deactivate"] button');
+	assert.doesNotMatch(await fetchPage('/?p=' + id), /hello-greeting/);
+});
+
 await step('scheduled post is published by the scheduler', async () => {
 	await go('/admin/posts/new');
 	await page.waitForSelector('.gp-content');

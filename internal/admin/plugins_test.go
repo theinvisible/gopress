@@ -117,8 +117,9 @@ func TestPluginsScreen(t *testing.T) {
 
 	// Iframe page and its bridge API.
 	frame := e.do("GET", "/admin/plugin/tester/app", admin, nil, nil).Body.String()
-	if !strings.Contains(frame, `sandbox="allow-scripts allow-forms allow-popups allow-modals"`) || strings.Contains(frame, "allow-same-origin") {
-		t.Error("iframe sandbox")
+	if !strings.Contains(frame, `sandbox="allow-scripts allow-forms allow-popups allow-modals"`) || strings.Contains(frame, "allow-same-origin") ||
+		!strings.Contains(frame, `src="/plugin-ui/tester/app.html"`) {
+		t.Error("iframe sandbox or src")
 	}
 	api := func(cur *auth.Current, body string, hdr map[string]string) (int, string) {
 		r := e.raw("POST", "/admin/api/plugins/tester/app", cur, body, hdr)

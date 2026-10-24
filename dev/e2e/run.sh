@@ -9,6 +9,8 @@ WORK=$(mktemp -d -t gopress-e2e-XXXXXX)
 trap 'kill "$(cat "$WORK/pid" 2>/dev/null)" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 
 go build -o "$WORK/gopress" ./cmd/gopress
+"$WORK/gopress" plugin-pack -o "$WORK/hello.zip" plugins/hello >/dev/null
+export E2E_HELLO_ZIP="$WORK/hello.zip"
 mkdir -p "$WORK/data"
 sqlite_copy() { cp "$SRC/gopress.db" "$WORK/data/gopress.db"; [ -f "$SRC/gopress.db-wal" ] && cp "$SRC/gopress.db-wal" "$WORK/data/gopress.db-wal" || true; }
 sqlite_copy
