@@ -63,12 +63,14 @@ func (pv *previewer) Visitor(r *http.Request) *site.Visitor {
 			v.Pending = counts[db.CommentPending]
 		}
 	}
-	if r.Header.Get("Sec-Fetch-Dest") == "iframe" && r.Header.Get("Sec-Fetch-Site") == "same-origin" && auth.Can(u, auth.CapEditThemeOptions) {
-		if raw, _ := db.UserMeta(ctx, pv.a.db.R, u.ID, metaCustomizeDraft); raw != "" {
-			var d map[string]any
-			if json.Unmarshal([]byte(raw), &d) == nil {
-				v.Draft = d
-				v.ShowBar = false // like WordPress' customizer preview
+	if r.Header.Get("Sec-Fetch-Dest") == "iframe" && r.Header.Get("Sec-Fetch-Site") == "same-origin" {
+		v.ShowBar = false // framed by the customizer: like WordPress' preview
+		if auth.Can(u, auth.CapEditThemeOptions) {
+			if raw, _ := db.UserMeta(ctx, pv.a.db.R, u.ID, metaCustomizeDraft); raw != "" {
+				var d map[string]any
+				if json.Unmarshal([]byte(raw), &d) == nil {
+					v.Draft = d
+				}
 			}
 		}
 	}

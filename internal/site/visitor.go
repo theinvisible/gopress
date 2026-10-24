@@ -126,7 +126,7 @@ func (rq *request) adminBar() string {
 	}
 	b.WriteString(`</ul></div></li>`)
 	if v.Can("edit_theme_options") {
-		li("customize", ` class="hide-if-no-customize"`, "/admin/customize", `Customize`)
+		li("customize", "", "/admin/customize", `<span class="ab-icon" aria-hidden="true"></span><span class="ab-label">Customize</span>`)
 	}
 	if v.Can("moderate_comments") {
 		fmt.Fprintf(&b, `<li id="wp-admin-bar-comments"><a class="ab-item" href="/admin/comments/"><span class="ab-icon" aria-hidden="true"></span><span class="ab-label awaiting-mod pending-count count-%d" aria-hidden="true">%d</span><span class="screen-reader-text comments-in-moderation-text">%d Comments in moderation</span></a></li>`,
