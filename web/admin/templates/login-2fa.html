@@ -1,0 +1,36 @@
+{{define "page"}}{{template "login-top" .}}
+	<div id="loginform" class="gp-2fa">
+		<p class="gp-2fa-intro">Confirm that it is you with your second factor.</p>
+		{{- if .HasPasskey}}
+		<div class="hide-if-no-js" data-passkey-assert="/login/2fa/passkey" data-csrf="{{.CSRF}}" data-redirect="{{.RedirectTo}}">
+			<button type="button" class="button button-primary button-large gp-passkey-button gp-wide"><span class="dashicons dashicons-admin-network" aria-hidden="true"></span> Use your passkey</button>
+			<p class="gp-passkey-error" role="alert" hidden></p>
+		</div>
+		{{- end}}
+		{{- if .HasTOTP}}
+		{{- if .HasPasskey}}<p class="gp-or"><span>or</span></p>{{end}}
+		<form method="post" action="/login/2fa">
+			<p>
+				<label for="authcode">Code from your authenticator app</label>
+				<input type="text" name="code" id="authcode" class="input gp-code" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" maxlength="8" {{if not .HasPasskey}}autofocus{{end}} required>
+			</p>
+			<input type="hidden" name="redirect_to" value="{{.RedirectTo}}">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<p class="submit"><input type="submit" class="button button-primary button-large" value="Verify"></p>
+		</form>
+		{{- end}}
+		<details class="gp-recovery">
+			<summary>Use a recovery code</summary>
+			<form method="post" action="/login/2fa">
+				<p>
+					<label for="recovery_code">Recovery code</label>
+					<input type="text" name="recovery_code" id="recovery_code" class="input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="xxxx-xxxx-xxxx-xxxx" required>
+				</p>
+				<input type="hidden" name="redirect_to" value="{{.RedirectTo}}">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<p class="submit"><input type="submit" class="button button-large" value="Use recovery code"></p>
+			</form>
+		</details>
+		<form method="post" action="/logout" class="gp-cancel"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button type="submit" class="button-link">Cancel and log out</button></form>
+	</div>
+{{template "login-bottom" .}}{{end}}

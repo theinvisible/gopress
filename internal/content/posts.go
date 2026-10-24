@@ -304,6 +304,57 @@ func (e *Editor) Save(ctx context.Context, p *db.Post, in *PostInput) (*db.Post,
 	return p, nil
 }
 
+// Now returns the service's current time.
+func (s *Service) Now() time.Time { return s.now() }
+
+// AddCategory creates a category (or returns the existing one with that
+// name below parent).
+func (s *Service) AddCategory(ctx context.Context, u *db.User, r *http.Request, name string, parent int64) (*db.Term, error) {
+	if !auth.Can(u, auth.CapManageCategories) {
+		return nil, ErrForbidden
+	}
+	name = strings.TrimSpace(render.SanitizeText(name))
+	if name == "" || len(name) > 200 {
+		return nil, &ValidationError{"Please enter a category name (up to 200 characters)."}
+	}
+	if parent != 0 {
+		if t, err := db.GetTerm(ctx, s.db.R, parent); err != nil || t == nil || t.Taxonomy != db.TaxCategory {
+			return nil, &ValidationError{"The parent category does not exist."}
+		}
+	}
+	cats, err := db.Terms(ctx, s.db.R, db.TaxCategory)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range cats {
+		if strings.EqualFold(t.Name, name) && t.ParentID == parent {
+			return &t, nil
+		}
+	}
+	base := SanitizeTitle(name)
+	if base == "" {
+		return nil, &ValidationError{"Invalid category name."}
+	}
+	slug := base
+	for n := 2; ; n++ {
+		t, err := db.TermBySlug(ctx, s.db.R, db.TaxCategory, slug)
+		if err != nil {
+			return nil, err
+		}
+		if t == nil {
+			break
+		}
+		slug = base + "-" + strconv.Itoa(n)
+	}
+	t := &db.Term{Taxonomy: db.TaxCategory, Slug: slug, Name: name, ParentID: parent}
+	if err := db.InsertTerm(ctx, s.db.W, t); err != nil {
+		return nil, err
+	}
+	s.audit(ctx, r, u.ID, "category_created", "term", t.ID, map[string]any{"name": name})
+	s.site.Invalidate()
+	return t, nil
+}
+
 // wall returns the wall clock of t as a UTC time (the storage convention
 // of *_local columns).
 func wall(t time.Time) time.Time {

@@ -1,0 +1,117 @@
+{{define "admin-styles"}}
+<link rel="stylesheet" href="{{asset "wp/wp-includes/css/dashicons.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-includes/css/admin-bar.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-includes/css/buttons.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-includes/css/dist/base-styles/admin-schemes.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/common.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/forms.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/admin-menu.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/dashboard.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/list-tables.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/edit.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/revisions.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/media.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/l10n.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/wp-tooltip.min.css"}}">
+{{- if ne .Color "fresh"}}
+<link rel="stylesheet" href="{{asset (printf "wp/wp-admin/css/colors/%s/colors.min.css" .Color)}}">
+{{- end}}
+<link rel="stylesheet" href="{{asset "admin.css"}}">
+{{- range .Styles}}
+<link rel="stylesheet" href="{{asset .}}">
+{{- end}}
+{{end}}
+
+{{define "admin-top"}}<!DOCTYPE html>
+<html class="wp-toolbar" lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="same-origin">
+<title>{{.Title}} &lsaquo; {{.SiteName}} &#8212; GoPress</title>
+<link rel="icon" href="{{asset "gopress-icon.svg"}}" type="image/svg+xml">
+{{template "admin-styles" .}}
+</head>
+<body class="wp-admin wp-core-ui no-js auto-fold admin-bar admin-color-{{.Color}} {{.BodyClass}}" data-csrf="{{.CSRF}}">
+<div id="wpwrap">
+<div id="adminmenumain" role="navigation" aria-label="Main menu">
+<a href="#wpbody-content" class="screen-reader-shortcut">Skip to main content</a>
+<a href="#wp-toolbar" class="screen-reader-shortcut">Skip to toolbar</a>
+<div id="adminmenuback"></div>
+<div id="adminmenuwrap">
+<ul id="adminmenu">
+{{- range .Menu}}
+{{- if .Separator}}
+	<li class="wp-not-current-submenu wp-menu-separator" aria-hidden="true"><div class="separator"></div></li>
+{{- else}}
+	<li class="menu-top menu-icon-{{.Icon}} {{if .Sub}}wp-has-submenu{{end}} {{if .Current}}wp-has-current-submenu wp-menu-open current{{else}}wp-not-current-submenu{{end}}" id="menu-{{.ID}}">
+	<a href="{{.URL}}" class="menu-top {{if .Sub}}wp-has-submenu{{end}} {{if .Current}}wp-has-current-submenu wp-menu-open current{{else}}wp-not-current-submenu{{end}}"{{if and .Current (not .Sub)}} aria-current="page"{{end}}><div class="wp-menu-image dashicons-before dashicons-{{.Icon}}" aria-hidden="true"><br></div><div class="wp-menu-name">{{.Label}}{{if .Badge}} <span class="awaiting-mod count-{{.Badge}}"><span class="pending-count" aria-hidden="true">{{.Badge}}</span><span class="screen-reader-text">{{.Badge}} {{plural .Badge "Comment" "Comments"}} in moderation</span></span>{{end}}</div></a>
+	{{- if .Sub}}
+	<ul class="wp-submenu wp-submenu-wrap"><li class="wp-submenu-head" aria-hidden="true">{{.Label}}</li>
+		{{- range $i, $s := .Sub}}<li class="{{if eq $i 0}}wp-first-item{{end}}{{if $s.Current}} current{{end}}"><a href="{{$s.URL}}" class="{{if eq $i 0}}wp-first-item{{end}}{{if $s.Current}} current{{end}}"{{if $s.Current}} aria-current="page"{{end}}>{{$s.Label}}</a></li>{{end}}
+	</ul>
+	{{- end}}
+	</li>
+{{- end}}
+{{- end}}
+	<li id="collapse-menu"><button type="button" id="collapse-button" aria-label="Collapse Main Menu" aria-expanded="true"><span class="collapse-button-icon" aria-hidden="true"></span><span class="collapse-button-label">Collapse Menu</span></button></li>
+</ul>
+</div>
+</div>
+<div id="wpcontent">
+{{template "admin-bar" .}}
+<div id="wpbody" role="main">
+<div id="wpbody-content">
+{{- if .Notice}}
+<div class="notice notice-{{.Notice.Kind}} is-dismissible gp-notice"><p>{{.Notice.Text}}</p><button type="button" class="notice-dismiss"><span class="screen-reader-text">Dismiss this notice.</span></button></div>
+{{- end}}
+{{end}}
+
+{{define "admin-bar"}}
+<div id="wpadminbar">
+<div class="quicklinks" id="wp-toolbar" role="navigation" aria-label="Toolbar">
+<ul id="wp-admin-bar-root-default" class="ab-top-menu">
+	<li id="wp-admin-bar-menu-toggle"><a class="ab-item" href="#" aria-expanded="false"><span class="ab-icon" aria-hidden="true"></span><span class="screen-reader-text">Menu</span></a></li>
+	<li id="wp-admin-bar-gopress" class="gp-brand"><a class="ab-item" href="/admin/"><img src="{{asset "gopress-icon.svg"}}" alt="" width="20" height="20"><span class="screen-reader-text">GoPress</span></a></li>
+	<li id="wp-admin-bar-site-name" class="menupop"><a class="ab-item" href="{{.Home}}">{{.SiteName}}</a>
+		<div class="ab-sub-wrapper"><ul class="ab-submenu"><li id="wp-admin-bar-view-site"><a class="ab-item" href="{{.Home}}">Visit Site</a></li></ul></div></li>
+	{{- if .Pending}}
+	<li id="wp-admin-bar-comments"><a class="ab-item" href="/admin/comments/?comment_status=pending"><span class="ab-icon" aria-hidden="true"></span><span class="ab-label awaiting-mod pending-count count-{{.Pending}}" aria-hidden="true">{{.Pending}}</span><span class="screen-reader-text">{{.Pending}} {{plural .Pending "Comment" "Comments"}} in moderation</span></a></li>
+	{{- end}}
+	<li id="wp-admin-bar-new-content" class="menupop"><a class="ab-item" href="/admin/posts/new"><span class="ab-icon" aria-hidden="true"></span><span class="ab-label">New</span></a>
+		<div class="ab-sub-wrapper"><ul class="ab-submenu">
+			<li id="wp-admin-bar-new-post"><a class="ab-item" href="/admin/posts/new">Post</a></li>
+			<li id="wp-admin-bar-new-page"><a class="ab-item" href="/admin/pages/new">Page</a></li>
+		</ul></div></li>
+</ul>
+<ul id="wp-admin-bar-top-secondary" class="ab-top-secondary ab-top-menu">
+	<li id="wp-admin-bar-my-account" class="menupop with-avatar"><a class="ab-item" href="/admin/profile">Howdy, <span class="display-name">{{.User.DisplayName}}</span><img alt="" src="{{avatar .User.Email 26}}" class="avatar avatar-26 photo" height="26" width="26"></a>
+		<div class="ab-sub-wrapper"><ul id="wp-admin-bar-user-actions" class="ab-submenu">
+			<li id="wp-admin-bar-user-info"><a class="ab-item" href="/admin/profile"><img alt="" src="{{avatar .User.Email 64}}" class="avatar avatar-64 photo" height="64" width="64"><span class="display-name">{{.User.DisplayName}}</span><span class="display-name edit-profile">Edit Profile</span></a></li>
+			<li id="wp-admin-bar-logout"><form method="post" action="/logout"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button type="submit" class="ab-item gp-link-button">Log Out</button></form></li>
+		</ul></div></li>
+</ul>
+</div>
+</div>
+{{end}}
+
+{{define "admin-bottom"}}
+<div class="clear"></div></div><!-- wpbody-content -->
+<div class="clear"></div></div><!-- wpbody -->
+<div class="clear"></div></div><!-- wpcontent -->
+<div id="wpfooter" role="contentinfo">
+	<p id="footer-left" class="alignleft">Thank you for creating with <a href="https://github.com/theinvisible/gopress">GoPress</a>.</p>
+	<p id="footer-upgrade" class="alignright"></p>
+	<div class="clear"></div>
+</div>
+</div><!-- wpwrap -->
+<script src="{{asset "admin.js"}}"></script>
+{{- range .Scripts}}
+<script src="{{asset .}}"></script>
+{{- end}}
+</body>
+</html>
+{{end}}
+
+{{define "csrf"}}<input type="hidden" name="_csrf" value="{{.}}">{{end}}

@@ -1,0 +1,76 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-dashboard">
+	<h1>Dashboard</h1>
+	{{- if .AutoApprove}}
+	<div class="notice notice-warning inline"><p><strong>Comments are published without moderation.</strong> Spam that gets past the built-in checks appears on the site immediately. Consider holding comments for moderation (Settings &rsaquo; Discussion) until the Akismet plugin is active.</p></div>
+	{{- end}}
+	<div class="gp-columns">
+		<div class="postbox gp-glance">
+			<div class="postbox-header"><h2 class="hndle">At a Glance</h2></div>
+			<div class="inside">
+				<ul>
+					<li><a href="/admin/posts/"><span class="dashicons dashicons-admin-post" aria-hidden="true"></span>{{.Posts}} {{plural .Posts "Post" "Posts"}}</a></li>
+					<li><a href="/admin/pages/"><span class="dashicons dashicons-admin-page" aria-hidden="true"></span>{{.Pages}} {{plural .Pages "Page" "Pages"}}</a></li>
+					{{- if .CanModerate}}
+					<li><a href="/admin/comments/"><span class="dashicons dashicons-admin-comments" aria-hidden="true"></span>{{.Approved}} {{plural .Approved "Comment" "Comments"}}</a></li>
+					<li><a href="/admin/comments/?comment_status=pending"><span class="dashicons dashicons-clock" aria-hidden="true"></span>{{.Pending}} in moderation</a></li>
+					<li><a href="/admin/comments/?comment_status=spam"><span class="dashicons dashicons-dismiss" aria-hidden="true"></span>{{.Spam}} spam</a></li>
+					{{- end}}
+				</ul>
+			</div>
+		</div>
+
+		{{- if .CanPost}}
+		<div class="postbox gp-quick-draft">
+			<div class="postbox-header"><h2 class="hndle">Quick Draft</h2></div>
+			<div class="inside">
+				<form method="post" action="/admin/quick-draft">
+					{{template "csrf" .CSRF}}
+					<p><label for="qd-title">Title</label><br><input type="text" id="qd-title" name="post_title" autocomplete="off"></p>
+					<p><label for="qd-content">Content</label><br><textarea id="qd-content" name="content" placeholder="What's on your mind?"></textarea></p>
+					<p><button type="submit" class="button button-primary">Save Draft</button></p>
+				</form>
+				{{- if .Drafts}}
+				<div class="gp-activity"><h3>Your Recent Drafts</h3><ul>
+					{{- range .Drafts}}<li><a href="{{.EditURL}}">{{.Title}}</a> <span class="gp-when">{{.Date}}</span></li>{{end}}
+				</ul></div>
+				{{- end}}
+			</div>
+		</div>
+		{{- end}}
+
+		<div class="postbox gp-activity">
+			<div class="postbox-header"><h2 class="hndle">Activity</h2></div>
+			<div class="inside">
+				{{- if .Scheduled}}
+				<h3>Publishing Soon</h3>
+				<ul>{{range .Scheduled}}<li><span class="gp-when">{{.Date}}</span><a href="{{.EditURL}}">{{.Title}}</a></li>{{end}}</ul>
+				{{- end}}
+				<h3>Recently Published</h3>
+				<ul>{{range .Published}}<li><span class="gp-when">{{.Date}}</span><a href="{{.EditURL}}">{{.Title}}</a></li>{{else}}<li>Nothing published yet.</li>{{end}}</ul>
+				{{- if .CanModerate}}
+				<h3>Recent Comments</h3>
+				{{- range .Comments}}
+				<div class="gp-comment{{if eq .Status "pending"}} unapproved{{end}}" id="dash-comment-{{.ID}}">
+					<img src="{{.Avatar}}" width="40" height="40" alt="">
+					<div>
+						<div>From <strong>{{.Author}}</strong> on <a href="{{.PostEditURL}}">{{.PostTitle}}</a>{{if eq .Status "pending"}} <span class="gp-badge gp-badge-warn">Pending</span>{{end}}</div>
+						<div class="gp-comment-text">{{.Text}}</div>
+						<div class="row-actions" data-comment-actions data-id="{{.ID}}">
+							{{- if eq .Status "pending"}}<button type="button" class="button-link" data-moderate="approve">Approve</button> | {{else}}<button type="button" class="button-link" data-moderate="unapprove">Unapprove</button> | {{end}}
+							<a href="/admin/comments/{{.ID}}/edit">Edit</a> |
+							<button type="button" class="button-link" data-moderate="spam">Spam</button> |
+							<button type="button" class="button-link delete" data-moderate="trash">Trash</button>
+						</div>
+					</div>
+				</div>
+				{{- else}}
+				<p>No comments yet.</p>
+				{{- end}}
+				<p><a href="/admin/comments/">View all comments</a></p>
+				{{- end}}
+			</div>
+		</div>
+	</div>
+</div>
+{{template "admin-bottom" .}}{{end}}

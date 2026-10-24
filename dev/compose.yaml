@@ -45,5 +45,6 @@ services:
       - ../local/wp-plugins/foto-slider-lightbox:/var/www/html/wp-content/plugins/foto-slider-lightbox:ro
       - ../local/uploads:/var/www/html/wp-content/uploads:ro
       - ./golden:/golden:ro
+      - ./wpref-mu:/var/www/html/wp-content/mu-plugins:ro
 volumes:
   gopress-devdb:

@@ -1,0 +1,18 @@
+{{define "page"}}<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Error &#8212; GoPress</title>
+<link rel="stylesheet" href="{{.Assets.URL "wp/wp-includes/css/buttons.min.css"}}">
+<link rel="stylesheet" href="{{.Assets.URL "admin.css"}}">
+</head>
+<body class="wp-core-ui gp-error-page">
+<div class="gp-error-box">
+	<p>{{.Message}}</p>
+	<p><a class="button" href="/admin/">Back to the dashboard</a></p>
+</div>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,34 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-reauth">
+	<h1>Confirm Your Identity</h1>
+	<p>This change needs a recent confirmation that it is really you.</p>
+	{{- if .Error}}<div class="notice notice-error inline" role="alert"><p>{{.Error}}</p></div>{{end}}
+	<div class="gp-cards">
+		{{- if .HasPasskey}}
+		<section class="gp-card">
+			<h2><span class="dashicons dashicons-admin-network" aria-hidden="true"></span> Passkey</h2>
+			<div class="hide-if-no-js" data-passkey-assert="/admin/reauth/passkey" data-csrf="{{.CSRF}}" data-redirect="{{.Next}}">
+				<button type="button" class="button button-primary gp-passkey-button">Confirm with passkey</button>
+				<p class="gp-passkey-error" role="alert" hidden></p>
+			</div>
+		</section>
+		{{- end}}
+		<section class="gp-card">
+			<h2><span class="dashicons dashicons-lock" aria-hidden="true"></span> Password and code</h2>
+			<form method="post" action="/admin/reauth">
+				{{template "csrf" .CSRF}}
+				<input type="hidden" name="next" value="{{.Next}}">
+				<input type="text" name="log" value="{{.User.Login}}" autocomplete="username" hidden>
+				<p><label for="pwd">Password</label><br><input type="password" id="pwd" name="pwd" class="regular-text" autocomplete="current-password" required></p>
+				{{- if .HasTOTP}}
+				<p><label for="code">Authenticator code</label><br><input type="text" id="code" name="code" class="gp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8"></p>
+				{{- end}}
+				<details{{if not .HasTOTP}} open{{end}}><summary>Use a recovery code</summary>
+					<p><input type="text" name="recovery_code" class="regular-text" autocomplete="off" placeholder="xxxx-xxxx-xxxx-xxxx"></p>
+				</details>
+				<p><button type="submit" class="button button-primary">Confirm</button></p>
+			</form>
+		</section>
+	</div>
+</div>
+{{template "admin-bottom" .}}{{end}}

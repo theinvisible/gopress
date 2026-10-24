@@ -8,7 +8,7 @@ if [[ -f local/serve.pid ]] && kill "$(cat local/serve.pid)" 2>/dev/null; then
 fi
 [[ "${1:-}" == "stop" ]] && exit 0
 go build -o bin/gopress ./cmd/gopress
-nohup ./bin/gopress serve --addr 127.0.0.1:8080 --base-url http://127.0.0.1:8080 --data ./local/data >local/serve.log 2>&1 &
+nohup ./bin/gopress serve --addr 127.0.0.1:8080 --base-url "${BASE_URL:-http://127.0.0.1:8080}" --data ./local/data >local/serve.log 2>&1 &
 echo $! >local/serve.pid
 for _ in $(seq 50); do curl -fs -o /dev/null http://127.0.0.1:8080/healthz && exit 0; sleep 0.1; done
 echo "server did not start" >&2; cat local/serve.log >&2; exit 1

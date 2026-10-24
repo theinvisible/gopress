@@ -467,3 +467,69 @@ func SetCommentStatus(ctx context.Context, q Querier, id int64, status string) e
 func CommentIDsWithStatus(ctx context.Context, q Querier, status string) ([]int64, error) {
 	return queryIDs(ctx, q, `SELECT id FROM comments WHERE status = ?`, status)
 }
+
+// PendingCommentCounts counts pending comments per post.
+func PendingCommentCounts(ctx context.Context, q Querier, postIDs []int64) (map[int64]int, error) {
+	out := map[int64]int{}
+	if len(postIDs) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(postIDs))
+	for i, id := range postIDs {
+		args[i] = id
+	}
+	rows, err := q.QueryContext(ctx, `SELECT post_id, COUNT(*) FROM comments WHERE status = 'pending'
+		AND post_id IN (`+placeholders(len(postIDs))+`) GROUP BY post_id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
+// MediaQuery selects attachments for the media picker.
+type MediaQuery struct {
+	Search     string
+	ImagesOnly bool
+	Limit      int
+	Offset     int
+}
+
+// AdminMedia returns attachments (newest first) with their file details
+// and the total count.
+func AdminMedia(ctx context.Context, q Querier, mq MediaQuery) ([]Post, map[int64]*Media, int, error) {
+	conds := []string{"type = 'attachment'"}
+	var args []any
+	if s := strings.TrimSpace(mq.Search); s != "" {
+		like := "%" + escapeLike(s) + "%"
+		conds = append(conds, `(title LIKE ? ESCAPE '\' OR excerpt LIKE ? ESCAPE '\' OR id IN (SELECT post_id FROM media WHERE file LIKE ? ESCAPE '\' OR alt LIKE ? ESCAPE '\'))`)
+		args = append(args, like, like, like, like)
+	}
+	if mq.ImagesOnly {
+		conds = append(conds, "mime_type LIKE 'image/%'")
+	}
+	where := strings.Join(conds, " AND ")
+	var total int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM posts WHERE `+where, args...).Scan(&total); err != nil {
+		return nil, nil, 0, err
+	}
+	posts, err := queryPosts(ctx, q, `SELECT `+postColumns+` FROM posts WHERE `+where+
+		fmt.Sprintf(` ORDER BY date_gmt DESC, id DESC LIMIT %d OFFSET %d`, mq.Limit, mq.Offset), args...)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	ids := make([]int64, len(posts))
+	for i, p := range posts {
+		ids[i] = p.ID
+	}
+	media, err := MediaByIDs(ctx, q, ids)
+	return posts, media, total, err
+}

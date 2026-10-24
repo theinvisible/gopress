@@ -1,0 +1,26 @@
+{{define "page"}}{{template "login-top" .}}
+	<form name="loginform" id="loginform" action="/login" method="post">
+		<p>
+			<label for="user_login">Username or Email Address</label>
+			<input type="text" name="log" id="user_login" class="input" value="{{.Login}}" size="20" autocapitalize="off" autocomplete="username webauthn" required autofocus>
+		</p>
+		<div class="user-pass-wrap">
+			<label for="user_pass">Password</label>
+			<div class="wp-pwd">
+				<input type="password" name="pwd" id="user_pass" class="input password-input" value="" size="20" autocomplete="current-password" spellcheck="false" required>
+				<button type="button" class="button button-secondary wp-hide-pw hide-if-no-js" data-toggle-password="user_pass" aria-label="Show password"><span class="dashicons dashicons-visibility" aria-hidden="true"></span></button>
+			</div>
+		</div>
+		<p class="forgetmenot"><input name="rememberme" type="checkbox" id="rememberme" value="forever"> <label for="rememberme">Remember Me</label></p>
+		<p class="submit">
+			<input type="submit" name="wp-submit" id="wp-submit" class="button button-primary button-large" value="Log In">
+			<input type="hidden" name="redirect_to" value="{{.RedirectTo}}">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+		</p>
+	</form>
+	<div class="gp-passkey-login hide-if-no-js" hidden data-passkey-login data-csrf="{{.CSRF}}" data-redirect="{{.RedirectTo}}">
+		<p class="gp-or"><span>or</span></p>
+		<button type="button" class="button button-large gp-passkey-button"><span class="dashicons dashicons-admin-network" aria-hidden="true"></span> Sign in with a passkey</button>
+		<p class="gp-passkey-error" role="alert" hidden></p>
+	</div>
+{{template "login-bottom" .}}{{end}}

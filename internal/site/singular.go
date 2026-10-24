@@ -21,6 +21,11 @@ func (rq *request) singular(indexed *db.Post, rt *route) *response {
 	if err != nil {
 		return errorResponse(err)
 	}
+	return rq.singularPost(p, rt)
+}
+
+// singularPost renders p; rt is nil for previews (no canonical redirect).
+func (rq *request) singularPost(p *db.Post, rt *route) *response {
 	s := rq.st.s
 	l := rq.st.links
 	url := l.PostURL(p)

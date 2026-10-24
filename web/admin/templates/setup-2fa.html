@@ -1,0 +1,50 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-setup-2fa">
+	<h1>Two-Factor Authentication</h1>
+	{{- if .Required}}
+	<div class="notice notice-warning inline"><p><strong>Set up a second factor to continue.</strong> Every account on this site is protected with two-factor authentication. Add a passkey or an authenticator app; you can add more later in your profile.</p></div>
+	{{- end}}
+	{{- if .Error}}<div class="notice notice-error inline" role="alert"><p>{{.Error}}</p></div>{{end}}
+
+	<div class="gp-cards">
+		<section class="gp-card">
+			<h2><span class="dashicons dashicons-admin-network" aria-hidden="true"></span> Passkey <span class="gp-badge">Recommended</span></h2>
+			<p>Sign in with your fingerprint, face or device PIN. Passkeys cannot be phished and also replace the password at login.</p>
+			{{- if .Passkeys}}
+			<ul class="gp-factor-list">{{range .Passkeys}}<li><span class="dashicons dashicons-yes-alt" aria-hidden="true"></span> {{.Name}}</li>{{end}}</ul>
+			{{- end}}
+			<div class="hide-if-no-js" data-passkey-register="/admin/setup-2fa/passkey" data-csrf="{{.CSRF}}">
+				<p><label for="passkey-name">Name of this passkey</label><br>
+				<input type="text" id="passkey-name" class="regular-text" maxlength="60" placeholder="e.g. Laptop, Phone, Security key"></p>
+				<button type="button" class="button button-primary gp-passkey-button">Add a passkey</button>
+				<p class="gp-passkey-error" role="alert" hidden></p>
+			</div>
+			<p class="hide-if-js description">Passkeys need JavaScript.</p>
+		</section>
+
+		<section class="gp-card">
+			<h2><span class="dashicons dashicons-smartphone" aria-hidden="true"></span> Authenticator app</h2>
+			{{- if .HasTOTP}}
+			<p><span class="dashicons dashicons-yes-alt" aria-hidden="true"></span> An authenticator app is set up.</p>
+			{{- else}}
+			<p>Scan the QR code with an authenticator app (e.g. Aegis, 2FAS, Google Authenticator, 1Password) and enter the 6-digit code it shows.</p>
+			<div class="gp-totp">
+				<img src="{{.TOTP.QR}}" width="200" height="200" alt="QR code for the authenticator app">
+				<details><summary>Can't scan the code?</summary><p>Enter this key manually:</p><code class="gp-secret">{{.TOTP.Secret}}</code></details>
+			</div>
+			<form method="post" action="/admin/setup-2fa/totp">
+				{{template "csrf" .CSRF}}
+				<input type="hidden" name="token" value="{{.TOTP.Token}}">
+				<p><label for="totp-code">Code from the app</label><br>
+				<input type="text" id="totp-code" name="code" class="gp-code" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" maxlength="8" required></p>
+				<p><button type="submit" class="button button-primary">Verify and activate</button></p>
+			</form>
+			{{- end}}
+		</section>
+	</div>
+
+	{{- if .Required}}
+	<form method="post" action="/logout" class="gp-cancel"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button type="submit" class="button-link">Log out</button></form>
+	{{- end}}
+</div>
+{{template "admin-bottom" .}}{{end}}

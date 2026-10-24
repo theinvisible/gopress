@@ -1,0 +1,31 @@
+{{define "login-top"}}<!DOCTYPE html>
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="same-origin">
+<title>{{.Title}} &lsaquo; {{.SiteName}} &#8212; GoPress</title>
+<link rel="icon" href="{{asset "gopress-icon.svg"}}" type="image/svg+xml">
+<link rel="stylesheet" href="{{asset "wp/wp-includes/css/dashicons.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-includes/css/buttons.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-includes/css/dist/base-styles/admin-schemes.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/forms.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/l10n.min.css"}}">
+<link rel="stylesheet" href="{{asset "wp/wp-admin/css/login.min.css"}}">
+<link rel="stylesheet" href="{{asset "admin.css"}}">
+</head>
+<body class="login no-js wp-core-ui gp-login">
+<div id="login">
+	<h1 class="gp-login-logo"><a href="{{.Home}}"><img src="{{asset "gopress-logo.svg"}}" alt="" width="84" height="84"><span>{{.SiteName}}</span></a></h1>
+	{{- if .Message}}<div class="notice notice-info message"><p>{{.Message}}</p></div>{{end}}
+	{{- if .Error}}<div id="login_error" class="notice notice-error" role="alert"><p>{{.Error}}</p></div>{{end}}
+{{end}}
+
+{{define "login-bottom"}}
+	<p id="backtoblog"><a href="{{.Home}}">&larr; Go to {{.SiteName}}</a></p>
+</div>
+<script src="{{asset "passkey.js"}}"></script>
+</body>
+</html>
+{{end}}

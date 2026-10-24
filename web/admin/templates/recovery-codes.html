@@ -1,0 +1,12 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-recovery-codes">
+	<h1>Your Recovery Codes</h1>
+	<div class="notice notice-warning inline"><p><strong>Save these codes now; they are shown only once.</strong> If you lose your passkey or phone, each code lets you sign in one time. Store them in a password manager or print them.</p></div>
+	<ol class="gp-codes">{{range .Codes}}<li><code>{{.}}</code></li>{{end}}</ol>
+	<p>
+		<button type="button" class="button" data-copy-codes>Copy codes</button>
+		<button type="button" class="button" data-print>Print</button>
+	</p>
+	<p><a class="button button-primary" href="/admin/">I have saved my codes</a></p>
+</div>
+{{template "admin-bottom" .}}{{end}}

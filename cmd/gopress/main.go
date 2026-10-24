@@ -18,8 +18,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/theinvisible/gopress/internal/admin"
+	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/buildinfo"
 	"github.com/theinvisible/gopress/internal/config"
+	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
 	"github.com/theinvisible/gopress/internal/site"
 	"github.com/theinvisible/gopress/internal/theme"
@@ -128,9 +131,35 @@ func cmdServe(args []string, stderr io.Writer) int {
 		Log:            log,
 	})
 
+	settings := func() *site.Settings {
+		st, err := public.Settings(context.Background())
+		if err != nil {
+			return &site.Settings{Name: "GoPress", Home: *baseURL}
+		}
+		return st
+	}
+	authSvc := auth.New(d, auth.Options{
+		Secret:         secret,
+		Home:           func() string { return settings().Home },
+		SiteName:       func() string { return settings().Name },
+		TrustedProxies: proxies,
+		Log:            log,
+	})
+	contentSvc := content.New(d, public, authSvc, log)
+	adm, err := admin.New(d, authSvc, public, contentSvc, admin.Options{Log: log})
+	if err != nil {
+		log.Error("admin", "err", err)
+		return 1
+	}
+	public.SetPreviewer(adm.Previewer())
+	mux := newMux(public)
+	adm.Register(mux)
+	go authSvc.Maintain(ctx)
+	go contentSvc.RunScheduler(ctx)
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           site.SecurityHeaders(newMux(public)),
+		Handler:           site.SecurityHeaders(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

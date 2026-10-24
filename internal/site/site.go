@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,6 +44,7 @@ type Site struct {
 
 	commentFilter CommentFilter
 	widgets       map[string]WidgetRenderer
+	previewer     Previewer
 
 	gen   atomic.Uint64
 	mu    sync.Mutex
@@ -159,6 +161,10 @@ func (s *Site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.serveUpload(w, r, st)
 		return
 	}
+	if q := r.URL.Query(); q.Get("preview") == "true" && s.previewer != nil {
+		s.servePreview(w, r, st)
+		return
+	}
 	email := s.personalized(r.Context(), r)
 	if email == "" && s.cache.serve(w, r, st.gen) {
 		return
@@ -172,5 +178,57 @@ func (s *Site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else if resp.cacheable() {
 		s.cache.store(r, st.gen, resp)
 	}
+	resp.write(w, r)
+}
+
+// Settings returns the current site settings (for the admin).
+func (s *Site) Settings(ctx context.Context) (*Settings, error) {
+	st, err := s.current(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return st.s, nil
+}
+
+// Links returns the current URL builder (for the admin).
+func (s *Site) Links(ctx context.Context) (*Links, error) {
+	st, err := s.current(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return st.links, nil
+}
+
+// Previewer authorizes previews of unpublished or changed content; the
+// admin implements it with the logged-in user's session.
+type Previewer interface {
+	// PreviewPost returns the post to preview (with unsaved changes
+	// applied) if the request may see it.
+	PreviewPost(r *http.Request, id int64) (*db.Post, bool)
+}
+
+// SetPreviewer installs the previewer.
+func (s *Site) SetPreviewer(p Previewer) { s.previewer = p }
+
+// servePreview renders /?p=N&preview=true. Previews are personal: never
+// cached, not indexed, and 404 for everyone not allowed to edit the post.
+func (s *Site) servePreview(w http.ResponseWriter, r *http.Request, st *state) {
+	q := r.URL.Query()
+	var id int64
+	for _, k := range []string{"preview_id", "p", "page_id"} {
+		if n, err := strconv.ParseInt(q.Get(k), 10, 64); err == nil && n > 0 {
+			id = n
+			break
+		}
+	}
+	rq := newRequest(s, st, r)
+	var resp *response
+	if p, ok := s.previewer.PreviewPost(r, id); ok && p.Type != db.TypeAttachment {
+		resp = rq.singularPost(p, nil)
+	} else {
+		resp = rq.notFound()
+	}
+	resp.header.Set("Cache-Control", "no-store")
+	resp.header.Set("X-Robots-Tag", "noindex, nofollow")
 	resp.write(w, r)
 }
