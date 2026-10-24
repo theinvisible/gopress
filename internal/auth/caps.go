@@ -96,12 +96,13 @@ func RoleLabel(role string) string {
 	return role
 }
 
-// Can reports whether user has a capability through its role.
+// Can reports whether user has a capability through its role (limited
+// to u.CapLimit when set, for requests made with an access token).
 func Can(u *db.User, capability string) bool {
 	if u == nil {
 		return false
 	}
-	return roleCaps[u.Role][capability]
+	return roleCaps[u.Role][capability] && (u.CapLimit == nil || u.CapLimit[capability])
 }
 
 // postCaps maps a post type to its capability names.

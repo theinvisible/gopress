@@ -145,6 +145,16 @@ func (s *Service) Audit(ctx context.Context, r *http.Request, userID int64, acti
 	if r != nil {
 		e.IP = s.ClientIP(r)
 	}
+	if tc, ok := ctx.Value(tokenCtxKey{}).(*tokenCtx); ok { // made through the MCP interface
+		if e.IP == "" {
+			e.IP = tc.ip
+		}
+		d := map[string]any{"via": "mcp", "token": tc.token.ID, "token_name": tc.token.Name}
+		for k, v := range detail {
+			d[k] = v
+		}
+		detail = d
+	}
 	if detail != nil {
 		b, err := json.Marshal(detail)
 		if err == nil {
@@ -202,6 +212,9 @@ func (s *Service) Maintain(ctx context.Context) {
 		}
 		if err := db.PruneUserTokens(ctx, s.db.W, now); err != nil {
 			s.log.Error("prune tokens", "err", err)
+		}
+		if err := db.PruneAccessTokens(ctx, s.db.W, now-30*24*3600); err != nil {
+			s.log.Error("prune access tokens", "err", err)
 		}
 		s.ceremonies.prune(s.now())
 		select {

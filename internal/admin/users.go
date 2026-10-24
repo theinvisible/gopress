@@ -560,6 +560,9 @@ func (a *Admin) userSecurity(w http.ResponseWriter, r *http.Request, c *reqCtx) 
 			if err := db.DeleteSecondFactors(ctx, tx, u.ID); err != nil {
 				return err
 			}
+			if _, err := db.DeleteAccessTokens(ctx, tx, u.ID); err != nil {
+				return err
+			}
 			return db.DeleteUserSessions(ctx, tx, u.ID, nil)
 		})
 		if err != nil {
@@ -584,7 +587,13 @@ func (a *Admin) userSecurity(w http.ResponseWriter, r *http.Request, c *reqCtx) 
 		a.flash.put(a.flashKey(c, "user"), userFlash{SetupCode: code})
 		return seeOther(w, r, back+"?msg=code")
 	case "end-sessions":
-		if err := db.DeleteUserSessions(ctx, a.db.W, u.ID, nil); err != nil {
+		err := a.db.Tx(ctx, func(tx *sql.Tx) error {
+			if _, err := db.DeleteAccessTokens(ctx, tx, u.ID); err != nil {
+				return err
+			}
+			return db.DeleteUserSessions(ctx, tx, u.ID, nil)
+		})
+		if err != nil {
 			return err
 		}
 		a.auth.Audit(ctx, r, c.user.ID, auth.ActSessionsRevoke, "user", u.ID, nil)

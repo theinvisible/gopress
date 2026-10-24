@@ -29,14 +29,15 @@ commands:
   add --login L --email E [--role R] [--display-name N]
                                  create a user (asks for the password) and print the
                                  one-time setup code for two-factor authentication
-  set-password LOGIN             set a new password (asks for it), log out all sessions
-                                 and lift login locks
-  reset-2fa LOGIN                remove all second factors and sessions and print a new
-                                 setup code; the user sets up 2FA again at the next login
+  set-password LOGIN             set a new password (asks for it), log out all sessions,
+                                 revoke access tokens and lift login locks
+  reset-2fa LOGIN                remove all second factors, sessions and access tokens
+                                 and print a new setup code; the user sets up 2FA
+                                 again at the next login
   setup-code LOGIN               print a new setup code (72 h, single use) for a user
                                  without a second factor (e.g. imported from WordPress)
   unlock LOGIN                   lift login and two-factor locks
-  revoke-sessions LOGIN          log the user out everywhere
+  revoke-sessions LOGIN          log the user out everywhere, revoke access tokens
 `
 
 func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -157,6 +158,9 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			if err := db.SetUserPassHash(ctx, tx, u.ID, hash); err != nil {
 				return err
 			}
+			if _, err := db.DeleteAccessTokens(ctx, tx, u.ID); err != nil {
+				return err
+			}
 			return db.DeleteUserSessions(ctx, tx, u.ID, nil)
 		})
 		if err == nil {
@@ -167,7 +171,7 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 1
 		}
 		audit(u.ID, auth.ActPasswordChange)
-		fmt.Fprintf(stdout, "password of %s changed, all sessions ended\n", u.Login)
+		fmt.Fprintf(stdout, "password of %s changed, all sessions ended, access tokens revoked\n", u.Login)
 		return 0
 
 	case "reset-2fa":
@@ -179,6 +183,9 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			if err := db.DeleteSecondFactors(ctx, tx, u.ID); err != nil {
 				return err
 			}
+			if _, err := db.DeleteAccessTokens(ctx, tx, u.ID); err != nil {
+				return err
+			}
 			return db.DeleteUserSessions(ctx, tx, u.ID, nil)
 		})
 		if err != nil {
@@ -186,7 +193,7 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return 1
 		}
 		audit(u.ID, auth.Act2FAReset)
-		fmt.Fprintf(stdout, "second factors of %s removed, all sessions ended\n", u.Login)
+		fmt.Fprintf(stdout, "second factors of %s removed, all sessions ended, access tokens revoked\n", u.Login)
 		if !setupCode(u) {
 			return 1
 		}
@@ -225,12 +232,18 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if !ok {
 			return 2
 		}
-		if err := db.DeleteUserSessions(ctx, d.W, u.ID, nil); err != nil {
+		err := d.Tx(ctx, func(tx *sql.Tx) error {
+			if _, err := db.DeleteAccessTokens(ctx, tx, u.ID); err != nil {
+				return err
+			}
+			return db.DeleteUserSessions(ctx, tx, u.ID, nil)
+		})
+		if err != nil {
 			fmt.Fprintf(stderr, "user: %v\n", err)
 			return 1
 		}
 		audit(u.ID, auth.ActSessionsRevoke)
-		fmt.Fprintf(stdout, "all sessions of %s ended\n", u.Login)
+		fmt.Fprintf(stdout, "all sessions of %s ended, access tokens revoked\n", u.Login)
 		return 0
 	}
 	fs.Usage()

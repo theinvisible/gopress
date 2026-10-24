@@ -234,6 +234,9 @@ func (a *Admin) resetSubmit(invite bool) http.HandlerFunc {
 			if err := db.DeleteUserTokens(ctx, tx, u.ID, auth.TokenReset); err != nil {
 				return err
 			}
+			if _, err := db.DeleteAccessTokens(ctx, tx, u.ID); err != nil {
+				return err
+			}
 			return db.DeleteUserSessions(ctx, tx, u.ID, nil)
 		})
 		if err == nil {

@@ -43,6 +43,9 @@ type User struct {
 	PassHash      string
 	Role          string
 	RegisteredGMT Time
+	// CapLimit, when set, limits the role's capabilities to these (a
+	// request made with an access token). It is never stored.
+	CapLimit map[string]bool
 }
 
 type Post struct {
