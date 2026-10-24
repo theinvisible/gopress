@@ -565,8 +565,11 @@ func (e *Editor) inputFrom(ctx context.Context, p *db.Post) *PostInput {
 // ClassicToHTML converts classic WordPress content (wpautop at render
 // time) into the HTML the editor stores.
 func ClassicToHTML(content string) string {
-	return render.ShortcodeUnautop(render.Autop(content), nil)
+	return classicPipeline.ClassicToHTML(content)
 }
+
+// classicPipeline knows the shortcodes whose paragraphs wpautop removes.
+var classicPipeline = render.NewPipeline()
 
 // EditorContent returns p's content as HTML for the editor.
 func EditorContent(p *db.Post) string {

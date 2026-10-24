@@ -1,6 +1,9 @@
 /* GoPress admin: additions and refinements on top of the WordPress admin
    stylesheets. */
 
+/* Default admin color (WordPress defines it in the block editor styles). */
+:root{--wp-admin-theme-color:#3858e9;--wp-admin-theme-color--rgb:56,88,233;--wp-admin-theme-color-darker-10:#2145e6;--wp-admin-theme-color-darker-10--rgb:33.0384615385,68.7307692308,230.4615384615;--wp-admin-theme-color-darker-20:#183ad6;--wp-admin-theme-color-darker-20--rgb:23.6923076923,58.1538461538,214.3076923077;--wp-admin-border-width-focus:2px}
+
 :root {
 	--gp-accent: var(--wp-admin-theme-color, #2271b1);
 	--gp-radius: 8px;
@@ -161,3 +164,29 @@ body.gp-error-page { background: #f0f0f1; font-family: -apple-system, BlinkMacSy
 /* ---- Profile ---- */
 .gp-profile .form-table th { width: 220px; }
 .postbox-header .hndle { padding: 10px 14px; margin: 0; font-size: 14px; line-height: 1.4; }
+
+/* ---- Editor screen ---- */
+#titlediv #title { border-radius: 6px; }
+#edit-slug-box { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+#edit-slug-box #post_name { font-family: inherit; padding: 0 4px; min-height: 26px; }
+#sample-permalink { word-break: break-all; color: #50575e; }
+.gp-visibility { border: 0; margin: 0; padding: 0; }
+.gp-visibility legend { padding: 0; margin-bottom: 4px; }
+.gp-visibility label { display: block; margin: 3px 0; }
+.gp-visibility .gp-sub { margin-left: 24px; }
+.gp-visibility .gp-sub input[type=text] { width: 100%; }
+.misc-pub-curtime .gp-date input { margin-top: 6px; width: 100%; }
+.misc-pub-curtime .description { margin: 4px 0 0; }
+.misc-pub-revisions .dashicons, .misc-pub-curtime::before { color: #8c8f94; }
+.gp-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.gp-tag-list li { display: inline-flex; align-items: center; gap: 2px; margin: 0; padding: 2px 4px 2px 10px; background: #f0f0f1; border-radius: 99px; }
+.gp-tag-remove { border: 0; background: none; cursor: pointer; font-size: 16px; line-height: 1; color: #646970; padding: 0 4px; border-radius: 50%; }
+.gp-tag-remove:hover { color: #d63638; }
+.gp-tag-add { display: flex; gap: 6px; }
+.gp-tag-add input { flex: 1; min-width: 0; }
+.gp-featured img { max-width: 100%; height: auto; display: block; border-radius: 4px; }
+#category-adder summary { cursor: pointer; color: var(--gp-accent); margin-top: 8px; }
+#category-adder .category-add { display: grid; gap: 6px; }
+#postdivrich { margin-bottom: 20px; }
+.post-revisions li { margin: 4px 0; }
+.gp-post-form [hidden] { display: none !important; }

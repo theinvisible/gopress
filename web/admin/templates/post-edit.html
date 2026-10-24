@@ -1,0 +1,198 @@
+{{define "page"}}{{template "admin-top" .}}
+{{- $d := .}}
+<div class="wrap">
+	<h1 class="wp-heading-inline">{{.Title}}</h1>
+	{{- if not .IsNew}} <a href="{{.PT.Base}}new" class="page-title-action">Add {{.PT.Singular}}</a>{{end}}
+	<hr class="wp-header-end">
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	{{- if .Autosave}}
+	<div class="notice notice-warning gp-autosave-notice"><p>There is an autosave of this {{.PT.Singular | lower}} from {{.AutosaveWhen}} that is more recent than the version below.
+		<button type="button" class="button-link" data-restore-autosave="{{json (dict "title" .Autosave.Title "content" .Autosave.Content "excerpt" .Autosave.Excerpt)}}">Restore the autosave</button></p>
+	</div>
+	{{- end}}
+
+	<form name="post" action="{{.Action}}" method="post" id="post" class="gp-post-form" data-post-id="{{if .Post}}{{.Post.ID}}{{end}}" data-post-type="{{.PT.Type}}" data-preview="{{.PreviewURL}}" data-base="{{.PT.Base}}">
+		{{template "csrf" .CSRF}}
+		<div id="poststuff">
+		<div id="post-body" class="metabox-holder columns-2">
+			<div id="post-body-content">
+				<div id="titlediv">
+					<div id="titlewrap">
+						<label class="screen-reader-text" id="title-prompt-text" for="title">Add title</label>
+						<input type="text" name="post_title" size="30" value="{{.PostTitle}}" id="title" spellcheck="true" autocomplete="off" placeholder="Add title"{{if .IsNew}} autofocus{{end}}>
+					</div>
+					<div class="inside">
+						<div id="edit-slug-box">
+							<strong>Permalink:</strong>
+							<span id="sample-permalink">{{.SlugBase}}<input type="text" name="post_name" value="{{.Slug}}" id="post_name" aria-label="Slug" placeholder="{{if .IsNew}}generated from the title{{else}}{{.Slug}}{{end}}" size="{{if .Slug}}{{len .Slug}}{{else}}24{{end}}">{{.SlugSuffix}}</span>
+							{{- if .ViewURL}} <a href="{{.ViewURL}}" class="button button-small" target="_blank" rel="noopener">View {{.PT.Singular}}</a>{{end}}
+						</div>
+					</div>
+				</div>
+
+				<div id="postdivrich" class="postarea">
+					<div data-gp-editor="{{json .EditorConfig}}">
+						<textarea name="content" id="content" rows="20" class="wp-editor-area">{{.Content}}</textarea>
+					</div>
+				</div>
+			</div>
+
+			<div id="postbox-container-1" class="postbox-container">
+				<div id="submitdiv" class="postbox">
+					<div class="postbox-header"><h2 class="hndle">{{if or (eq .Status "publish") (eq .Status "private") (eq .Status "future")}}Update{{else}}Publish{{end}}</h2></div>
+					<div class="inside">
+						<div class="submitbox" id="submitpost">
+							<div id="minor-publishing">
+								<div id="minor-publishing-actions">
+									{{- if not (or (eq .Status "publish") (eq .Status "private") (eq .Status "future"))}}
+									<div id="save-action"><input type="submit" name="save_draft" id="save-post" value="Save Draft" class="button"></div>
+									{{- end}}
+									<div id="preview-action"><button type="button" class="preview button" id="post-preview">Preview</button></div>
+									<div class="clear"></div>
+								</div>
+								<div id="misc-publishing-actions">
+									<div class="misc-pub-section misc-pub-post-status">Status: <strong id="post-status-display">{{if .StatusLabel}}{{.StatusLabel}}{{else}}Draft{{end}}</strong></div>
+									<div class="misc-pub-section misc-pub-visibility">
+										<fieldset class="gp-visibility">
+											<legend>Visibility:</legend>
+											<label><input type="radio" name="visibility" value="public"{{if eq .Visibility "public"}} checked{{end}}> Public</label>
+											{{- if eq .PT.Type "post"}}<label class="gp-sub"><input type="checkbox" name="sticky" value="1"{{if .Sticky}} checked{{end}}> Stick to the top of the blog</label>{{end}}
+											<label><input type="radio" name="visibility" value="password"{{if eq .Visibility "password"}} checked{{end}}> Password protected</label>
+											<label class="gp-sub gp-password-field"{{if ne .Visibility "password"}} hidden{{end}}><input type="text" name="post_password" value="{{.Password}}" autocomplete="off" maxlength="255" placeholder="Password"></label>
+											{{- if .CanPublish}}<label><input type="radio" name="visibility" value="private"{{if eq .Visibility "private"}} checked{{end}}> Private</label>{{end}}
+										</fieldset>
+									</div>
+									<div class="misc-pub-section curtime misc-pub-curtime">
+										<span id="timestamp">{{.DateText}}</span>
+										<label class="gp-date"><span class="screen-reader-text">Publish date</span>
+											<input type="datetime-local" name="post_date" value="{{.DateValue}}" step="60" aria-describedby="timestamp">
+										</label>
+										<p class="description">Leave empty to publish immediately. A future date schedules the {{.PT.Singular | lower}}.</p>
+									</div>
+									{{- if .Revisions}}
+									<div class="misc-pub-section misc-pub-revisions"><span class="dashicons dashicons-backup" aria-hidden="true"></span> Revisions: <b>{{len .Revisions}}</b> <a href="{{.PT.Base}}{{.Post.ID}}/revisions">Browse</a></div>
+									{{- end}}
+								</div>
+								<div class="clear"></div>
+							</div>
+							<div id="major-publishing-actions">
+								<div id="delete-action">
+									{{- if .CanDelete}}<button type="submit" class="button-link submitdelete deletion" formaction="{{.PT.Base}}{{.Post.ID}}/trash" formnovalidate>Move to Trash</button>{{end}}
+								</div>
+								<div id="publishing-action">
+									<span class="spinner"></span>
+									{{- if or (eq .Status "publish") (eq .Status "private") (eq .Status "future")}}
+									<input type="submit" name="update" id="publish" class="button button-primary button-large" value="Update">
+									{{- else if .CanPublish}}
+									<input type="submit" name="publish" id="publish" class="button button-primary button-large" value="Publish" data-schedule-label="Schedule">
+									{{- else}}
+									<input type="submit" name="save_pending" id="publish" class="button button-primary button-large" value="Submit for Review">
+									{{- end}}
+								</div>
+								<div class="clear"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				{{- if eq .PT.Type "post"}}
+				<div id="categorydiv" class="postbox">
+					<div class="postbox-header"><h2 class="hndle">Categories</h2></div>
+					<div class="inside">
+						<div id="taxonomy-category" class="categorydiv">
+							<div id="category-all" class="tabs-panel">
+								<ul id="categorychecklist" class="categorychecklist form-no-clear">
+									{{- range .Categories}}
+									<li style="margin-left: {{.Level}}em"><label class="selectit"><input value="{{.Value}}" type="checkbox" name="post_category[]"{{if contains $d.CheckedCats .Value}} checked{{end}}> {{.Label}}</label></li>
+									{{- end}}
+								</ul>
+							</div>
+							{{- if .CanAddCat}}
+							<details id="category-adder" class="wp-hidden-children">
+								<summary class="taxonomy-add-new">+ Add New Category</summary>
+								<p class="category-add wp-hidden-child">
+									<label class="screen-reader-text" for="newcategory">Add New Category</label>
+									<input type="text" id="newcategory" class="form-required" placeholder="New Category Name">
+									<label class="screen-reader-text" for="newcategory_parent">Parent Category:</label>
+									<select id="newcategory_parent"><option value="0">&mdash; Parent Category &mdash;</option>{{range .Categories}}<option value="{{.Value}}">{{range $i := iterate .Level}}&nbsp;&nbsp;&nbsp;{{end}}{{.Label}}</option>{{end}}</select>
+									<button type="button" id="category-add-submit" class="button category-add-submit">Add New Category</button>
+								</p>
+							</details>
+							{{- end}}
+						</div>
+					</div>
+				</div>
+
+				<div id="tagsdiv-post_tag" class="postbox">
+					<div class="postbox-header"><h2 class="hndle">Tags</h2></div>
+					<div class="inside">
+						<div class="gp-tags" data-tags-url="/admin/api/tags">
+							<input type="hidden" name="tags" value="{{range $i, $t := .Tags}}{{if $i}}, {{end}}{{$t}}{{end}}">
+							<ul class="gp-tag-list" aria-label="Tags">{{range .Tags}}<li><span>{{.}}</span><button type="button" class="gp-tag-remove" aria-label="Remove tag: {{.}}">&times;</button></li>{{end}}</ul>
+							<div class="gp-tag-add">
+								<input type="text" class="gp-tag-input" list="gp-tag-suggestions" autocomplete="off" aria-label="Add new tag" placeholder="Add tag, press Enter">
+								<datalist id="gp-tag-suggestions"></datalist>
+								<button type="button" class="button gp-tag-button">Add</button>
+							</div>
+							<p class="howto">Separate tags with commas</p>
+						</div>
+					</div>
+				</div>
+				{{- else}}
+				<div id="pageparentdiv" class="postbox">
+					<div class="postbox-header"><h2 class="hndle">Page Attributes</h2></div>
+					<div class="inside">
+						<p class="post-attributes-label-wrapper"><label class="post-attributes-label" for="parent_id">Parent</label></p>
+						<select name="parent_id" id="parent_id">{{range .Parents}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{range $i := iterate .Level}}&nbsp;&nbsp;&nbsp;{{end}}{{.Label}}</option>{{end}}</select>
+						<p class="post-attributes-label-wrapper"><label class="post-attributes-label" for="page_template">Template</label></p>
+						<select name="page_template" id="page_template">{{range .Templates}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+						<p class="post-attributes-label-wrapper"><label class="post-attributes-label" for="menu_order">Order</label></p>
+						<input name="menu_order" type="number" size="4" id="menu_order" value="{{.MenuOrder}}">
+					</div>
+				</div>
+				{{- end}}
+
+				<div id="postimagediv" class="postbox">
+					<div class="postbox-header"><h2 class="hndle">Featured image</h2></div>
+					<div class="inside gp-featured">
+						<input type="hidden" name="featured_media" value="{{if .FeaturedID}}{{.FeaturedID}}{{end}}">
+						<p class="hide-if-no-js"><button type="button" class="button-link gp-featured-set">{{if .FeaturedThumb}}<img src="{{.FeaturedThumb}}" alt="">{{else}}Set featured image{{end}}</button></p>
+						<p class="hide-if-no-js"{{if not .FeaturedID}} hidden{{end}}><button type="button" class="button-link gp-featured-remove">Remove featured image</button></p>
+					</div>
+				</div>
+			</div>
+
+			<div id="postbox-container-2" class="postbox-container">
+				<div id="postexcerpt" class="postbox closed">
+					<div class="postbox-header"><h2 class="hndle">Excerpt</h2><button type="button" class="handlediv" aria-expanded="false"><span class="screen-reader-text">Toggle panel: Excerpt</span><span class="toggle-indicator" aria-hidden="true"></span></button></div>
+					<div class="inside">
+						<label class="screen-reader-text" for="excerpt">Excerpt</label>
+						<textarea rows="3" cols="40" name="excerpt" id="excerpt">{{.Excerpt}}</textarea>
+						<p>Excerpts are optional hand-crafted summaries of your content that can be used in your theme.</p>
+					</div>
+				</div>
+				<div id="commentstatusdiv" class="postbox closed">
+					<div class="postbox-header"><h2 class="hndle">Discussion</h2><button type="button" class="handlediv" aria-expanded="false"><span class="screen-reader-text">Toggle panel: Discussion</span><span class="toggle-indicator" aria-hidden="true"></span></button></div>
+					<div class="inside">
+						<p class="meta-options">
+							<label for="comment_status" class="selectit"><input name="comment_status" type="checkbox" id="comment_status" value="open"{{if .CommentsOpen}} checked{{end}}> Allow comments</label><br>
+							<label for="ping_status" class="selectit"><input name="ping_status" type="checkbox" id="ping_status" value="open"{{if .PingsOpen}} checked{{end}}> Allow pingbacks &amp; trackbacks</label>
+						</p>
+						{{- if and .Post (not .IsNew)}}<p><a href="/admin/comments/?p={{.Post.ID}}">Manage the comments of this {{.PT.Singular | lower}}</a></p>{{end}}
+					</div>
+				</div>
+				{{- if .Revisions}}
+				<div id="revisionsdiv" class="postbox closed">
+					<div class="postbox-header"><h2 class="hndle">Revisions</h2><button type="button" class="handlediv" aria-expanded="false"><span class="screen-reader-text">Toggle panel: Revisions</span><span class="toggle-indicator" aria-hidden="true"></span></button></div>
+					<div class="inside">
+						<ul class="post-revisions">{{range .Revisions}}<li><a href="{{$d.PT.Base}}{{$d.Post.ID}}/revisions?revision={{.ID}}">{{.When}}</a> by {{.Author}}</li>{{end}}</ul>
+					</div>
+				</div>
+				{{- end}}
+			</div>
+		</div>
+		<br class="clear">
+		</div>
+	</form>
+</div>
+{{template "admin-bottom" .}}{{end}}

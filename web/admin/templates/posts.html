@@ -1,0 +1,205 @@
+{{define "page"}}{{template "admin-top" .}}
+{{- $d := .}}
+<div class="wrap">
+	<h1 class="wp-heading-inline">{{.PT.Plural}}</h1>
+	{{- if .CanCreate}} <a href="{{.PT.Base}}new" class="page-title-action">Add {{.PT.Singular}}</a>{{end}}
+	{{- if .Search}}<span class="subtitle">Search results for: <strong>{{.Search}}</strong></span>{{end}}
+	<hr class="wp-header-end">
+
+	<h2 class="screen-reader-text">Filter {{.PT.Plural}} list</h2>
+	<ul class="subsubsub">
+		{{- range $i, $v := .Views}}
+		<li>{{if $i}} | {{end}}<a href="{{$v.URL}}"{{if $v.Current}} class="current" aria-current="page"{{end}}>{{$v.Label}} <span class="count">({{$v.Count}})</span></a></li>
+		{{- end}}
+	</ul>
+
+	<form id="posts-filter" method="get" action="{{.PT.Base}}">
+		<p class="search-box">
+			<label class="screen-reader-text" for="post-search-input">Search {{.PT.Plural}}:</label>
+			<input type="search" id="post-search-input" name="s" value="{{.Search}}">
+			<input type="submit" id="search-submit" class="button" value="Search {{.PT.Plural}}">
+		</p>
+		{{- if .Status}}<input type="hidden" name="post_status" value="{{.Status}}">{{end}}
+		<div class="tablenav top">
+			<div class="alignleft actions">
+				<label for="filter-by-date" class="screen-reader-text">Filter by date</label>
+				<select name="m" id="filter-by-date">
+					<option value="">All dates</option>
+					{{- range .Months}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
+				</select>
+				{{- if eq .PT.Type "post"}}
+				<label class="screen-reader-text" for="cat">Filter by category</label>
+				<select name="cat" id="cat">
+					<option value="">All Categories</option>
+					{{- range .Cats}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{range $i := iterate .Level}}&nbsp;&nbsp;&nbsp;{{end}}{{.Label}}</option>{{end}}
+				</select>
+				{{- end}}
+				<input type="submit" id="post-query-submit" class="button" value="Filter">
+			</div>
+			{{template "pagination" .}}
+			<br class="clear">
+		</div>
+	</form>
+
+	<form id="posts-bulk" method="post" action="{{.PT.Base}}bulk">
+		{{template "csrf" .CSRF}}
+		<input type="hidden" name="redirect" value="{{.PT.Base}}{{if .Status}}?post_status={{.Status}}{{end}}">
+		<div class="tablenav top gp-bulk">
+			<div class="alignleft actions bulkactions">
+				<label for="bulk-action-selector-top" class="screen-reader-text">Select bulk action</label>
+				<select name="action" id="bulk-action-selector-top">
+					<option value="">Bulk actions</option>
+					{{- range .BulkActions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+				</select>
+				<input type="submit" class="button action" value="Apply" data-bulk-apply>
+			</div>
+			{{- if eq .Status "trash"}}{{end}}
+			<br class="clear">
+		</div>
+
+		<h2 class="screen-reader-text">{{.PT.Plural}} list</h2>
+		<table class="wp-list-table widefat fixed striped table-view-list {{if eq .PT.Type "page"}}pages{{else}}posts{{end}}">
+			<thead>{{template "post-columns" .}}</thead>
+			<tbody id="the-list">
+			{{- range .Rows}}
+				<tr id="post-{{.ID}}" class="iedit level-{{.Level}} type-{{$d.PT.Type}} status-{{.Status}}" data-quick-edit="{{json .QuickEdit}}">
+					<th scope="row" class="check-column">{{if or .CanEdit .CanDelete}}<input id="cb-select-{{.ID}}" type="checkbox" name="post[]" value="{{.ID}}"><label for="cb-select-{{.ID}}"><span class="screen-reader-text">Select {{.Title}}</span></label>{{end}}</th>
+					<td class="title column-title has-row-actions column-primary page-title" data-colname="Title">
+						<strong>{{if gt .Level 0}}<span class="gp-level">{{range $i := iterate .Level}}— {{end}}</span>{{end}}{{if and .CanEdit (not .Trashed)}}<a class="row-title" href="{{.EditURL}}">{{.Title}}</a>{{else}}<span class="row-title">{{.Title}}</span>{{end}}{{range .States}} — <span class="post-state">{{.}}</span>{{end}}</strong>
+						<div class="row-actions">
+							{{- if .Trashed}}
+								{{- if .CanDelete}}
+								<span class="untrash"><button type="submit" class="button-link" formaction="{{$d.PT.Base}}{{.ID}}/restore">Restore</button> | </span>
+								<span class="delete"><button type="submit" class="button-link submitdelete" formaction="{{$d.PT.Base}}{{.ID}}/delete" data-confirm-click="Delete “{{.Post.Title}}” permanently?">Delete Permanently</button></span>
+								{{- end}}
+							{{- else}}
+								{{- if .CanEdit}}
+								<span class="edit"><a href="{{.EditURL}}">Edit</a> | </span>
+								<span class="inline hide-if-no-js"><button type="button" class="button-link editinline" aria-expanded="false">Quick&nbsp;Edit</button> | </span>
+								{{- end}}
+								{{- if .CanDelete}}
+								<span class="trash"><button type="submit" class="button-link submitdelete" formaction="{{$d.PT.Base}}{{.ID}}/trash">Trash</button> | </span>
+								{{- end}}
+								<span class="view"><a href="{{.ViewURL}}" rel="bookmark">{{if or (eq .Status "publish") (eq .Status "private")}}View{{else}}Preview{{end}}</a> | </span>
+								<span class="clone"><button type="submit" class="button-link" formaction="{{$d.PT.Base}}{{.ID}}/duplicate">Duplicate</button></span>
+							{{- end}}
+						</div>
+						<button type="button" class="toggle-row"><span class="screen-reader-text">Show more details</span></button>
+					</td>
+					<td class="author column-author" data-colname="Author"><a href="{{.AuthorURL}}">{{.AuthorName}}</a></td>
+					{{- if eq $d.PT.Type "post"}}
+					<td class="categories column-categories" data-colname="Categories">{{range $i, $t := .Cats}}{{if $i}}, {{end}}<a href="{{$t.URL}}">{{$t.Name}}</a>{{else}}<span aria-hidden="true">&#8212;</span>{{end}}</td>
+					<td class="tags column-tags" data-colname="Tags">{{range $i, $t := .Tags}}{{if $i}}, {{end}}<a href="{{$t.URL}}">{{$t.Name}}</a>{{else}}<span aria-hidden="true">&#8212;</span><span class="screen-reader-text">No tags</span>{{end}}</td>
+					{{- end}}
+					<td class="comments column-comments" data-colname="Comments">
+						<div class="post-com-count-wrapper">
+						{{- if or .Comments .Pending}}
+							<a href="{{.CommentsURL}}" class="post-com-count post-com-count-approved"><span class="comment-count-approved" aria-hidden="true">{{.Comments}}</span><span class="screen-reader-text">{{.Comments}} {{plural .Comments "comment" "comments"}}</span></a>
+							{{- if .Pending}}<a href="{{.CommentsURL}}&amp;comment_status=pending" class="post-com-count post-com-count-pending"><span class="comment-count-pending" aria-hidden="true">{{.Pending}}</span><span class="screen-reader-text">{{.Pending}} pending</span></a>{{else}}<span class="post-com-count post-com-count-pending post-com-count-no-pending"><span class="comment-count comment-count-no-pending" aria-hidden="true">0</span></span>{{end}}
+						{{- else}}
+							<span aria-hidden="true">&#8212;</span><span class="screen-reader-text">No comments</span>
+						{{- end}}
+						</div>
+					</td>
+					<td class="date column-date" data-colname="Date">{{.DateLabel}}<br>{{.Date}}</td>
+				</tr>
+			{{- else}}
+				<tr class="no-items"><td class="colspanchange" colspan="{{if eq .PT.Type "post"}}7{{else}}5{{end}}">No {{.PT.Plural}} found.</td></tr>
+			{{- end}}
+			</tbody>
+			<tfoot>{{template "post-columns" .}}</tfoot>
+		</table>
+	</form>
+	<div class="tablenav bottom">{{template "pagination" .}}<br class="clear"></div>
+
+	{{template "quick-edit" .}}
+</div>
+{{template "admin-bottom" .}}{{end}}
+
+{{define "post-columns"}}
+<tr>
+	<td class="manage-column column-cb check-column"><input class="cb-select-all" type="checkbox"><label><span class="screen-reader-text">Select All</span></label></td>
+	<th scope="col" class="manage-column column-title column-primary {{index .SortDir "title"}}"><a href="{{index .SortURL "title"}}"><span>Title</span><span class="sorting-indicators"><span class="sorting-indicator asc" aria-hidden="true"></span><span class="sorting-indicator desc" aria-hidden="true"></span></span></a></th>
+	<th scope="col" class="manage-column column-author">Author</th>
+	{{- if eq .PT.Type "post"}}
+	<th scope="col" class="manage-column column-categories">Categories</th>
+	<th scope="col" class="manage-column column-tags">Tags</th>
+	{{- end}}
+	<th scope="col" class="manage-column column-comments num {{index .SortDir "comments"}}"><a href="{{index .SortURL "comments"}}"><span><span class="vers comment-grey-bubble" title="Comments" aria-hidden="true"></span><span class="screen-reader-text">Comments</span></span><span class="sorting-indicators"><span class="sorting-indicator asc" aria-hidden="true"></span><span class="sorting-indicator desc" aria-hidden="true"></span></span></a></th>
+	<th scope="col" class="manage-column column-date {{index .SortDir "date"}}"><a href="{{index .SortURL "date"}}"><span>Date</span><span class="sorting-indicators"><span class="sorting-indicator asc" aria-hidden="true"></span><span class="sorting-indicator desc" aria-hidden="true"></span></span></a></th>
+</tr>
+{{end}}
+
+{{define "quick-edit"}}
+<template id="gp-quick-edit">
+	<tr class="inline-edit-row gp-inline-edit"><td colspan="{{if eq .PT.Type "post"}}7{{else}}5{{end}}">
+		<form class="gp-quick-edit-form" data-base="{{.PT.Base}}">
+			<fieldset>
+				<label>Title <input type="text" name="title"></label>
+				<label>Slug <input type="text" name="slug"></label>
+				<label>Date <input type="datetime-local" name="date" step="60"></label>
+				<label>Password <input type="text" name="password" autocomplete="off"></label>
+				<label>Status
+					<select name="status">
+						<option value="publish">Published</option>
+						<option value="private">Private</option>
+						<option value="pending">Pending Review</option>
+						<option value="draft">Draft</option>
+					</select>
+				</label>
+				{{- if eq .PT.Type "post"}}
+				<label>Tags <input type="text" name="tags" placeholder="Separate tags with commas"></label>
+				<div><span class="gp-field-label">Categories</span><div class="gp-cat-checklist">
+					{{- range .Categories}}<label class="gp-check" style="padding-left: {{.Level}}em"><input type="checkbox" name="categories[]" value="{{.Value}}"> {{.Label}}</label>{{end}}
+				</div></div>
+				<div>
+					<label class="gp-check"><input type="checkbox" name="comments"> Allow Comments</label>
+					<label class="gp-check"><input type="checkbox" name="pings"> Allow Pings</label>
+					<label class="gp-check"><input type="checkbox" name="sticky"> Make this post sticky</label>
+				</div>
+				{{- else}}
+				<label>Parent
+					<select name="parent">{{range .Parents}}<option value="{{.Value}}">{{range $i := iterate .Level}}&nbsp;&nbsp;&nbsp;{{end}}{{.Label}}</option>{{end}}</select>
+				</label>
+				<label>Order <input type="number" name="menu_order" step="1"></label>
+				<label>Template
+					<select name="template">{{range .Templates}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+				</label>
+				<div><label class="gp-check"><input type="checkbox" name="comments"> Allow Comments</label></div>
+				{{- end}}
+			</fieldset>
+			<div class="gp-actions">
+				<button type="submit" class="button button-primary">Update</button>
+				<button type="button" class="button cancel">Cancel</button>
+				<span class="spinner"></span>
+				<span class="gp-error" role="alert"></span>
+			</div>
+		</form>
+	</td></tr>
+</template>
+{{end}}
+
+{{define "pagination"}}
+<div class="tablenav-pages{{if le .Pages 1}} one-page{{end}}">
+	<span class="displaying-num">{{.Total}} {{plural .Total "item" "items"}}</span>
+	{{- if gt .Pages 1}}
+	<span class="pagination-links">
+		{{- if gt .Paged 1}}
+		<a class="first-page button" href="{{call .PageURL 1}}"><span class="screen-reader-text">First page</span><span aria-hidden="true">&laquo;</span></a>
+		<a class="prev-page button" href="{{call .PageURL (add .Paged -1)}}"><span class="screen-reader-text">Previous page</span><span aria-hidden="true">&lsaquo;</span></a>
+		{{- else}}
+		<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&laquo;</span>
+		<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&lsaquo;</span>
+		{{- end}}
+		<span class="screen-reader-text">Current Page</span><span class="paging-input"><span class="tablenav-paging-text">{{.Paged}} of <span class="total-pages">{{.Pages}}</span></span></span>
+		{{- if lt .Paged .Pages}}
+		<a class="next-page button" href="{{call .PageURL (add .Paged 1)}}"><span class="screen-reader-text">Next page</span><span aria-hidden="true">&rsaquo;</span></a>
+		<a class="last-page button" href="{{call .PageURL .Pages}}"><span class="screen-reader-text">Last page</span><span aria-hidden="true">&raquo;</span></a>
+		{{- else}}
+		<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&rsaquo;</span>
+		<span class="tablenav-pages-navspan button disabled" aria-hidden="true">&raquo;</span>
+		{{- end}}
+	</span>
+	{{- end}}
+</div>
+{{end}}

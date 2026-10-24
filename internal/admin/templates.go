@@ -38,6 +38,8 @@ func loadTemplates(as *assets) (*templates, error) {
 		"json":     toJSON,
 		"plural":   plural,
 		"title":    escTitle,
+		"lower":    strings.ToLower,
+		"iterate":  func(n int) []int { return make([]int, max(n, 0)) },
 		"add":      func(a, b int) int { return a + b },
 		"query":    withQuery,
 		"unixTime": func(t int64) string { return time.Unix(t, 0).UTC().Format("2006/01/02 15:04 UTC") },

@@ -5,7 +5,7 @@ COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS  := -s -w -X $(PKG)/internal/buildinfo.Version=$(VERSION) -X $(PKG)/internal/buildinfo.Commit=$(COMMIT)
 COMPOSE  := docker compose -f dev/compose.yaml
 
-.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden import serve parity vulncheck
+.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden import serve parity vulncheck editor admin-assets e2e roundtrip
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/gopress
@@ -73,3 +73,25 @@ parity: wpref-up serve
 
 vulncheck:
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+# The post editor (web/editor, TipTap) is built into web/admin/static/editor,
+# which is committed: building GoPress itself needs no Node.
+editor:
+	cd web/editor && npm ci --no-audit --no-fund && npm run build
+
+# Copy the WordPress admin stylesheets from a WordPress checkout
+# (default local/wp-core) into web/admin/static/wp.
+admin-assets:
+	dev/admin-assets.sh $(WP_CORE)
+
+# End-to-end tests of the admin with the local Chrome against a running
+# server (BASE_URL=http://localhost:8080 dev/serve-local.sh), credentials
+# in local/e2e-credentials.json.
+e2e:
+	cd dev/e2e && npm ci --no-audit --no-fund && node e2e.mjs
+
+# Editor round trip over all local posts: no content loss, same rendering.
+roundtrip:
+	go run ./dev/exportcontent > local/editor-content.json
+	node web/editor/test/roundtrip.mjs local/editor-content.json
+	go test ./internal/content -run 'RoundTrip|Classic' -v

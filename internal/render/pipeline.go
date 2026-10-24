@@ -98,3 +98,13 @@ func (p *Pipeline) Excerpt(env *Env, content, format string) string {
 	text = strings.ReplaceAll(text, "]]>", "]]&gt;")
 	return TrimWords(text, 55, ExcerptMore)
 }
+
+// ClassicToHTML converts classic content (wpautop at render time) into
+// final HTML: wptexturize and wpautop in the order the_content runs them
+// (so quotes next to line breaks keep their direction) and this pipeline's
+// shortcodes taken out of their paragraphs. Rendering the result as "html"
+// gives the same output as rendering the original as "wpautop".
+func (p *Pipeline) ClassicToHTML(content string) string {
+	names := p.names()
+	return ShortcodeUnautop(Autop(Texturize(content, names)), names)
+}

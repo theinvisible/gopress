@@ -1,0 +1,21 @@
+{
+  "name": "gopress-editor",
+  "private": true,
+  "description": "GoPress post editor (TipTap/ProseMirror); built into ../admin/static/editor by `make editor`",
+  "license": "GPL-2.0-or-later",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch"
+  },
+  "devDependencies": {
+    "@tiptap/core": "3.32.0",
+    "@tiptap/extension-bubble-menu": "3.32.0",
+    "@tiptap/extension-link": "3.32.0",
+    "@tiptap/extension-table": "3.32.0",
+    "@tiptap/extensions": "3.32.0",
+    "@tiptap/pm": "3.32.0",
+    "@tiptap/starter-kit": "3.32.0",
+    "@tiptap/suggestion": "3.32.0",
+    "esbuild": "0.28.2"
+  }
+}
