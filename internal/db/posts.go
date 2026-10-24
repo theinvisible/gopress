@@ -150,7 +150,8 @@ func ListPosts(ctx context.Context, q Querier, pq PostQuery) ([]Post, int, error
 	}
 	query := `SELECT ` + postColumns + ` FROM posts WHERE ` + where + ` ORDER BY date_gmt ` + order + `, id ` + order
 	if pq.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d OFFSET %d", pq.Limit, pq.Offset)
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, pq.Limit, pq.Offset)
 	}
 	posts, err := queryPosts(ctx, q, query, args...)
 	return posts, total, err

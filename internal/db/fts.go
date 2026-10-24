@@ -17,7 +17,7 @@ var searchStopwords = map[string]bool{
 // phrases stay together, stopwords and single letters are dropped; if
 // nothing remains (or more than 9 terms) the whole query is one term.
 func SearchTerms(q string) []string {
-	q = strings.NewReplacer("\r", "", "\n", "").Replace(q)
+	q = strings.NewReplacer("\r", "", "\n", "", "\x00", "").Replace(q)
 	var raw []string
 	for i := 0; i < len(q); {
 		c := q[i]

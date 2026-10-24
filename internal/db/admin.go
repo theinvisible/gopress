@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 )
 
@@ -51,8 +50,10 @@ func (aq AdminPostQuery) where() (string, []any) {
 	return strings.Join(conds, " AND "), args
 }
 
+// escapeLike escapes LIKE wildcards. NUL bytes are dropped: SQLite would
+// end the pattern there.
 func escapeLike(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`, "\x00", "").Replace(s)
 }
 
 // AdminPosts returns one page of posts for the list table and the total.
@@ -80,7 +81,8 @@ func AdminPosts(ctx context.Context, q Querier, aq AdminPostQuery) ([]Post, int,
 	}
 	query := `SELECT ` + postColumns + ` FROM posts WHERE ` + where + ` ORDER BY ` + order
 	if aq.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d OFFSET %d", aq.Limit, aq.Offset)
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, aq.Limit, aq.Offset)
 	}
 	posts, err := queryPosts(ctx, q, query, args...)
 	return posts, total, err
@@ -377,7 +379,8 @@ func AdminComments(ctx context.Context, q Querier, cq AdminCommentQuery) ([]Comm
 	}
 	query := `SELECT ` + commentColumns + ` FROM comments WHERE ` + where + ` ORDER BY date_gmt DESC, id DESC`
 	if cq.Limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d OFFSET %d", cq.Limit, cq.Offset)
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, cq.Limit, cq.Offset)
 	}
 	cs, err := queryComments(ctx, q, query, args...)
 	return cs, total, err
@@ -522,7 +525,7 @@ func AdminMedia(ctx context.Context, q Querier, mq MediaQuery) ([]Post, map[int6
 		return nil, nil, 0, err
 	}
 	posts, err := queryPosts(ctx, q, `SELECT `+postColumns+` FROM posts WHERE `+where+
-		fmt.Sprintf(` ORDER BY date_gmt DESC, id DESC LIMIT %d OFFSET %d`, mq.Limit, mq.Offset), args...)
+		` ORDER BY date_gmt DESC, id DESC LIMIT ? OFFSET ?`, append(args, mq.Limit, mq.Offset)...)
 	if err != nil {
 		return nil, nil, 0, err
 	}
