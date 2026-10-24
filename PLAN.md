@@ -220,6 +220,15 @@ GoPress serves a public, internet-facing site. Security follows current best pra
 - Audit log for logins, failures, lockouts, factor and password changes and content changes; users see their recent activity.
 - Admin responses: `Cache-Control: no-store`, strict CSP (scripts only from `/admin/static/`, no inline scripts, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`; previews are never cached and 404 for everyone not allowed to edit.
 
+**Admin completion (M2b)**
+- Mail only over TLS (except to a localhost relay); SMTP password encrypted, write-only, bound to its server; no header injection; mails with one-time links expire with them.
+- One-time links (reset 1 h, invitation 72 h, admin email 48 h): 256-bit tokens, only hashes stored, single use, bound to purpose and password hash; moved out of the URL at once; resets end all sessions but never skip the second factor or its lock; no account enumeration (same answer, work after the response), rate limits per network and account.
+- User management only for administrators with a recent re-authentication; no self-demotion or self-deletion; at least one administrator.
+- Uploads: type allowlist checked against the content (no HTML, SVG or scripts), pixel and decoded-size limits with a shared memory budget, per-user upload limit, metadata removed, all file access through `os.Root`, temp files never served.
+- Settings, widgets, menus, customizer: values validated and escaped; HTML only with `unfiltered_html`; menu URLs only http(s)/relative/mailto/tel; custom CSS cannot leave its style element.
+- Logged-in visitors (toolbar, customizer preview, commenting): the session is validated by the admin; personal pages are never cached; customizer drafts only in the same-origin preview frame; logged-in comments need the session's CSRF token.
+- SQL: values only as parameters; a `go/ast` guard test checks every query in the module.
+
 **Plugins (M3)**
 - WASM sandbox: no filesystem or network access except the host functions; HTTP only to allowlisted hosts; per-call timeout and memory limit; plugin zip uploads validated (size, paths, manifest).
 
@@ -270,12 +279,14 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [x] Security review (see devlog)
 
 ### M2b – Admin completion
-- [ ] Media library with upload and resizes/srcset
-- [ ] Categories/tags screens
-- [ ] Appearance: widgets, menus, customize-lite
-- [ ] Users (list, add, roles), settings (General/Writing/Reading/Discussion/Media/Permalinks)
-- [ ] Admin bar on the public site for logged-in users
-- [ ] Mail (lost password, notifications)
+- [x] Mail: SMTP queue with mandatory TLS, lost password, invitations, security notices, comment notifications
+- [x] Media library with upload, metadata removal, sizes/srcset; paste and drop into the editor; featured images
+- [x] Categories/tags screens
+- [x] Appearance: widgets, menus, customizer with live preview
+- [x] Users (list, add, roles, account security), settings (General/Writing/Reading/Discussion/Media/Permalinks/Email)
+- [x] Admin bar, edit links and logged-in commenting on the public site
+- [x] SQL injection guard test for every query
+- [x] Security review (see devlog)
 
 ### M2c – MCP interface for AI agents (*to be planned*)
 - [ ] Generic MCP server (Streamable HTTP, `/mcp`) so any MCP-capable agent (e.g. Claude Code) can write posts, e.g. release announcements
