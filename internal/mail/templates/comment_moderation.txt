@@ -1,0 +1,12 @@
+Subject: [{{.SiteName}}] Please moderate: "{{.PostTitle}}"
+A new comment on "{{.PostTitle}}" is waiting for your approval.
+
+Author: {{.Author}}{{if .AuthorEmail}} <{{.AuthorEmail}}>{{end}}
+{{- if .AuthorURL}}
+URL:    {{.AuthorURL}}{{end}}
+IP:     {{.IP}}
+
+{{.Text}}
+
+Moderate it: {{.Home}}/admin/comments/?comment_status=pending
+Currently {{.Pending}} comment(s) await moderation.

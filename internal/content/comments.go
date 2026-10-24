@@ -32,8 +32,10 @@ func (e *Editor) ModerateComments(ctx context.Context, action string, ids []int6
 		return 0, ErrForbidden
 	}
 	posts := map[int64]bool{}
+	var approved []*db.Comment // pending → approved: the post author is notified
 	n := 0
 	err := e.s.db.Tx(ctx, func(tx *sql.Tx) error {
+		approved = approved[:0]
 		for _, id := range ids {
 			c, err := db.GetComment(ctx, tx, id)
 			if errors.Is(err, sql.ErrNoRows) {
@@ -45,6 +47,9 @@ func (e *Editor) ModerateComments(ctx context.Context, action string, ids []int6
 			switch action {
 			case CommentApprove:
 				err = db.SetCommentStatus(ctx, tx, id, db.CommentApproved)
+				if c.Status == db.CommentPending {
+					approved = append(approved, c)
+				}
 			case CommentUnapprove:
 				err = db.SetCommentStatus(ctx, tx, id, db.CommentPending)
 			case CommentSpam:
@@ -83,6 +88,10 @@ func (e *Editor) ModerateComments(ctx context.Context, action string, ids []int6
 	if n > 0 {
 		e.s.audit(ctx, e.r, e.user.ID, "comments_"+action, "comment", 0, map[string]any{"ids": ids})
 		e.s.site.Invalidate()
+	}
+	for _, c := range approved {
+		c.Status = db.CommentApproved
+		e.s.NotifyComment(ctx, c, true)
 	}
 	return n, nil
 }
@@ -144,6 +153,7 @@ func (e *Editor) ReplyComment(ctx context.Context, parent *db.Comment, text stri
 	}
 	e.s.audit(ctx, e.r, e.user.ID, "comment_reply", "comment", c.ID, nil)
 	e.s.site.Invalidate()
+	e.s.NotifyComment(ctx, c, false)
 	return c, nil
 }
 

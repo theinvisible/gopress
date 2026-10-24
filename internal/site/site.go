@@ -43,6 +43,7 @@ type Site struct {
 	uploadsRoot *os.Root
 
 	commentFilter CommentFilter
+	commentNotify CommentNotifier
 	widgets       map[string]WidgetRenderer
 	previewer     Previewer
 

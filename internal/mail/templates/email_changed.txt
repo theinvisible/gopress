@@ -1,0 +1,5 @@
+Subject: [{{.SiteName}}] Your email address was changed
+The email address of your account "{{.Login}}" on {{.SiteName}} was
+changed to {{.Email}}.
+
+If you did not do this, contact the site administrator immediately.

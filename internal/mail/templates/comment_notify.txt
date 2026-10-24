@@ -1,0 +1,11 @@
+Subject: [{{.SiteName}}] Comment: "{{.PostTitle}}"
+New comment on your post "{{.PostTitle}}".
+
+Author: {{.Author}}
+{{- if .AuthorURL}}
+URL:    {{.AuthorURL}}{{end}}
+
+{{.Text}}
+
+Read it: {{.Link}}
+All comments: {{.Home}}/admin/comments/

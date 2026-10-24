@@ -1,12 +1,16 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
+	"mime/quotedprintable"
 	"net/http"
 	"net/http/httptest"
+	netmail "net/mail"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,6 +19,7 @@ import (
 	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/site"
 	"github.com/theinvisible/gopress/internal/theme"
 	"github.com/theinvisible/gopress/themes"
@@ -23,11 +28,35 @@ import (
 const home = "https://example.org"
 
 type testEnv struct {
-	t     *testing.T
-	d     *db.DB
-	auth  *auth.Service
-	h     http.Handler
-	users map[string]*db.User
+	t       *testing.T
+	d       *db.DB
+	auth    *auth.Service
+	h       http.Handler
+	users   map[string]*db.User
+	mail    *mail.Service
+	mailDir string
+	pub     *site.Site
+	cs      *content.Service
+}
+
+// mails delivers the queued mail and returns the messages sent so far
+// (to → raw messages).
+func (e *testEnv) mails() map[string][]string {
+	e.t.Helper()
+	e.mail.Flush(context.Background())
+	files, _ := filepath.Glob(filepath.Join(e.mailDir, "*.eml"))
+	out := map[string][]string{}
+	for _, f := range files {
+		b, _ := os.ReadFile(f)
+		m, err := netmail.ReadMessage(bytes.NewReader(b))
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		body, _ := io.ReadAll(quotedprintable.NewReader(m.Body))
+		to := strings.Trim(m.Header.Get("To"), "<>")
+		out[to] = append(out[to], m.Header.Get("Subject")+"\n"+string(body))
+	}
+	return out
 }
 
 func newEnv(t *testing.T) *testEnv {
@@ -63,9 +92,16 @@ func newEnv(t *testing.T) *testEnv {
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	pub := site.New(d, th, site.Options{BaseURL: home, Secret: []byte("k"), Log: log})
-	e.auth = auth.New(d, auth.Options{Secret: []byte("0123456789abcdef0123456789abcdef"), Home: func() string { return home }, Log: log})
+	e.mailDir = t.TempDir()
+	e.mail = mail.New(d, mail.Options{Secret: []byte("0123456789abcdef0123456789abcdef"), Home: func() string { return home },
+		Sink: e.mailDir, Log: log})
+	e.auth = auth.New(d, auth.Options{Secret: []byte("0123456789abcdef0123456789abcdef"), Home: func() string { return home }, Log: log,
+		Notify: func(ctx context.Context, to string, data map[string]any) { e.mail.Enqueue(ctx, to, "security", data) }})
 	cs := content.New(d, pub, e.auth, log)
-	ad, err := New(d, e.auth, pub, cs, Options{Log: log})
+	cs.SetMailer(e.mail)
+	pub.SetCommentNotifier(cs.NotifyComment)
+	e.pub, e.cs = pub, cs
+	ad, err := New(d, e.auth, pub, cs, Options{Log: log, Mail: e.mail, MailSink: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +145,7 @@ func (e *testEnv) do(method, target string, cur *auth.Current, form url.Values, 
 }
 
 var adminPages = []string{"/admin/", "/admin/posts/", "/admin/posts/new", "/admin/posts/10/edit", "/admin/pages/",
-	"/admin/pages/new", "/admin/comments/", "/admin/profile", "/admin/profile/security"}
+	"/admin/pages/new", "/admin/comments/", "/admin/profile", "/admin/profile/security", "/admin/settings/email"}
 
 func TestRequiresLogin(t *testing.T) {
 	e := newEnv(t)

@@ -90,10 +90,12 @@
 		});
 	});
 
-	// Confirmation for destructive actions: <form data-confirm="…">.
+	// Confirmation for destructive actions: <form data-confirm="…"> or a
+	// submit button with data-confirm.
 	document.addEventListener('submit', function (ev) {
 		var f = ev.target;
-		var msg = f.getAttribute && f.getAttribute('data-confirm');
+		var b = ev.submitter;
+		var msg = (b && b.getAttribute('data-confirm')) || (f.getAttribute && f.getAttribute('data-confirm'));
 		if (msg && !window.confirm(msg)) { ev.preventDefault(); }
 	}, true);
 

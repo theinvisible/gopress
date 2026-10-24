@@ -1,6 +1,7 @@
 package site
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -28,6 +29,13 @@ type CommentFilter func(r *http.Request, c *db.Comment, post *db.Post) string
 
 // SetCommentFilter installs the comment filter (used by the plugin host).
 func (s *Site) SetCommentFilter(f CommentFilter) { s.commentFilter = f }
+
+// CommentNotifier is called after a visitor's comment was stored (email
+// notifications).
+type CommentNotifier func(ctx context.Context, c *db.Comment, approved bool)
+
+// SetCommentNotifier installs the notifier.
+func (s *Site) SetCommentNotifier(f CommentNotifier) { s.commentNotify = f }
 
 // commentError renders a wp_die()-style error page.
 func commentError(w http.ResponseWriter, status int, msg string) {
@@ -187,6 +195,9 @@ func (s *Site) postComment(w http.ResponseWriter, r *http.Request) {
 		s.Invalidate() // only approved comments change public pages
 	}
 	s.log.Info("comment stored", "id", c.ID, "post", postID, "status", c.Status)
+	if s.commentNotify != nil {
+		s.commentNotify(ctx, c, false)
+	}
 
 	if c.Status != db.CommentSpam {
 		remember := !st.s.CookiesOptIn || f.Get("wp-comment-cookies-consent") == "yes"

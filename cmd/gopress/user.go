@@ -185,7 +185,7 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "user: %v\n", err)
 			return 1
 		}
-		audit(u.ID, "2fa_reset")
+		audit(u.ID, auth.Act2FAReset)
 		fmt.Fprintf(stdout, "second factors of %s removed, all sessions ended\n", u.Login)
 		if !setupCode(u) {
 			return 1
@@ -216,7 +216,7 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "user: %v\n", err)
 			return 1
 		}
-		audit(u.ID, "user_unlocked")
+		audit(u.ID, auth.ActUserUnlocked)
 		fmt.Fprintf(stdout, "login locks of %s lifted\n", u.Login)
 		return 0
 

@@ -1,0 +1,12 @@
+Subject: [{{.SiteName}}] Your new account
+{{.Inviter}} created an account for you on {{.SiteName}}.
+
+Login: {{.Login}}
+Role:  {{.Role}}
+
+Open this link within {{.Valid}} to choose your password and to set up
+two-factor authentication:
+
+{{.Link}}
+
+The link works once.

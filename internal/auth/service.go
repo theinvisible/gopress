@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/theinvisible/gopress/internal/db"
@@ -25,6 +27,9 @@ type Options struct {
 	TrustedProxies []netip.Prefix
 	SiteName       func() string
 	Log            *slog.Logger
+	// Notify, if set, sends a security notice to a user's email address
+	// (template data: Login, Event, When, IP).
+	Notify func(ctx context.Context, to string, data map[string]any)
 }
 
 // Service is the authentication service.
@@ -99,7 +104,37 @@ const (
 	ActRecoveryUsed   = "recovery_code_used"
 	ActSessionsRevoke = "sessions_revoked"
 	ActProfileUpdate  = "profile_updated"
+	Act2FAReset       = "2fa_reset"
+	ActUserUnlocked   = "user_unlocked"
+	ActPasswordReset  = "password_reset"
 )
+
+var actionLabels = map[string]string{
+	ActLogin: "Logged in", ActLoginFailed: "Failed login", ActLoginLocked: "Login blocked (too many attempts)",
+	ActMFAFailed: "Wrong second factor", ActLogout: "Logged out", ActPasswordChange: "Password changed",
+	ActTOTPAdded: "Authenticator app added", ActTOTPRemoved: "Authenticator app removed",
+	ActPasskeyAdded: "Passkey added", ActPasskeyRemoved: "Passkey removed",
+	ActRecoveryNew: "Recovery codes generated", ActRecoveryUsed: "Recovery code used",
+	ActSessionsRevoke: "Sessions logged out", ActProfileUpdate: "Profile updated",
+	Act2FAReset: "Two-factor authentication reset by an administrator", ActUserUnlocked: "Login locks lifted",
+	ActPasswordReset: "Password reset by email link",
+}
+
+// ActionLabel returns a readable label of an audit action.
+func ActionLabel(a string) string {
+	if l, ok := actionLabels[a]; ok {
+		return l
+	}
+	return strings.ReplaceAll(a, "_", " ")
+}
+
+// noticeInterval is the minimum time between two security notices of the
+// same kind to one user (a lockout under attack must not flood the inbox).
+var noticeInterval = map[string]time.Duration{
+	ActPasswordChange: 0, ActPasswordReset: 0, ActTOTPAdded: 0, ActTOTPRemoved: 0, ActPasskeyAdded: 0,
+	ActPasskeyRemoved: 0, ActRecoveryUsed: 0, ActRecoveryNew: 0, Act2FAReset: 0,
+	ActLoginLocked: 24 * time.Hour, ActMFAFailed: 24 * time.Hour,
+}
 
 // Audit records an action. detail may be nil. Errors are logged, never
 // returned: auditing must not break the action itself.
@@ -118,6 +153,33 @@ func (s *Service) Audit(ctx context.Context, r *http.Request, userID int64, acti
 		s.log.Error("audit", "action", action, "err", err)
 	}
 	s.log.Info("audit", "action", action, "user", userID, "ip", e.IP, "object", objType, "id", objID)
+	if every, ok := noticeInterval[action]; ok && userID != 0 && s.opts.Notify != nil {
+		s.notify(ctx, userID, action, e.IP, every)
+	}
+}
+
+// notify sends a security notice about action to the user, at most once
+// per interval for the same action.
+func (s *Service) notify(ctx context.Context, userID int64, action, ip string, every time.Duration) {
+	u, err := db.GetUser(ctx, s.db.R, userID)
+	if err != nil || u.Email == "" {
+		return
+	}
+	now := s.now()
+	if every > 0 {
+		key := "notice_" + action
+		if last, _ := db.UserMeta(ctx, s.db.R, userID, key); last != "" {
+			if t, err := strconv.ParseInt(last, 10, 64); err == nil && now.Sub(time.Unix(t, 0)) < every {
+				return
+			}
+		}
+		db.SetUserMeta(ctx, s.db.W, userID, key, strconv.FormatInt(now.Unix(), 10))
+	}
+	if ip == "" {
+		ip = "unknown"
+	}
+	s.opts.Notify(ctx, u.Email, map[string]any{"Login": u.Login, "Event": ActionLabel(action),
+		"When": now.UTC().Format("2006-01-02 15:04 UTC"), "IP": ip})
 }
 
 // Maintain prunes expired sessions, old login failures and audit entries

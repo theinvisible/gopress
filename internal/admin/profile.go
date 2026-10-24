@@ -375,20 +375,6 @@ func deviceName(ua string) string {
 	return browser + " on " + osName
 }
 
-var actionLabels = map[string]string{
-	auth.ActLogin: "Logged in", auth.ActLoginFailed: "Failed login", auth.ActLoginLocked: "Login blocked (too many attempts)",
-	auth.ActMFAFailed: "Wrong second factor", auth.ActLogout: "Logged out", auth.ActPasswordChange: "Password changed",
-	auth.ActTOTPAdded: "Authenticator app added", auth.ActTOTPRemoved: "Authenticator app removed",
-	auth.ActPasskeyAdded: "Passkey added", auth.ActPasskeyRemoved: "Passkey removed",
-	auth.ActRecoveryNew: "Recovery codes generated", auth.ActRecoveryUsed: "Recovery code used",
-	auth.ActSessionsRevoke: "Sessions logged out", auth.ActProfileUpdate: "Profile updated",
-}
-
-func actionLabel(a string) string {
-	if l, ok := actionLabels[a]; ok {
-		return l
-	}
-	return strings.ReplaceAll(a, "_", " ")
-}
+func actionLabel(a string) string { return auth.ActionLabel(a) }
 
 func b64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }

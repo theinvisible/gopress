@@ -1,0 +1,9 @@
+Subject: [{{.SiteName}}] Confirm the new admin email address
+Someone asked to use this address ({{.Email}}) as the administration
+email address of {{.SiteName}}.
+
+To confirm, open this link within {{.Valid}} while logged in:
+
+{{.Link}}
+
+If you did not expect this, ignore this email.

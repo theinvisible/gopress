@@ -56,6 +56,7 @@ var importedOptions = []string{
 	"comment_moderation", "comment_previously_approved", "comment_max_links", "moderation_keys", "disallowed_keys",
 	"close_comments_for_old_posts", "close_comments_days_old", "thread_comments", "thread_comments_depth",
 	"page_comments", "comments_per_page", "default_comments_page", "comment_order", "show_comments_cookies_opt_in",
+	"comments_notify", "moderation_notify",
 	"show_avatars", "avatar_rating", "avatar_default", "users_can_register", "default_role",
 	"thumbnail_size_w", "thumbnail_size_h", "thumbnail_crop", "medium_size_w", "medium_size_h",
 	"medium_large_size_w", "medium_large_size_h", "large_size_w", "large_size_h", "uploads_use_yearmonth_folders",

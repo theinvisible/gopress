@@ -24,6 +24,7 @@ import (
 	"github.com/theinvisible/gopress/internal/config"
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/site"
 	"github.com/theinvisible/gopress/internal/theme"
 	"github.com/theinvisible/gopress/internal/wpimport"
@@ -37,6 +38,7 @@ commands:
   import-wp    import a WordPress site (M1)
   backup       create a backup of the data directory (M5)
   user         manage users and reset passwords or two-factor authentication
+  mail         show the mail queue and send a test email
   plugin-pack  build a plugin .zip (M3)
   version      print version information
 `
@@ -61,6 +63,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdImportWP(rest, stdout, stderr)
 	case "user":
 		return cmdUser(rest, os.Stdin, stdout, stderr)
+	case "mail":
+		return cmdMail(rest, stdout, stderr)
 	case "backup", "plugin-pack":
 		fmt.Fprintf(stderr, "gopress %s: not implemented yet\n", cmd)
 		return 2
@@ -82,6 +86,7 @@ func cmdServe(args []string, stderr io.Writer) int {
 	cacheMB := fs.Int("cache-mb", 256, "page cache size in MiB (0 disables)")
 	trustedProxies := fs.String("trusted-proxies", os.Getenv("GOPRESS_TRUSTED_PROXIES"),
 		"comma-separated CIDRs of reverse proxies whose X-Real-Ip/X-Forwarded-For are trusted, e.g. 172.16.0.0/12")
+	mailSink := fs.String("mail-sink", "", "development: write outgoing mail as .eml files into this directory instead of sending it")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -138,15 +143,36 @@ func cmdServe(args []string, stderr io.Writer) int {
 		}
 		return st
 	}
+	if *mailSink != "" {
+		if err := os.MkdirAll(*mailSink, 0o700); err != nil {
+			log.Error("mail sink", "err", err)
+			return 1
+		}
+		log.Warn("development mode: mail is written to the sink directory, not sent", "dir", *mailSink)
+	}
+	mailSvc := mail.New(d, mail.Options{
+		Secret:   secret,
+		Home:     func() string { return settings().Home },
+		SiteName: func() string { return settings().Name },
+		Sink:     *mailSink,
+		Log:      log,
+	})
 	authSvc := auth.New(d, auth.Options{
 		Secret:         secret,
 		Home:           func() string { return settings().Home },
 		SiteName:       func() string { return settings().Name },
 		TrustedProxies: proxies,
 		Log:            log,
+		Notify: func(ctx context.Context, to string, data map[string]any) {
+			if err := mailSvc.Enqueue(ctx, to, "security", data); err != nil {
+				log.Warn("security notice", "err", err)
+			}
+		},
 	})
 	contentSvc := content.New(d, public, authSvc, log)
-	adm, err := admin.New(d, authSvc, public, contentSvc, admin.Options{Log: log})
+	contentSvc.SetMailer(mailSvc)
+	public.SetCommentNotifier(contentSvc.NotifyComment)
+	adm, err := admin.New(d, authSvc, public, contentSvc, admin.Options{Log: log, Mail: mailSvc, MailSink: *mailSink != ""})
 	if err != nil {
 		log.Error("admin", "err", err)
 		return 1
@@ -156,6 +182,7 @@ func cmdServe(args []string, stderr io.Writer) int {
 	adm.Register(mux)
 	go authSvc.Maintain(ctx)
 	go contentSvc.RunScheduler(ctx)
+	go mailSvc.Run(ctx)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

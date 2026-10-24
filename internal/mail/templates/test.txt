@@ -1,0 +1,4 @@
+Subject: [{{.SiteName}}] Test email
+This is a test email from {{.SiteName}}.
+
+If you can read it, sending email works.

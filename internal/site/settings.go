@@ -56,6 +56,8 @@ type Settings struct {
 	AvatarDefault             string
 	AvatarRating              string
 	CookiesOptIn              bool
+	CommentsNotify            bool // mail the post author about new comments
+	ModerationNotify          bool // mail the admin about comments to moderate
 
 	AttachmentPages bool
 	ThemeMods       map[string]any
@@ -109,6 +111,8 @@ func LoadSettings(ctx context.Context, q db.Querier) (*Settings, error) {
 		AvatarDefault:             o.str("avatar_default", "mystery"),
 		AvatarRating:              o.str("avatar_rating", "G"),
 		CookiesOptIn:              o.bool("show_comments_cookies_opt_in", false),
+		CommentsNotify:            o.bool("comments_notify", true),
+		ModerationNotify:          o.bool("moderation_notify", true),
 		AttachmentPages:           o.bool("wp_attachment_pages_enabled", true),
 	}
 	if s.Permalink == "" {

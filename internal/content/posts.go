@@ -32,6 +32,7 @@ type Service struct {
 	auth *auth.Service
 	log  *slog.Logger
 	now  func() time.Time
+	mail Mailer
 }
 
 // New creates the service.

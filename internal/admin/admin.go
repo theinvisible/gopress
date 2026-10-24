@@ -18,24 +18,30 @@ import (
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
 	"github.com/theinvisible/gopress/internal/httpx"
+	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/site"
 )
 
 // Options configures the admin.
 type Options struct {
-	Log *slog.Logger
+	Log  *slog.Logger
+	Mail *mail.Service
+	// MailSink reports that mail goes to a directory (development).
+	MailSink bool
 }
 
 // Admin serves /admin/ and the login pages.
 type Admin struct {
-	db      *db.DB
-	auth    *auth.Service
-	site    *site.Site
-	content *content.Service
-	log     *slog.Logger
-	tpl     *templates
-	assets  *assets
-	flash   *flashStore
+	db       *db.DB
+	auth     *auth.Service
+	site     *site.Site
+	content  *content.Service
+	log      *slog.Logger
+	tpl      *templates
+	assets   *assets
+	flash    *flashStore
+	mail     *mail.Service
+	mailSink bool
 }
 
 // New creates the admin.
@@ -43,7 +49,7 @@ func New(d *db.DB, a *auth.Service, s *site.Site, cs *content.Service, opts Opti
 	if opts.Log == nil {
 		opts.Log = slog.Default()
 	}
-	ad := &Admin{db: d, auth: a, site: s, content: cs, log: opts.Log, flash: newFlashStore()}
+	ad := &Admin{db: d, auth: a, site: s, content: cs, log: opts.Log, flash: newFlashStore(), mail: opts.Mail, mailSink: opts.MailSink}
 	var err error
 	if ad.assets, err = loadAssets(); err != nil {
 		return nil, err
@@ -102,6 +108,7 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	a.registerPosts(mux)
 	a.registerComments(mux)
 	a.registerProfile(mux)
+	a.registerSettings(mux)
 
 	mux.Handle("/admin/", a.page(auth.CapRead, func(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 		return errNotFound

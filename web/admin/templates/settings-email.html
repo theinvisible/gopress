@@ -1,0 +1,61 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-settings">
+	<h1>Email Settings</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	{{- if .Sink}}<div class="notice notice-info inline"><p>Development mode: messages are written to the mail sink directory instead of being sent.</p></div>
+	{{- else if not .Configured}}<div class="notice notice-warning inline"><p><strong>Email is not configured.</strong> Password resets, invitations and notifications wait in the queue until an SMTP server is set up.</p></div>{{end}}
+
+	<form method="post" action="/admin/settings/email" autocomplete="off">
+		{{template "csrf" .CSRF}}
+		<h2>SMTP Server</h2>
+		<p class="description">GoPress sends mail through your mail provider's SMTP server. The connection is always encrypted (except to a relay on this machine), and the server certificate is verified.</p>
+		{{- if not .Reauth}}<div class="notice notice-info inline"><p>To change these settings, <a href="/admin/reauth?next=%2Fadmin%2Fsettings%2Femail">confirm your identity</a> first.</p></div>{{end}}
+		<fieldset{{if not .Reauth}} disabled{{end}}>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th><label for="host">Server</label></th><td><input type="text" name="host" id="host" value="{{.Config.Host}}" class="regular-text code" placeholder="smtp.example.org" required></td></tr>
+			<tr><th><label for="port">Port</label></th><td><input type="number" name="port" id="port" value="{{.Config.Port}}" class="small-text" min="1" max="65535" required></td></tr>
+			<tr><th><label for="security">Security</label></th><td><select name="security" id="security">
+				<option value="starttls"{{if eq .Config.Security "starttls"}} selected{{end}}>STARTTLS (usually port 587)</option>
+				<option value="tls"{{if eq .Config.Security "tls"}} selected{{end}}>TLS (usually port 465)</option>
+				<option value="none"{{if eq .Config.Security "none"}} selected{{end}}>None (only a relay on localhost)</option>
+			</select></td></tr>
+			<tr><th><label for="user">Username</label></th><td><input type="text" name="user" id="user" value="{{.Config.User}}" class="regular-text code" autocomplete="off"></td></tr>
+			<tr><th><label for="password">Password</label></th><td>
+				<input type="password" name="password" id="password" class="regular-text" autocomplete="new-password" placeholder="{{if .HasPassword}}(unchanged){{end}}">
+				{{- if .HasPassword}}<p><label><input type="checkbox" name="clear_password" value="1"> Remove the stored password</label></p>{{end}}
+				<p class="description">Stored encrypted; it is never shown again.</p></td></tr>
+			<tr><th><label for="from">Sender address</label></th><td><input type="email" name="from" id="from" value="{{.Config.From}}" class="regular-text ltr" required>
+				<p class="description">Most providers only accept their own addresses here.</p></td></tr>
+			<tr><th><label for="from_name">Sender name</label></th><td><input type="text" name="from_name" id="from_name" value="{{.Config.FromName}}" class="regular-text" placeholder="{{.SiteName}}"></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Save Changes">
+			{{- if .Configured}} <button type="submit" name="remove" value="1" class="button button-link-delete" data-confirm="Remove the email configuration?">Remove configuration</button>{{end}}</p>
+		</fieldset>
+	</form>
+
+	{{- if or .Configured .Sink}}
+	<h2>Test</h2>
+	<form method="post" action="/admin/settings/email/test">
+		{{template "csrf" .CSRF}}
+		<p><input type="submit" class="button" value="Send a test email to {{.User.Email}}"></p>
+	</form>
+	{{- end}}
+
+	<h2>Queue</h2>
+	<p>{{index .Counts "pending"}} waiting, {{index .Counts "failed"}} failed. Sent messages are removed from the queue; unsent ones after seven days.</p>
+	{{- if .Queue}}
+	<table class="wp-list-table widefat fixed striped">
+		<thead><tr><th scope="col">Recipient</th><th scope="col">Subject</th><th scope="col">Queued</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+		<tbody>
+		{{- range .Queue}}
+		<tr><td>{{.To}}</td><td>{{.Subject}}</td><td>{{.Created}}</td>
+			<td>{{if eq .Status "failed"}}<span class="gp-badge gp-badge-warn">failed</span>{{else}}waiting{{end}}{{if .Tries}} ({{.Tries}} {{plural .Tries "try" "tries"}}){{end}}{{if .LastErr}}<br><code>{{.LastErr}}</code>{{end}}</td>
+			<td><form method="post" action="/admin/settings/email/queue" class="gp-inline-form">{{template "csrf" $.CSRF}}<input type="hidden" name="id" value="{{.ID}}">
+				{{- if eq .Status "failed"}}<button type="submit" name="action" value="retry" class="button button-small">Retry</button> {{end}}
+				<button type="submit" name="action" value="delete" class="button button-small">Delete</button></form></td></tr>
+		{{- end}}
+		</tbody>
+	</table>
+	{{- end}}
+</div>
+{{template "admin-bottom" .}}{{end}}

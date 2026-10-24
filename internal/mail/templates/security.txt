@@ -1,0 +1,9 @@
+Subject: [{{.SiteName}}] Security notice: {{.Event}}
+Security notice for your account "{{.Login}}" on {{.SiteName}}:
+
+{{.Event}} ({{.When}}, IP address {{.IP}}).
+
+If this was you, there is nothing to do. If not, change your password and
+review the second factors and sessions of your account:
+
+{{.Home}}/admin/profile/security
