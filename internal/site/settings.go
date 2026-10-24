@@ -65,6 +65,9 @@ type Settings struct {
 	AttachmentPages bool
 	ThemeMods       map[string]any
 
+	// MenuLocations maps theme locations ("primary") to menu ids.
+	MenuLocations map[string]int64
+
 	// Media.
 	ImageSizes       []ImageSize // generated for uploaded images
 	UploadsYearMonth bool        // store uploads in YYYY/MM folders
@@ -183,6 +186,14 @@ func LoadSettings(ctx context.Context, q db.Querier) (*Settings, error) {
 	s.UploadMaxBytes = int64(o.int("upload_max_size", DefaultUploadMax))
 	if s.UploadMaxBytes <= 0 || s.UploadMaxBytes > 1<<30 {
 		s.UploadMaxBytes = DefaultUploadMax
+	}
+	s.MenuLocations = map[string]int64{}
+	if locs, ok := o["nav_menu_locations"].(map[string]any); ok {
+		for k, v := range locs {
+			if f, ok := v.(float64); ok && f > 0 {
+				s.MenuLocations[k] = int64(f)
+			}
+		}
 	}
 	if mods, ok := o["theme_mods"].(map[string]any); ok {
 		s.ThemeMods = mods

@@ -95,6 +95,14 @@ func (rq *request) widget(w *db.Widget) (string, string) {
 		content, _ := set["content"].(string)
 		return widgetTitle(set, "") + `<div class="textwidget custom-html-widget">` + content + `</div>`, "widget_custom_html"
 
+	case "nav_menu":
+		id := int64(settingInt(set, "nav_menu", 0))
+		menu := rq.navMenu(id, "menu", rq.curPostObj(), false)
+		if menu == "" {
+			return "", ""
+		}
+		return widgetTitle(set, "") + menu, "widget_nav_menu"
+
 	case "pages":
 		var b strings.Builder
 		fmt.Fprintf(&b, "%s\n\t\t\t<ul>\n", widgetTitle(set, "Pages"))

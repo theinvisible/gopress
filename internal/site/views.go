@@ -165,7 +165,7 @@ func (rq *request) baseView(o viewOpts) *theme.View {
 	}
 	v.BodyClass = strings.Join(classes, " ")
 
-	v.Menu = template.HTML(rq.pageMenu(o.isFront, o.singular))
+	v.Menu = template.HTML(rq.primaryMenu(o.isFront, o.singular))
 	if !o.noSidebar && !o.fullWidth && !o.frontTemplate {
 		v.Sidebar = template.HTML(rq.sidebar("sidebar-1"))
 	}

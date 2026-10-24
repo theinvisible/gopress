@@ -122,6 +122,7 @@ func (a *Admin) menu(u *db.User, screen string, pending int) []menuItem {
 	if auth.Can(u, auth.CapEditThemeOptions) {
 		m = append(m, menuItem{ID: "appearance", Label: "Appearance", Icon: "admin-appearance", URL: "/admin/widgets", Sub: []subItem{
 			{ID: "appearance-widgets", Label: "Widgets", URL: "/admin/widgets"},
+			{ID: "appearance-menus", Label: "Menus", URL: "/admin/menus"},
 		}})
 	}
 	if auth.Can(u, auth.CapListUsers) {

@@ -189,6 +189,9 @@ func (s *Service) DeleteTerms(ctx context.Context, u *db.User, r *http.Request, 
 			if err := db.DeleteTerm(ctx, tx, t, def); err != nil {
 				return err
 			}
+			if err := db.DeleteMenuItemsFor(ctx, tx, []string{taxonomy}, t.ID); err != nil {
+				return err
+			}
 			n++
 		}
 		return db.RecountTerms(ctx, tx)

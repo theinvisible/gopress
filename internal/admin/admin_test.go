@@ -92,7 +92,11 @@ func newEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logOut := io.Discard
+	if os.Getenv("GP_TEST_LOG") != "" { // GP_TEST_LOG=1 go test … shows the server log
+		logOut = os.Stderr
+	}
+	log := slog.New(slog.NewTextHandler(logOut, nil))
 	e.uploads = t.TempDir()
 	pub := site.New(d, th, site.Options{BaseURL: home, Secret: []byte("k"), Log: log, UploadsDir: e.uploads})
 	e.mailDir = t.TempDir()

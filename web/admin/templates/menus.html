@@ -1,0 +1,108 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-menus">
+	<h1 class="wp-heading-inline">Menus</h1>
+	<hr class="wp-header-end">
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+
+	<div class="manage-menus">
+		{{- if .Menus}}
+		<form method="get" action="/admin/menus" class="gp-inline-form">
+			<label for="select-menu-to-edit">Select a menu to edit:</label>
+			<select name="menu" id="select-menu-to-edit">{{range .Menus}}<option value="{{.ID}}"{{if and $.Editing (eq .ID $.Editing.ID)}} selected{{end}}>{{.Name}}</option>{{end}}</select>
+			<button type="submit" class="button">Select</button>
+		</form>
+		<span class="add-new-menu-action">or</span>
+		{{- end}}
+		<form method="post" action="/admin/menus/new" class="gp-inline-form">
+			{{template "csrf" .CSRF}}
+			<label for="new-menu-name">{{if .Menus}}create a new menu:{{else}}Create your first menu:{{end}}</label>
+			<input type="text" name="menu-name" id="new-menu-name" maxlength="100" required placeholder="Menu name">
+			<button type="submit" class="button">Create Menu</button>
+		</form>
+	</div>
+
+	{{- if .Editing}}
+	<div class="gp-menus-layout">
+		<section class="gp-menu-sources" aria-label="Add menu items">
+			<h2>Add menu items</h2>
+			{{template "menu-source" (dict "Kind" "page" "Label" "Pages" "Items" .Pages "Search" true)}}
+			{{template "menu-source" (dict "Kind" "post" "Label" "Posts" "Items" .Posts "Search" true)}}
+			{{template "menu-source" (dict "Kind" "category" "Label" "Categories" "Items" .Cats "Search" false)}}
+			{{template "menu-source" (dict "Kind" "post_tag" "Label" "Tags" "Items" .Tags "Search" false)}}
+			<details class="gp-menu-source postbox" data-kind="custom">
+				<summary class="hndle">Custom Links</summary>
+				<div class="inside">
+					<p><label>URL<input type="url" class="widefat code" data-custom-url placeholder="https://"></label></p>
+					<p><label>Link Text<input type="text" class="widefat" data-custom-label></label></p>
+					<p><button type="button" class="button" data-add-custom>Add to Menu</button></p>
+				</div>
+			</details>
+		</section>
+
+		<form method="post" action="/admin/menus/{{$.Editing.ID}}" class="gp-menu-edit" id="update-nav-menu">
+			{{template "csrf" .CSRF}}
+			<input type="hidden" name="items" value="">
+			<div class="gp-menu-header">
+				<label for="menu-name">Menu Name</label>
+				<input name="menu-name" id="menu-name" type="text" class="regular-text" value="{{$.Editing.Name}}" maxlength="100" required>
+				<button type="submit" class="button button-primary">Save Menu</button>
+			</div>
+			<h3>Menu structure</h3>
+			<p class="description">Drag the items into the order you prefer; drag them right (or use the arrow buttons) to make sub items. Click an item to change its settings.</p>
+			<ul class="gp-menu-items" id="menu-to-edit">
+			{{- range .Items}}{{template "menu-item" .}}{{end}}
+			</ul>
+			<p class="gp-menu-empty description"{{if .Items}} hidden{{end}}>Add menu items from the column on the left.</p>
+			<h3>Menu Settings</h3>
+			<fieldset class="menu-settings-group">
+				<legend class="menu-settings-group-name">Display location</legend>
+				{{- range .Locations}}<p><label><input type="checkbox" name="menu-locations[{{.Value}}]" value="1"{{if .Selected}} checked{{end}}> {{.Label}}</label></p>{{end}}
+			</fieldset>
+			<div class="gp-menu-footer">
+				<button type="submit" class="button-link button-link-delete" formaction="/admin/menus/{{$.Editing.ID}}/delete" data-confirm="Delete the menu “{{$.Editing.Name}}”?">Delete Menu</button>
+				<button type="submit" class="button button-primary">Save Menu</button>
+			</div>
+		</form>
+	</div>
+	<template id="gp-menu-item-tpl">{{template "menu-item" .Blank}}</template>
+	{{- end}}
+</div>
+{{template "admin-bottom" .}}{{end}}
+
+{{define "menu-source"}}
+<details class="gp-menu-source postbox" data-kind="{{.Kind}}">
+	<summary class="hndle">{{.Label}}</summary>
+	<div class="inside">
+		{{- if .Search}}<p><input type="search" class="widefat" placeholder="Search…" data-menu-search aria-label="Search {{.Label}}"></p>{{end}}
+		<ul class="gp-menu-choices">
+			{{- range .Items}}<li><label class="level-{{.Level}}"><input type="checkbox" value="{{.ID}}" data-title="{{.Title}}"> {{.Title}}</label></li>{{else}}<li class="description">Nothing yet.</li>{{end}}
+		</ul>
+		<p><button type="button" class="button" data-add-items>Add to Menu</button></p>
+	</div>
+</details>
+{{end}}
+
+{{define "menu-item"}}
+<li class="gp-menu-item depth-{{.Depth}}" data-id="{{.ID}}" data-kind="{{.Kind}}" data-object="{{.ObjectID}}" data-depth="{{.Depth}}" draggable="true">
+	<div class="gp-menu-item-bar">
+		<span class="dashicons dashicons-menu gp-drag" aria-hidden="true"></span>
+		<button type="button" class="button-link gp-menu-item-title" aria-expanded="false" data-toggle-item>{{.Label}}</button>
+		<span class="gp-menu-item-type">{{.TypeLabel}}</span>
+		<span class="gp-menu-item-move">
+			<button type="button" class="button-link" data-move="up" aria-label="Move up"><span class="dashicons dashicons-arrow-up-alt2" aria-hidden="true"></span></button>
+			<button type="button" class="button-link" data-move="down" aria-label="Move down"><span class="dashicons dashicons-arrow-down-alt2" aria-hidden="true"></span></button>
+			<button type="button" class="button-link" data-move="out" aria-label="Move out of sub menu"><span class="dashicons dashicons-arrow-left-alt2" aria-hidden="true"></span></button>
+			<button type="button" class="button-link" data-move="in" aria-label="Make sub item"><span class="dashicons dashicons-arrow-right-alt2" aria-hidden="true"></span></button>
+		</span>
+	</div>
+	<div class="gp-menu-item-settings" hidden>
+		<p class="gp-field-url"{{if ne .Kind "custom"}} hidden{{end}}><label>URL<input type="url" class="widefat code" data-field="url" value="{{.URL}}"></label></p>
+		<p><label>Navigation Label<input type="text" class="widefat" data-field="title" value="{{.Title}}" placeholder="{{.Original}}" maxlength="500"></label></p>
+		<p><label>Title Attribute<input type="text" class="widefat" data-field="attr_title" value="{{.AttrTitle}}" maxlength="500"></label></p>
+		<p><label><input type="checkbox" data-field="target"{{if eq .Target "_blank"}} checked{{end}}> Open link in a new tab</label></p>
+		<p><label>CSS Classes (optional)<input type="text" class="widefat code" data-field="classes" value="{{.Classes}}" maxlength="200"></label></p>
+		<p class="gp-menu-item-original">{{if .Link}}Original: <a href="{{.Link}}" target="_blank" rel="noopener">{{if .Original}}{{.Original}}{{else}}{{.Link}}{{end}}</a>{{end}}</p>
+		<p><button type="button" class="button-link button-link-delete" data-remove-item>Remove</button></p>
+	</div>
+</li>
+{{end}}

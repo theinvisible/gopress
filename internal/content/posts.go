@@ -654,6 +654,9 @@ func (e *Editor) Delete(ctx context.Context, p *db.Post) error {
 		return ErrForbidden
 	}
 	err := e.s.db.Tx(ctx, func(tx *sql.Tx) error {
+		if err := db.DeleteMenuItemsFor(ctx, tx, []string{p.Type}, p.ID); err != nil {
+			return err
+		}
 		if err := db.DeletePost(ctx, tx, p.ID); err != nil {
 			return err
 		}

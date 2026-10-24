@@ -58,6 +58,8 @@ var widgetTypes = []widgetType{
 		{Key: "count", Label: "Show post counts", Kind: "checkbox"}, {Key: "hierarchical", Label: "Show hierarchy", Kind: "checkbox"}}},
 	{"custom_html", "Custom HTML", "Arbitrary HTML code.", []widgetField{titleField, {Key: "content", Label: "Content", Kind: "html"}}},
 	{"meta", "Meta", "Login, RSS, & WordPress.org links.", []widgetField{titleField}},
+	{"nav_menu", "Navigation Menu", "Add a navigation menu to your sidebar.", []widgetField{titleField,
+		{Key: "nav_menu", Label: "Select Menu", Kind: "menu"}}},
 	{"pages", "Pages", "A list of your site’s pages.", []widgetField{titleField,
 		{Key: "sortby", Label: "Sort by", Kind: "select", Options: []option{{Value: "post_title", Label: "Page title"}, {Value: "menu_order", Label: "Page order"}, {Value: "ID", Label: "Page ID"}}},
 		{Key: "exclude", Label: "Exclude", Kind: "text", Help: "Page IDs, separated by commas."}}},
@@ -104,7 +106,7 @@ type widgetsData struct {
 	Menus    []option
 }
 
-func (a *Admin) widgetCard(w db.Widget) widgetCard {
+func (a *Admin) widgetCard(w db.Widget, menus []option) widgetCard {
 	c := widgetCard{ID: w.ID, Type: w.Type, Label: w.Type}
 	if t, _ := w.Settings["title"].(string); t != "" {
 		c.Title = t
@@ -115,6 +117,9 @@ func (a *Admin) widgetCard(w db.Widget) widgetCard {
 	}
 	c.Known, c.Label = true, wt.Label
 	for _, f := range wt.Fields {
+		if f.Kind == "menu" {
+			f.Kind, f.Options = "select", append([]option{{Value: "0", Label: "— Select —"}}, menus...)
+		}
 		v := widgetFieldValue{widgetField: f}
 		switch x := w.Settings[f.Key].(type) {
 		case string:
@@ -147,16 +152,24 @@ func (a *Admin) widgetsPage(w http.ResponseWriter, r *http.Request, c *reqCtx) e
 	if err != nil {
 		return err
 	}
+	menus, err := db.Menus(ctx, a.db.R)
+	if err != nil {
+		return err
+	}
+	var menuOpts []option
+	for _, m := range menus {
+		menuOpts = append(menuOpts, option{Value: strconv.FormatInt(m.ID, 10), Label: m.Name})
+	}
 	for _, area := range widgetAreas {
 		ad := widgetAreaData{widgetArea: area}
 		for _, wd := range all[area.ID] {
-			ad.Widgets = append(ad.Widgets, a.widgetCard(wd))
+			ad.Widgets = append(ad.Widgets, a.widgetCard(wd, menuOpts))
 		}
 		d.Areas = append(d.Areas, ad)
 	}
 	d.Inactive = widgetAreaData{widgetArea: widgetArea{db.InactiveWidgets, "Inactive Widgets", "Drag widgets here to remove them from the site but keep their settings."}}
 	for _, wd := range all[db.InactiveWidgets] {
-		d.Inactive.Widgets = append(d.Inactive.Widgets, a.widgetCard(wd))
+		d.Inactive.Widgets = append(d.Inactive.Widgets, a.widgetCard(wd, menuOpts))
 	}
 	return a.render(w, "widgets", d)
 }
@@ -247,6 +260,14 @@ func (a *Admin) widgetSave(w http.ResponseWriter, r *http.Request, c *reqCtx) er
 			settings[f.Key] = float64(n)
 		case "checkbox":
 			settings[f.Key] = v != ""
+		case "menu":
+			id := atoi64(v)
+			if id != 0 {
+				if _, err := db.GetMenu(ctx, a.db.R, id); err != nil {
+					return badRequest("Please choose a menu.")
+				}
+			}
+			settings[f.Key] = float64(id)
 		case "select":
 			ok := false
 			for _, o := range f.Options {
