@@ -57,12 +57,34 @@
 		});
 	}
 
-	// Admin bar dropdowns via keyboard/touch.
+	// Admin bar dropdowns: mouse (with a short delay before closing, so
+	// the pointer can travel into the menu), keyboard focus and touch (the
+	// first tap opens the menu instead of following the link).
 	document.querySelectorAll('#wpadminbar .menupop > .ab-item').forEach(function (a) {
-		a.addEventListener('focus', function () { a.parentNode.classList.add('hover'); });
-		a.parentNode.addEventListener('focusout', function (ev) {
-			if (!a.parentNode.contains(ev.relatedTarget)) { a.parentNode.classList.remove('hover'); }
+		var li = a.parentNode, timer;
+		var open = function () {
+			clearTimeout(timer);
+			document.querySelectorAll('#wpadminbar .menupop.hover').forEach(function (o) { if (o !== li) { o.classList.remove('hover'); } });
+			li.classList.add('hover');
+		};
+		li.addEventListener('mouseenter', open);
+		li.addEventListener('mouseleave', function () { timer = setTimeout(function () { li.classList.remove('hover'); }, 300); });
+		a.addEventListener('focus', open);
+		li.addEventListener('focusout', function (ev) {
+			if (!li.contains(ev.relatedTarget)) { li.classList.remove('hover'); }
 		});
+		a.addEventListener('click', function (ev) {
+			if (window.matchMedia('(hover: none)').matches && !li.classList.contains('menu-opened')) {
+				ev.preventDefault();
+				li.classList.add('menu-opened');
+				open();
+			}
+		});
+	});
+	document.addEventListener('click', function (ev) {
+		if (!ev.target.closest('#wpadminbar .menupop')) {
+			document.querySelectorAll('#wpadminbar .menupop.hover').forEach(function (o) { o.classList.remove('hover', 'menu-opened'); });
+		}
 	});
 
 	// Dismissible notices.

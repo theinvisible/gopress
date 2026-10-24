@@ -508,6 +508,15 @@ await step('customizer: preview first, publish later', async () => {
 	assert.doesNotMatch(await fetchPage('/'), /E2E Preview Title/);
 });
 
+await step('admin toolbar: account menu opens on hover and stays open', async () => {
+	await go('/admin/');
+	await page.hover('#wp-admin-bar-my-account > .ab-item');
+	const box = await page.$eval('#wp-admin-bar-my-account', (e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.bottom }; });
+	await page.mouse.move(box.x, box.y + 40, { steps: 6 }); // down into the menu
+	await new Promise((r) => setTimeout(r, 400));
+	assert.ok(await page.$eval('#wp-admin-bar-logout', (e) => e.offsetParent !== null), 'logout entry visible');
+});
+
 await step('toolbar on the site for logged-in users', async () => {
 	await go('/');
 	assert.ok(await page.$('#wpadminbar #wp-admin-bar-my-account'), 'toolbar');
