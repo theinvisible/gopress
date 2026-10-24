@@ -33,6 +33,7 @@ type request struct {
 	curMonth int
 
 	threads map[int64]*commentThreads // comment pagination cache
+	visitor *Visitor                  // logged-in user, nil for everybody else
 }
 
 // commenter is the visitor's verified identity (signed cookie); used to
@@ -135,9 +136,18 @@ func (rq *request) baseView(o viewOpts) *theme.View {
 		bgClass = true
 		fmt.Fprintf(&head, "<style id=\"custom-background-css\">\n%s\n</style>", css)
 	}
+	head.WriteString(rq.headerTextCSS())
+	head.WriteString(rq.siteIconLinks())
+	head.WriteString(rq.customCSS())
+	head.WriteString(rq.adminBarHead())
 	v.Head = template.HTML(head.String())
+	v.HeaderImage = template.HTML(rq.headerImage())
+	v.AdminBar = template.HTML(rq.adminBar())
 
 	classes := append([]string{}, o.bodyClass...)
+	if rq.visitor != nil && rq.visitor.ShowBar {
+		classes = append(classes, "logged-in", "admin-bar", "no-customize-support")
+	}
 	if o.paged > 1 {
 		classes = append(classes, "paged")
 	}
@@ -411,6 +421,14 @@ func (rq *request) entry(p *db.Post, terms []db.Term, mode entryMode) *theme.Pos
 	}
 	if p.Type == db.TypePost || mode == modeSearch {
 		e.Meta = template.HTML(rq.entryMeta(p, terms, url))
+	}
+	if v := rq.visitor; v != nil && mode != modeSearch && v.CanEdit(p) {
+		base := "/admin/posts/"
+		if p.Type == db.TypePage {
+			base = "/admin/pages/"
+		}
+		e.EditLink = template.HTML(fmt.Sprintf(`<span class="edit-link"><a class="post-edit-link" href="%s%d/edit">Edit<span class="screen-reader-text"> &#8220;%s&#8221;</span></a></span>`,
+			base, p.ID, rq.title(p.Title)))
 	}
 	return e
 }

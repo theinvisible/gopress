@@ -22,7 +22,9 @@
 		<nav id="site-navigation" class="main-navigation">
 			<button class="menu-toggle">Menu</button>
 			{{.Menu}}
-		</nav><!-- #site-navigation -->
+		</nav><!-- #site-navigation -->{{if .HeaderImage}}
+
+				{{.HeaderImage}}{{end}}
 	</header><!-- #masthead -->
 	<div id="main" class="wrapper">
 {{template "main" .}}
@@ -33,7 +35,7 @@
 		</div><!-- .site-info -->
 	</footer><!-- #colophon -->
 </div><!-- #page -->
-{{.FooterScripts}}
+{{.FooterScripts}}{{.AdminBar}}
 </body>
 </html>
 {{end}}

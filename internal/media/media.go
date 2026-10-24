@@ -658,3 +658,58 @@ func (s *Store) Strip(file string, apply bool) (bool, error) {
 // ReadFile reads a file below the uploads directory (for tests and
 // tools).
 func (s *Store) ReadFile(name string) ([]byte, error) { return s.root.ReadFile(name) }
+
+// AddSizes creates additional sizes of an image (e.g. the site icon
+// sizes) next to the existing ones and returns all sizes.
+func (s *Store) AddSizes(ctx context.Context, m *db.Media, sizes []Size) (map[string]db.MediaSize, error) {
+	out := map[string]db.MediaSize{}
+	for k, v := range m.Sizes {
+		out[k] = v
+	}
+	if !strings.HasPrefix(m.Mime, "image/") || m.Mime == "image/gif" {
+		return out, nil
+	}
+	select {
+	case s.sem <- struct{}{}:
+		defer func() { <-s.sem }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	data, err := s.root.ReadFile(m.File)
+	if err != nil {
+		return nil, err
+	}
+	img, format, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, ErrCorrupt
+	}
+	dir, ext := path.Dir(m.File), path.Ext(m.File)
+	base := strings.TrimSuffix(strings.TrimSuffix(path.Base(m.File), ext), "-scaled")
+	b := img.Bounds()
+	src := newSources(img)
+	for _, sz := range sizes {
+		rect, w, h, ok := resizeDims(b.Dx(), b.Dy(), sz)
+		if !ok {
+			// Already small enough: use the image itself.
+			rect, w, h = b, b.Dx(), b.Dy()
+		}
+		var buf bytes.Buffer
+		mime, sext := "image/png", ".png"
+		resized := src.resize(rect, w, h)
+		if format == "jpeg" {
+			mime, sext = "image/jpeg", ext
+			err = jpeg.Encode(&buf, resized, &jpeg.Options{Quality: jpegQuality})
+		} else {
+			err = png.Encode(&buf, resized)
+		}
+		if err != nil {
+			return nil, err
+		}
+		name := fmt.Sprintf("%s-%dx%d%s", base, w, h, sext)
+		if err := s.root.WriteFile(path.Join(dir, name), buf.Bytes(), 0o640); err != nil {
+			return nil, err
+		}
+		out[sz.Name] = db.MediaSize{File: name, Width: w, Height: h, Mime: mime}
+	}
+	return out, nil
+}

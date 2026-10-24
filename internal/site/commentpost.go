@@ -110,15 +110,26 @@ func (s *Site) postComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Logged-in users comment under their account: only from this site
+	// (SameSite=Strict session cookie, origin and the session's CSRF
+	// token in the form).
+	vis := s.formVisitor(r, st.s.Home)
+	if st.s.CommentRegistration && vis == nil {
+		commentError(w, http.StatusForbidden, "Sorry, you must be logged in to comment.")
+		return
+	}
 	author := truncateRunes(strings.TrimSpace(render.SanitizeText(f.Get("author"))), 245)
 	email := truncateRunes(strings.TrimSpace(f.Get("email")), 100)
 	website := truncateRunes(strings.TrimSpace(f.Get("url")), 200)
+	if vis != nil {
+		author, email, website = truncateRunes(vis.DisplayName, 245), vis.Email, vis.URL
+	}
 	content := strings.TrimSpace(f.Get("comment"))
 	if !utf8.ValidString(author + email + website + content) {
 		commentError(w, http.StatusBadRequest, "Invalid characters.")
 		return
 	}
-	if st.s.RequireNameEmail {
+	if st.s.RequireNameEmail && vis == nil {
 		if author == "" || email == "" {
 			commentError(w, http.StatusBadRequest, "Please fill the required fields.")
 			return
@@ -170,7 +181,13 @@ func (s *Site) postComment(w http.ResponseWriter, r *http.Request) {
 		AuthorIP: ip, Agent: truncateRunes(r.UserAgent(), 254), Content: content,
 		Date: db.Time{Time: wallClock(now.In(st.s.Loc))}, DateGMT: db.Time{Time: now.UTC().Truncate(time.Second)},
 	}
+	if vis != nil {
+		c.UserID = vis.ID
+	}
 	c.Status = s.moderate(r, st, c)
+	if vis != nil && vis.Can("moderate_comments") {
+		c.Status = db.CommentApproved // moderators are trusted (wp_allow_comment)
+	}
 	if s.commentFilter != nil {
 		switch verdict := s.commentFilter(r, c, post); verdict {
 		case "discard":
@@ -199,7 +216,7 @@ func (s *Site) postComment(w http.ResponseWriter, r *http.Request) {
 		s.commentNotify(ctx, c, false)
 	}
 
-	if c.Status != db.CommentSpam {
+	if c.Status != db.CommentSpam && vis == nil {
 		remember := !st.s.CookiesOptIn || f.Get("wp-comment-cookies-consent") == "yes"
 		s.setCommenterCookies(w, st, author, email, website, remember)
 	}

@@ -34,7 +34,8 @@
 		</div><!-- .entry-content -->
 {{- end}}
 		<footer class="entry-meta">
-			{{.Meta}}
+			{{.Meta}}{{if .EditLink}}
+			{{.EditLink}}{{end}}
 		</footer><!-- .entry-meta -->
 	</article><!-- #post -->
 {{end}}
@@ -48,7 +49,8 @@
 		<div class="entry-content">
 			{{.Content}}
 		</div><!-- .entry-content -->
-		<footer class="entry-meta">
+		<footer class="entry-meta">{{if .EditLink}}
+			{{.EditLink}}{{end}}
 		</footer><!-- .entry-meta -->
 	</article><!-- #post -->
 {{end}}

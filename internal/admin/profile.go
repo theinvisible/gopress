@@ -36,6 +36,7 @@ type profileData struct {
 	URL      string
 	Display  string
 	Bio      string
+	ShowBar  bool
 }
 
 var profileMessages = map[string]notice{
@@ -57,6 +58,8 @@ func (a *Admin) renderProfile(w http.ResponseWriter, r *http.Request, c *reqCtx,
 		Login: u.Login, Email: u.Email, URL: u.URL, Display: u.DisplayName, Bio: u.Description}
 	d.Reauth = a.auth.RecentlyAuthenticated(c.cur)
 	d.Nickname, _ = db.UserMeta(ctx, a.db.R, u.ID, "nickname")
+	bar, _ := db.UserMeta(ctx, a.db.R, u.ID, metaShowBar)
+	d.ShowBar = bar != "false"
 	d.Scripts = []string{"profile.js"}
 	if msg, ok := profileMessages[r.URL.Query().Get("msg")]; ok && errMsg == "" && pwErr == "" {
 		if d.Notice == nil {
@@ -152,6 +155,13 @@ func (a *Admin) profileSave(w http.ResponseWriter, r *http.Request, c *reqCtx) e
 				return err
 			}
 		}
+	}
+	bar := "false"
+	if r.PostFormValue("admin_bar_front") != "" {
+		bar = "true"
+	}
+	if err := db.SetUserMeta(ctx, a.db.W, u.ID, metaShowBar, bar); err != nil {
+		return err
 	}
 	a.auth.Audit(ctx, r, u.ID, auth.ActProfileUpdate, "user", u.ID, map[string]any{"email_changed": u.Email != c.user.Email})
 	if u.Email != c.user.Email {

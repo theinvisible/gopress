@@ -171,15 +171,21 @@ func (s *Site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.servePreview(w, r, st)
 		return
 	}
+	// Logged-in visitors (admin bar, customizer preview) and commenters
+	// with pending comments get personal, uncached pages.
+	vis := s.visitor(r)
 	email := s.personalized(r.Context(), r)
-	if email == "" && s.cache.serve(w, r, st.gen) {
+	if vis == nil && email == "" && s.cache.serve(w, r, st.gen) {
 		return
 	}
-	resp := s.handle(st, r, email)
+	if vis != nil && vis.Draft != nil {
+		st = st.withDraft(vis.Draft)
+	}
+	resp := s.handle(st, r, email, vis)
 	if resp.status == http.StatusInternalServerError {
 		s.log.Error("render", "path", r.URL.String(), "err", resp.err)
 	}
-	if email != "" {
+	if email != "" || vis != nil {
 		resp.header.Set("Cache-Control", "private, no-store")
 	} else if resp.cacheable() {
 		s.cache.store(r, st.gen, resp)
@@ -211,6 +217,9 @@ type Previewer interface {
 	// PreviewPost returns the post to preview (with unsaved changes
 	// applied) if the request may see it.
 	PreviewPost(r *http.Request, id int64) (*db.Post, bool)
+	// Visitor returns the logged-in user of a request with a session
+	// cookie, or nil.
+	Visitor(r *http.Request) *Visitor
 }
 
 // SetPreviewer installs the previewer.

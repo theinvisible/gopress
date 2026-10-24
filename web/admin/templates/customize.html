@@ -1,0 +1,75 @@
+{{define "page"}}{{template "admin-top" .}}
+{{- $v := .V}}
+<div class="wrap gp-customize">
+	<form method="post" action="/admin/customize/publish" id="customize-form" class="gp-customize-panel" data-draft="/admin/api/customize/draft">
+		{{template "csrf" .CSRF}}
+		<div class="gp-customize-head">
+			<h1>Customize</h1>
+			<button type="submit" class="button button-primary">Publish</button>
+		</div>
+		{{- if .Error}}<div class="notice notice-error inline"><p>{{.Error}}</p></div>{{end}}
+		{{- if .HasDraft}}<div class="notice notice-warning inline"><p>You have unpublished changes. <button type="submit" class="button-link" formaction="/admin/customize/discard" formnovalidate>Discard them</button></p></div>{{end}}
+		<p class="gp-customize-status description" role="status" aria-live="polite">The preview shows your changes. Visitors see them after “Publish”.</p>
+
+		<details open><summary>Site Identity</summary><div class="gp-section">
+			<label>Site Title<input type="text" name="blogname" value="{{index $v "blogname"}}" maxlength="200" required></label>
+			<label>Tagline<input type="text" name="blogdescription" value="{{index $v "blogdescription"}}" maxlength="500"></label>
+			<label><input type="checkbox" name="display_header_text" value="1"{{if index $v "display_header_text"}} checked{{end}}> Display Site Title and Tagline</label>
+			{{template "image-field" (dict "Name" "site_icon" "Label" "Site Icon" "Value" (index $v "site_icon") "Preview" (index .Images "site_icon") "Help" "A square image of at least 512 × 512 pixels, shown as the browser tab icon.")}}
+		</div></details>
+
+		<details><summary>Colors &amp; Header</summary><div class="gp-section">
+			<label>Header Text Color<input type="color" name="header_textcolor" value="{{index $v "header_textcolor"}}"></label>
+			{{template "image-field" (dict "Name" "header_image_id" "Label" "Header Image" "Value" (index $v "header_image_id") "Preview" (index .Images "header_image_id") "Help" "Shown below the navigation; 960 × 250 pixels suit the theme.")}}
+		</div></details>
+
+		<details><summary>Background</summary><div class="gp-section">
+			<label>Background Color<input type="color" name="background_color" value="{{index $v "background_color"}}"></label>
+			{{template "image-field" (dict "Name" "background_image_id" "Label" "Background Image" "Value" (index $v "background_image_id") "Preview" (index .Images "background_image_id") "Help" "")}}
+			{{- if index $v "background_image_url"}}<input type="hidden" name="background_image_url" value="{{index $v "background_image_url"}}">{{end}}
+			<label>Position<select name="background_position">{{$p := index $v "background_position"}}{{range .Positions}}<option{{if eq . $p}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+			<label>Size<select name="background_size">{{$sz := index $v "background_size"}}{{range splitWords "auto contain cover"}}<option{{if eq . $sz}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+			<label><input type="checkbox" name="background_repeat" value="1"{{if index $v "background_repeat"}} checked{{end}}> Repeat Background Image</label>
+			<label><input type="checkbox" name="background_attachment" value="1"{{if index $v "background_attachment"}} checked{{end}}> Fixed (does not scroll)</label>
+		</div></details>
+
+		<details><summary>Menus</summary><div class="gp-section">
+			<label>Primary Menu<select name="menu_primary"><option value="0">— Page list (default) —</option>{{$m := index $v "menu_primary"}}{{range .Menus}}<option value="{{.Value}}"{{if eq .Value $m}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+			<p class="description"><a href="/admin/menus">Edit menus</a></p>
+		</div></details>
+
+		<details><summary>Homepage Settings</summary><div class="gp-section">
+			{{- $f := index $v "show_on_front"}}{{$pof := index $v "page_on_front"}}{{$pfp := index $v "page_for_posts"}}
+			<label><input type="radio" name="show_on_front" value="posts"{{if eq $f "posts"}} checked{{end}}> Your latest posts</label>
+			<label><input type="radio" name="show_on_front" value="page"{{if eq $f "page"}} checked{{end}}> A static page</label>
+			<label>Homepage<select name="page_on_front"><option value="0">— Select —</option>{{range .Pages}}<option value="{{.Value}}"{{if eq .Value $pof}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+			<label>Posts page<select name="page_for_posts"><option value="0">— Select —</option>{{range .Pages}}<option value="{{.Value}}"{{if eq .Value $pfp}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+		</div></details>
+
+		{{- if .CanCSS}}
+		<details><summary>Additional CSS</summary><div class="gp-section">
+			<label>CSS<textarea name="custom_css" rows="14" class="code" spellcheck="false">{{index $v "custom_css"}}</textarea></label>
+			<p class="description">Added after the theme’s styles on every page.</p>
+		</div></details>
+		{{- end}}
+	</form>
+	<div class="gp-customize-preview">
+		<div class="gp-devices" role="group" aria-label="Preview size">
+			<button type="button" class="button" data-device="desktop" aria-pressed="true"><span class="dashicons dashicons-desktop" aria-hidden="true"></span><span class="screen-reader-text">Desktop</span></button>
+			<button type="button" class="button" data-device="tablet" aria-pressed="false"><span class="dashicons dashicons-tablet" aria-hidden="true"></span><span class="screen-reader-text">Tablet</span></button>
+			<button type="button" class="button" data-device="mobile" aria-pressed="false"><span class="dashicons dashicons-smartphone" aria-hidden="true"></span><span class="screen-reader-text">Mobile</span></button>
+		</div>
+		<iframe src="/" title="Site preview" name="gp-preview"></iframe>
+	</div>
+</div>
+{{template "admin-bottom" .}}{{end}}
+
+{{define "image-field"}}
+<div class="gp-image-field" data-image-field>
+	<span class="gp-field-label">{{.Label}}</span>
+	<input type="hidden" name="{{.Name}}" value="{{.Value}}">
+	<img alt="" src="{{.Preview}}"{{if not .Preview}} hidden{{end}}>
+	<p><button type="button" class="button" data-pick>Select image</button> <button type="button" class="button-link button-link-delete" data-clear{{if not .Preview}} hidden{{end}}>Remove</button></p>
+	{{- if .Help}}<p class="description">{{.Help}}</p>{{end}}
+</div>
+{{end}}

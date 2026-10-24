@@ -10,6 +10,8 @@
 				<td><fieldset id="color-picker" class="scheme-list gp-schemes">
 					{{- range .Schemes}}<label><input type="radio" name="admin_color" value="{{.}}"{{if eq . $.Color}} checked{{end}}> {{.}}</label>{{end}}
 				</fieldset></td></tr>
+			<tr class="show-admin-bar user-admin-bar-front-wrap"><th scope="row">Toolbar</th>
+				<td><label for="admin_bar_front"><input name="admin_bar_front" type="checkbox" id="admin_bar_front" value="1"{{if .ShowBar}} checked{{end}}> Show Toolbar when viewing site</label></td></tr>
 		</tbody></table>
 
 		<h2>Name</h2>

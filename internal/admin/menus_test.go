@@ -38,7 +38,7 @@ func TestMenus(t *testing.T) {
 		`[{"kind":"custom","url":"javascript:alert(1)","title":"x"}]`,
 		`[{"kind":"custom","url":"//evil.example/","title":"x"}]`,
 		`[{"kind":"post","object_id":999}]`,
-		`[{"kind":"post","object_id":1}]`, // a term id as post
+		`[{"kind":"post","object_id":1}]`,  // a term id as post
 		`[{"kind":"page","object_id":10}]`, // a post as page
 		`[{"kind":"custom","url":"/x","title":"x","classes":"a\"onclick=\"x"}]`,
 		`not json`,

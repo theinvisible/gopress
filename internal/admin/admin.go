@@ -118,6 +118,7 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	a.registerMedia(mux)
 	a.registerWidgets(mux)
 	a.registerMenus(mux)
+	a.registerCustomize(mux)
 
 	mux.Handle("/admin/", a.page(auth.CapRead, func(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 		return errNotFound

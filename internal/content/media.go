@@ -268,3 +268,23 @@ func hasAllSizes(m *db.Media, sizes []media.Size) bool {
 	}
 	return true
 }
+
+// PrepareSiteIcon creates the square site icon sizes of an image.
+func (s *Service) PrepareSiteIcon(ctx context.Context, id int64) error {
+	if s.media == nil {
+		return errors.New("uploads are not configured")
+	}
+	m, err := db.GetMedia(ctx, s.db.R, id)
+	if err != nil || m == nil {
+		return ErrNotFound
+	}
+	var sizes []media.Size
+	for _, px := range site.SiteIconSizes {
+		sizes = append(sizes, media.Size{Name: "site_icon-" + strconv.Itoa(px), Width: px, Height: px, Crop: true})
+	}
+	all, err := s.media.AddSizes(ctx, m, sizes)
+	if err != nil {
+		return err
+	}
+	return db.SetMediaSizes(ctx, s.db.W, id, all)
+}

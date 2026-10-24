@@ -21,6 +21,8 @@ type View struct {
 	// (sidebar-front.php); it replaces the sidebar.
 	FrontWidgets  template.HTML
 	FooterScripts template.HTML
+	AdminBar      template.HTML // toolbar for logged-in users
+	HeaderImage   template.HTML // custom header image (link and img)
 	Credit        template.HTML // footer site-info content
 	SearchForm    template.HTML
 
@@ -41,6 +43,8 @@ type View struct {
 
 // Post is one entry in a loop or the singular post.
 type Post struct {
+	// EditLink is edit_post_link() for logged-in users who may edit.
+	EditLink template.HTML
 	// PageImage is the featured image of the front page template
 	// (div.entry-page-image).
 	PageImage    template.HTML

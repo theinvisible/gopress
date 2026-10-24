@@ -336,14 +336,18 @@ func (rq *request) commentForm(p *db.Post) string {
 	path := rq.r.URL.Path // the current URL, including a comment page
 	var b strings.Builder
 	fmt.Fprintf(&b, "\t<div id=\"respond\" class=\"comment-respond\">\n\t\t<h3 id=\"reply-title\" class=\"comment-reply-title\">%s <small><a rel=\"nofollow\" id=\"cancel-comment-reply-link\" href=\"%s#respond\"%s>Cancel reply</a></small></h3>", title, esc(path), cancelStyle)
+	if rq.st.s.CommentRegistration && rq.visitor == nil {
+		b.WriteString(`<p class="must-log-in">You must be <a href="/login">logged in</a> to post a comment.</p>` + "\t</div><!-- #respond -->\n\t")
+		return b.String()
+	}
 	fmt.Fprintf(&b, `<form action="%s" method="post" id="commentform" class="comment-form">`, esc(rq.st.links.URL("/wp-comments-post.php")))
-	b.WriteString(`<p class="comment-notes"><span id="email-notes">Your email address will not be published.</span> <span class="required-field-message">Required fields are marked <span class="required">*</span></span></p>`)
-	b.WriteString(`<p class="comment-form-comment"><label for="comment">Comment <span class="required">*</span></label> <textarea id="comment" name="comment" cols="45" rows="8" maxlength="65525" required="required"></textarea></p>`)
-	b.WriteString(`<p class="comment-form-author"><label for="author">Name <span class="required">*</span></label> <input id="author" name="author" type="text" value="" size="30" maxlength="245" autocomplete="name" required="required" /></p>` + "\n")
-	b.WriteString(`<p class="comment-form-email"><label for="email">Email <span class="required">*</span></label> <input id="email" name="email" type="text" value="" size="30" maxlength="100" aria-describedby="email-notes" autocomplete="email" required="required" /></p>` + "\n")
-	b.WriteString(`<p class="comment-form-url"><label for="url">Website</label> <input id="url" name="url" type="text" value="" size="30" maxlength="200" autocomplete="url" /></p>` + "\n")
-	if rq.st.s.CookiesOptIn {
-		b.WriteString(`<p class="comment-form-cookies-consent"><input id="wp-comment-cookies-consent" name="wp-comment-cookies-consent" type="checkbox" value="yes" /> <label for="wp-comment-cookies-consent">Save my name, email, and website in this browser for the next time I comment.</label></p>` + "\n")
+	if v := rq.visitor; v != nil {
+		fmt.Fprintf(&b, `<p class="logged-in-as"><a href="/admin/profile" aria-label="Logged in as %s. Edit your profile.">Logged in as %s</a>. <span class="required-field-message">Required fields are marked <span class="required">*</span></span></p>`,
+			esc(v.DisplayName), esc(v.DisplayName))
+		b.WriteString(`<p class="comment-form-comment"><label for="comment">Comment <span class="required">*</span></label> <textarea id="comment" name="comment" cols="45" rows="8" maxlength="65525" required="required"></textarea></p>`)
+		fmt.Fprintf(&b, `<input type="hidden" name="_csrf" value="%s" />`, esc(v.CSRF))
+	} else {
+		rq.anonymousFields(&b)
 	}
 	fmt.Fprintf(&b, "<p class=\"form-submit\"><input name=\"submit\" type=\"submit\" id=\"submit\" class=\"submit\" value=\"Post Comment\" /> <input type='hidden' name='comment_post_ID' value='%d' id='comment_post_ID' />\n<input type='hidden' name='comment_parent' id='comment_parent' value='%d' />\n</p>", p.ID, parent)
 	fmt.Fprintf(&b, `<p style="display: none !important;" aria-hidden="true"><label>Leave this field empty <input type="text" name="%s" value="" tabindex="-1" autocomplete="off" /></label></p><input type="hidden" name="%s" value="%s" />`,
@@ -401,4 +405,17 @@ type commentThreads struct {
 func hasKey(m map[int64]int64, k int64) bool {
 	_, ok := m[k]
 	return ok
+}
+
+// anonymousFields writes the comment, name, email, website and cookie
+// fields for visitors who are not logged in.
+func (rq *request) anonymousFields(b *strings.Builder) {
+	b.WriteString(`<p class="comment-notes"><span id="email-notes">Your email address will not be published.</span> <span class="required-field-message">Required fields are marked <span class="required">*</span></span></p>`)
+	b.WriteString(`<p class="comment-form-comment"><label for="comment">Comment <span class="required">*</span></label> <textarea id="comment" name="comment" cols="45" rows="8" maxlength="65525" required="required"></textarea></p>`)
+	b.WriteString(`<p class="comment-form-author"><label for="author">Name <span class="required">*</span></label> <input id="author" name="author" type="text" value="" size="30" maxlength="245" autocomplete="name" required="required" /></p>` + "\n")
+	b.WriteString(`<p class="comment-form-email"><label for="email">Email <span class="required">*</span></label> <input id="email" name="email" type="text" value="" size="30" maxlength="100" aria-describedby="email-notes" autocomplete="email" required="required" /></p>` + "\n")
+	b.WriteString(`<p class="comment-form-url"><label for="url">Website</label> <input id="url" name="url" type="text" value="" size="30" maxlength="200" autocomplete="url" /></p>` + "\n")
+	if rq.st.s.CookiesOptIn {
+		b.WriteString(`<p class="comment-form-cookies-consent"><input id="wp-comment-cookies-consent" name="wp-comment-cookies-consent" type="checkbox" value="yes" /> <label for="wp-comment-cookies-consent">Save my name, email, and website in this browser for the next time I comment.</label></p>` + "\n")
+	}
 }

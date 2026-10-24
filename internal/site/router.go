@@ -112,8 +112,9 @@ func isFeedType(s string) bool {
 }
 
 // handle routes a GET request to a response.
-func (s *Site) handle(st *state, r *http.Request, commenterEmail string) *response {
+func (s *Site) handle(st *state, r *http.Request, commenterEmail string, vis *Visitor) *response {
 	rq := newRequest(s, st, r)
+	rq.visitor = vis
 	rq.commenter.Email = commenterEmail
 	p := r.URL.Path
 

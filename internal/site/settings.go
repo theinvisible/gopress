@@ -65,6 +65,9 @@ type Settings struct {
 	AttachmentPages bool
 	ThemeMods       map[string]any
 
+	CustomCSS string // Additional CSS (Customizer)
+	SiteIcon  int64  // attachment id of the site icon
+
 	// MenuLocations maps theme locations ("primary") to menu ids.
 	MenuLocations map[string]int64
 
@@ -187,6 +190,8 @@ func LoadSettings(ctx context.Context, q db.Querier) (*Settings, error) {
 	if s.UploadMaxBytes <= 0 || s.UploadMaxBytes > 1<<30 {
 		s.UploadMaxBytes = DefaultUploadMax
 	}
+	s.CustomCSS = o.str("custom_css", "")
+	s.SiteIcon = int64(o.int("site_icon", 0))
 	s.MenuLocations = map[string]int64{}
 	if locs, ok := o["nav_menu_locations"].(map[string]any); ok {
 		for k, v := range locs {
