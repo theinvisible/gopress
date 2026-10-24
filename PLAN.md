@@ -44,7 +44,7 @@ The first migration target (the *reference site*) is a WordPress 7.1 site runnin
   - Images: `golang.org/x/image/draw`.
   - Compression: `andybalholm/brotli`.
   - Import only: `go-sql-driver/mysql`.
-  - Admin: htmx (embedded). Editor: TipTap (vanilla, esbuild).
+  - Admin: server-rendered `html/template` + small vanilla JS (no inline scripts, strict CSP). Editor: TipTap (vanilla, esbuild; bundle committed, so building needs no Node).
 - **Performance:**
   - In-memory full-page cache for anonymous GETs, pre-compressed with br/gzip, ETag/304.
   - Invalidation via a global generation counter bumped on every write.
@@ -61,12 +61,13 @@ internal/render/        shortcode parser (WP-compatible), wpautop/wptexturize po
 internal/media/         upload, resize (thumbnail 150, medium 300, medium_large 768, large 1024), srcset
 internal/site/          public handlers, permalink router, feeds, sitemap, robots.txt, search, archives, redirects, page cache
 internal/theme/         theme loader, widgets (search, text, recent posts, categories, tag cloud, archives, meta + plugin widgets), menus
-internal/admin/         wp-admin-like UI (server-rendered + htmx)
-internal/auth/          sessions, CSRF, argon2id + verification of WP hashes (phpass & WP 6.8 bcrypt "$wp$2y$…"), rehash on login
+internal/admin/         wp-admin-like UI (server-rendered + vanilla JS)
+internal/auth/          sessions, CSRF, lockout, argon2id + verification of WP hashes (phpass & WP 6.8 bcrypt "$wp$2y$…"), TOTP, passkeys, recovery codes, capabilities, audit log
+internal/content/       write logic: posts/pages (slugs, scheduling, terms, revisions, trash), comment moderation
 internal/antispam/      honeypot, HMAC time token, per-IP rate limit, link heuristics
 internal/plugins/       Extism host, manifest, hook registry, instance pool, zip install, host functions
 internal/wpimport/      MariaDB → SQLite, block → HTML conversion, plugin data stash
-web/admin/  web/editor/ admin templates/CSS/JS, TipTap sources → dist (embedded)
+web/admin/  web/editor/ admin templates/CSS/JS (wp-admin stylesheets, GPL), TipTap sources → web/admin/static/editor
 themes/twentytwelve/    Go template port + original CSS (GPL), Open Sans self-hosted
 pdk/go/                 plugin SDK for plugin authors (wraps extism go-pdk + JSON ABI)
 plugins/paypal-donations/  plugins/foto-slider-lightbox/  plugins/akismet/
@@ -114,8 +115,8 @@ Makefile                editor → plugins (.zip) → embed → binary; Dockerfi
 
 ### 3. Admin (`internal/admin`, `web/admin`)
 
-- **Look:** like wp-admin. Dark side menu, admin bar, list tables with status filters (All/Published/Draft/Trash), search, bulk actions, row actions (Edit/Quick Edit/Trash/View/**Duplicate**), pagination.
-- **Login:** `/admin/` and `/login`. Redirects from `/wp-admin/` and `/wp-login.php`, rate-limited.
+- **Look:** based on wp-admin (its stylesheets and markup): dark side menu, admin bar, list tables with status filters (All/Published/Draft/Trash), search, bulk actions, row actions (Edit/Quick Edit/Trash/View/**Duplicate**), pagination. Not a pixel copy: where something can be nicer or more practical (login and 2FA screens, inline actions without reloads), GoPress deviates.
+- **Login:** `/login` (password + second factor, or a passkey alone); admin under `/admin/`. `GET /wp-admin/…` and `GET /wp-login.php` redirect; other requests to `/wp-login.php` get 404.
 - **Menu:**
   - Dashboard: At a Glance, Activity/Recent Comments, Quick Draft, plugin dashboard widgets
   - Posts: All, Add New, Categories, Tags
@@ -131,13 +132,13 @@ Makefile                editor → plugins (.zip) → embed → binary; Dockerfi
   - Side boxes: Publish (status, visibility, scheduling, preview), Categories, Tags, Featured Image, Excerpt and Discussion.
   - Autosave, revisions with restore.
 
-### 4. Lightweight editor (`web/editor`, TipTap/ProseMirror)
+### 4. Editor (`web/editor`, TipTap/ProseMirror)
 
-- **Tabs "Visual"/"Text"** like the WP classic editor. Text = HTML source.
-- **Toolbar:**
-  - Paragraph/H2–H4, bold/italic/strike, link, lists, quote, code/pre, table, alignment.
-  - "Add Media" with the media library modal: image with size, alignment, caption and link, plus gallery.
-- **Shortcodes and plugin content** appear as non-editable "chips" with an edit popover. Existing HTML (Gutenberg columns/group) is kept as a raw HTML node.
+- **Modern and fast:** slash commands (`/`), floating format menu on selections, Markdown shortcuts, keyboard shortcuts, distraction-free mode, word count; framework-free bundle loaded only on the editor screen.
+- **Tabs "Visual"/"HTML"**; HTML = the stored source.
+- **Toolbar:** paragraph/headings/preformatted, bold/italic/strike/code, lists, quote, separator, alignment, link, table, read-more, undo/redo; "Add Media" with a media picker (image with size, alignment, caption and link; several images become a gallery).
+- **Lossless:** every stored block is parsed and serialized again on load; anything not equivalent stays a raw HTML block (shown as a sandboxed preview). Shortcodes are blocks with an edit dialog. Inline elements without a button (colored spans, `<mark>`, `<sup>` …) keep their attributes. Verified over all imported documents (`make roundtrip`: no loss, identical rendering).
+- **Classic content** (wpautop at render time) is converted to HTML when opened (texturize → autop → shortcode unautop, the order of `the_content`), which renders identically.
 - **Extension API** `window.gopress.editor.registerInsert({id, label, icon, onClick})`. Plugins register e.g. "Insert photo gallery" through it. `window.gopress.media.pick({multiple})` is also available for plugin admin pages.
 
 ### 5. WASM plugin system (`internal/plugins`, `pdk/go`)
@@ -208,16 +209,16 @@ GoPress serves a public, internet-facing site. Security follows current best pra
 - Only same-site redirects; no open redirects.
 - `xmlrpc.php` and pingback receiving removed (common attack surface).
 
-**Admin & login (M2)**
-- Passwords hashed with argon2id; WordPress hashes (phpass, `$wp$` bcrypt) verified once and rehashed on login.
-- Two-factor authentication: TOTP and passkeys (WebAuthn); recovery codes.
-- Login rate limiting and progressive lockout per IP and account; generic error messages (no user enumeration); constant-time comparisons.
-- Sessions: random 256-bit ids stored hashed, `__Host-` cookie with `Secure`, `HttpOnly`, `SameSite=Strict`; id rotation on login and privilege change; idle and absolute timeouts; logout everywhere.
-- CSRF tokens on every state-changing request plus `Origin`/`Sec-Fetch-Site` checks.
-- Re-authentication for sensitive actions (password, 2FA, users, plugin upload).
-- Role-based authorization checked server-side on every admin handler.
-- Audit log for logins, failed logins and admin changes.
-- Admin responses are never cached (`Cache-Control: no-store`).
+**Admin & login (M2a)**
+- Passwords: argon2id (64 MiB, t=3), at most 4 hashes in parallel; WordPress hashes (`$wp$` bcrypt, phpass, bcrypt, MD5) verified and rehashed on login. Policy per NIST 800-63B: 12–256 characters, no composition rules, common-password blocklist, not the login or email.
+- Two-factor authentication is mandatory for every user: TOTP (secret encrypted with AES-GCM, replay protection) or passkeys (WebAuthn, user verification required); 10 single-use recovery codes (HMAC-hashed). Until a factor is set up, a session can only reach the setup page. A passkey alone is a complete login.
+- Login rate limiting per IP (/64 for IPv6) and progressive lockout per account name (also for unknown names); one generic error message and a dummy hash for unknown users (no enumeration). Passkey logins are not subject to the password lockout, so attackers cannot lock the owner out.
+- Sessions: random 256-bit tokens, only SHA-256 stored; `__Host-` cookie `Secure`, `HttpOnly`, `SameSite=Strict`; new session id on login and after the second factor; idle and absolute timeouts (2 h/12 h, "remember me" 3 d/14 d); logout everywhere; password change ends other sessions.
+- CSRF: per-session HMAC token on every state-changing request plus strict `Origin`/`Sec-Fetch-Site` checks; login form token bound to a pre-session cookie (no login CSRF).
+- Re-authentication (password + factor, or passkey) within 10 minutes for password, email and factor changes and new recovery codes.
+- Role/capability checks (WordPress roles) and ownership checks server-side in every handler and in the write layer; contributors/authors get their HTML sanitized.
+- Audit log for logins, failures, lockouts, factor and password changes and content changes; users see their recent activity.
+- Admin responses: `Cache-Control: no-store`, strict CSP (no inline scripts, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`; previews are never cached and 404 for everyone not allowed to edit.
 
 **Plugins (M3)**
 - WASM sandbox: no filesystem or network access except the host functions; HTTP only to allowlisted hosts; per-call timeout and memory limit; plugin zip uploads validated (size, paths, manifest).
@@ -255,19 +256,31 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [x] Parity check against a local reference WordPress (`dev/parity`): 162/162 URLs identical
 - [x] Security: headers/CSP, comment sanitizing, file serving hardening, server limits, govulncheck, security review (12 findings fixed, see devlog)
 
-### M2 – Admin
-- [ ] Auth: login, sessions, CSRF, rate limit + lockout, argon2id, WP hash verification + rehash (see Security)
-- [ ] 2FA: TOTP and passkeys (WebAuthn), recovery codes
-- [ ] Audit log, re-authentication for sensitive actions
-- [ ] Admin layout (menu, admin bar), dashboard
-- [ ] Posts/pages: list table, filters, bulk/row actions, duplicate, quick edit
-- [ ] Editor screen incl. side boxes, autosave, revisions
-- [ ] TipTap editor (visual/text, media modal, shortcode chips, extension API)
+### M2a – Admin core (*result: the site can be run and written with*)
+- [x] Auth: login, sessions, CSRF, rate limit + lockout, argon2id, WP hash verification + rehash (see Security)
+- [x] 2FA (mandatory for all users): TOTP and passkeys (WebAuthn, also as passwordless login), recovery codes
+- [x] Audit log, re-authentication for sensitive actions, `gopress user` break-glass CLI
+- [x] Admin layout (menu, admin bar, color schemes), dashboard (at a glance, activity, quick draft)
+- [x] Posts/pages: list table, filters, bulk/row actions, duplicate, quick edit
+- [x] Editor screen incl. side boxes, autosave, preview, scheduling, revisions with compare/restore
+- [x] TipTap editor (visual/HTML, slash commands, media picker, shortcode and HTML blocks, extension API), lossless round trip
+- [x] Comment moderation (inline approve/spam/trash/reply/quick edit, edit screen)
+- [x] Profile and security page (factors, recovery codes, sessions, recent activity)
+- [x] Tests: unit + HTTP tests, e2e suite with the local Chrome incl. passkeys (`make e2e`), editor round trip (`make roundtrip`)
+- [x] Security review (see devlog)
+
+### M2b – Admin completion
 - [ ] Media library with upload and resizes/srcset
-- [ ] Comment moderation
-- [ ] Categories/tags
+- [ ] Categories/tags screens
 - [ ] Appearance: widgets, menus, customize-lite
-- [ ] Users, settings (General/Writing/Reading/Discussion/Media/Permalinks)
+- [ ] Users (list, add, roles), settings (General/Writing/Reading/Discussion/Media/Permalinks)
+- [ ] Admin bar on the public site for logged-in users
+- [ ] Mail (lost password, notifications)
+
+### M2c – MCP interface for AI agents (*to be planned*)
+- [ ] Generic MCP server (Streamable HTTP, `/mcp`) so any MCP-capable agent (e.g. Claude Code) can write posts, e.g. release announcements
+- [ ] Tools: list/read/draft/edit posts and pages, media upload, categories/tags, optional publish
+- [ ] Highly secure: per-user scoped tokens or OAuth 2.1 (MCP authorization), created only after re-authentication, drafts-only by default, expiry and revocation, rate limits, audit log, content sanitized like for authors without `unfiltered_html`
 
 ### M3 – Plugin host
 - [ ] Manifest format `plugin.json` and zip install/delete

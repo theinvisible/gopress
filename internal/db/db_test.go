@@ -96,8 +96,8 @@ func TestOptions(t *testing.T) {
 }
 
 func TestSearchTerms(t *testing.T) {
-	got := SearchTerms(`"exact phrase" the fortigate, a ubuntu+deb`)
-	want := []string{"exact phrase", "fortigate", "ubuntu", "deb"}
+	got := SearchTerms(`"exact phrase" the router, a ubuntu+deb`)
+	want := []string{"exact phrase", "router", "ubuntu", "deb"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("SearchTerms = %q, want %q", got, want)
 	}

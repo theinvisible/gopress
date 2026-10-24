@@ -229,13 +229,17 @@ await step('drafts are private; preview shows the unsaved change', async () => {
 	await pv.close();
 });
 
-await step('saving an unchanged block post keeps the page identical', async () => {
-	const path = '/2026/02/proton-forge/';
+await step('saving an unchanged existing post keeps the page identical', async () => {
+	// The second newest post is an imported one (the newest is the test post).
+	await go('/admin/posts/');
+	const [editPath, viewURL] = await page.$$eval('#the-list tr', (rows) =>
+		[rows[1].querySelector('.row-title').getAttribute('href'), rows[1].querySelector('.view a').href]);
+	const path = new URL(viewURL).pathname;
 	// Whitespace between tags and <br /> vs. <br> render the same.
 	const content = (html) => html.slice(html.indexOf('<div class="entry-content">'), html.indexOf('<footer class="entry-meta">'))
 		.replace(/>\s+</g, '><').replace(/\s*\/>/g, '>');
 	const before = content(await fetchPage(path));
-	await go('/admin/posts/761/edit');
+	await go(editPath);
 	await page.waitForSelector('.gp-content');
 	await submit('#publish');
 	const after = content(await fetchPage(path));

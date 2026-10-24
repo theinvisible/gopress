@@ -32,6 +32,7 @@ var (
 	out     = flag.String("out", "local/parity", "report directory")
 	only    = flag.String("only", "", "only check paths containing this string")
 	verbose = flag.Bool("v", false, "print every URL")
+	extra   = flag.String("extra", "local/parity-urls.txt", "file with additional paths to check, one per line; \"!/path/\" marks an intentional status difference (site-specific, not committed)")
 	site    = flag.String("site-host", os.Getenv("SITE_HOST"), "host name of the original site; absolute links to it in content are compared as root-relative (env SITE_HOST)")
 )
 
@@ -146,16 +147,26 @@ func collect() ([]string, error) {
 	for _, m := range regexp.MustCompile(`href=['"](`+regexp.QuoteMeta(*ref)+`/[^'"#?]*)['"]`).FindAllStringSubmatch(string(home.body), -1) {
 		add(m[1])
 	}
-	for _, p := range []string{"/page/2/", "/page/3/", "/page/7/", "/page/99/", "/category/firewall/fortigate/page/2/",
-		"/tag/linux/page/3/", "/2020/", "/2020/05/", "/2020/05/12/", "/1999/", "/author/ti/page/2/",
-		"/feed/", "/comments/feed/", "/category/os/linux/feed/", "/tag/linux/feed/", "/2024/02/openfortigui-0-9-10/feed/",
-		"/feed/atom/", "/feed/rss2/", "/?s=fortigate", "/?s=openfortigui+ubuntu", "/?s=zzzqqq", "/?s=fortigate&paged=2", "/page/2/?s=linux",
-		"/?p=726", "/?page_id=124", "/?cat=30", "/?m=202402", "/?attachment_id=604", "/?feed=rss2", "/?author=1",
-		"/nonexistent/", "/2024/02/openfortigui-0-9-10", "/i-moved-again/", "/2014/04/i-moved-again/", "/openfortigui-0-9-10/",
-		"/linux/forticlient-sslvpn-deb-packages/comment-page-1/", "/linux/forticlient-sslvpn-deb-packages/comment-page-6/",
-		"/linux/openfortigui/comment-page-2/", "/linux/tinyotp/tinyotp1-2/", "/linux/openfortigui/openfortigui1-2/",
-		"/robots.txt", "/xmlrpc.php"} {
+	// Generic URLs every site has, plus site-specific extras (old slugs,
+	// comment pages, query URLs) from a local file.
+	for _, p := range []string{"/page/2/", "/page/3/", "/page/99/", "/1999/", "/feed/", "/comments/feed/",
+		"/feed/atom/", "/feed/rss2/", "/?s=zzzqqq", "/?feed=rss2", "/?author=1", "/nonexistent/", "/robots.txt", "/xmlrpc.php"} {
 		set[p] = true
+	}
+	if data, err := os.ReadFile(*extra); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			// "!/path/" marks an intentional status difference, e.g. an old
+			// slug without the date prefix that GoPress also redirects.
+			if strings.HasPrefix(line, "!") {
+				line = line[1:]
+				knownStatus[line] = true
+			}
+			set[line] = true
+		}
 	}
 	var paths []string
 	for p := range set {
@@ -171,10 +182,9 @@ func collect() ([]string, error) {
 // knownDifferences are paths whose comparison is intentionally skipped
 // (WordPress-only endpoints).
 var knownStatus = map[string]bool{
-	"/xmlrpc.php":     true, // removed in GoPress (410)
-	"/feed/atom/":     true, // GoPress redirects Atom/RDF feeds to RSS2
-	"/?feed=rss2":     true, // GoPress redirects to the pretty feed URL
-	"/i-moved-again/": true, // GoPress also redirects old slugs without the date prefix
+	"/xmlrpc.php": true, // removed in GoPress (410)
+	"/feed/atom/": true, // GoPress redirects Atom/RDF feeds to RSS2
+	"/?feed=rss2": true, // GoPress redirects to the pretty feed URL
 }
 
 func compare(path string) ([]string, error) {
