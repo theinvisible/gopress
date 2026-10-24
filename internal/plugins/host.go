@@ -73,6 +73,8 @@ type Options struct {
 	// HTTP sends the plugins' HTTP requests; nil uses a client that only
 	// connects to public addresses.
 	HTTP *http.Client
+	// ClientIP returns the client address of a request (trusted proxies).
+	ClientIP func(*http.Request) string
 }
 
 // Host runs the active plugins.
@@ -85,6 +87,8 @@ type Host struct {
 
 	mu     sync.RWMutex
 	active map[string]*plugin // by name
+
+	routeLimit *limiter
 }
 
 // plugin is an active plugin.
@@ -114,7 +118,8 @@ func New(ctx context.Context, opts Options) (*Host, error) {
 	if opts.Log == nil {
 		opts.Log = slog.Default()
 	}
-	h := &Host{opts: opts, log: opts.Log, now: time.Now, active: map[string]*plugin{}, http: opts.HTTP}
+	h := &Host{opts: opts, log: opts.Log, now: time.Now, active: map[string]*plugin{}, http: opts.HTTP,
+		routeLimit: newLimiter(routePerMin, time.Minute)}
 	if h.http == nil {
 		h.http = safeClient()
 	}

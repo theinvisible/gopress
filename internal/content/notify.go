@@ -15,6 +15,13 @@ type Mailer interface {
 	Enqueue(ctx context.Context, to, template string, data mail.Data) error
 }
 
+// SetCommentStatusHook installs a function told about comments whose
+// status an editor changed (approve, unapprove, spam, unspam, trash,
+// untrash); the plugin host uses it.
+func (s *Service) SetCommentStatusHook(f func(ctx context.Context, ids []int64, action string)) {
+	s.statusHook = f
+}
+
 // SetMailer enables email notifications.
 func (s *Service) SetMailer(m Mailer) { s.mail = m }
 

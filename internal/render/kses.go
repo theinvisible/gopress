@@ -154,3 +154,50 @@ func SanitizePost(s string) string {
 	}
 	return out
 }
+
+var (
+	pluginPolicyOnce sync.Once
+	pluginPolicy     *bluemonday.Policy
+)
+
+// SanitizePluginHTML filters what plugins put on public pages: the post
+// subset plus forms (to https or same-site targets), data-*, aria-* and
+// role attributes and video/audio. Scripts, event handlers, iframes,
+// objects and javascript: URLs never pass: plugin behavior comes from its
+// declared asset files.
+func SanitizePluginHTML(s string) string {
+	pluginPolicyOnce.Do(func() {
+		p := bluemonday.UGCPolicy()
+		p.AllowURLSchemes("http", "https", "mailto", "tel")
+		p.AllowAttrs("class", "id", "title", "lang", "dir", "role", "hidden", "tabindex").Globally()
+		p.AllowAttrs("style").Globally()
+		p.AllowStyles("text-align", "color", "background-color", "background-image", "width", "height", "max-width",
+			"max-height", "float", "margin", "padding", "display", "font-weight", "font-style", "font-size",
+			"text-decoration", "border", "border-radius", "aspect-ratio", "object-fit", "gap").Globally()
+		p.AllowDataAttributes()
+		p.AllowAttrs("aria-label", "aria-labelledby", "aria-describedby", "aria-hidden", "aria-expanded", "aria-controls",
+			"aria-current", "aria-live", "aria-modal", "aria-pressed", "aria-selected", "aria-roledescription").Globally()
+		p.AllowAttrs("target").Matching(regexp.MustCompile(`^_(blank|self)$`)).OnElements("a", "form")
+		p.AllowAttrs("rel").Matching(regexp.MustCompile(`^[a-z ]+$`)).OnElements("a")
+		p.AllowAttrs("srcset", "sizes", "loading", "decoding", "width", "height").OnElements("img")
+		p.AllowElements("figure", "figcaption", "div", "span", "section", "article", "aside", "nav", "header", "footer",
+			"mark", "small", "sub", "sup", "u", "s", "del", "ins", "kbd", "var", "samp", "abbr", "cite", "q", "dl", "dt",
+			"dd", "hr", "pre", "code", "details", "summary", "caption", "colgroup", "col", "picture", "source", "time",
+			"form", "fieldset", "legend", "label", "input", "select", "option", "optgroup", "textarea", "button", "output",
+			"video", "audio", "track")
+		p.AllowAttrs("action").Matching(regexp.MustCompile(`^(https://[^\s"'<>]+|/[^/\s"'<>][^\s"'<>]*|/)$`)).OnElements("form")
+		p.AllowAttrs("method").Matching(regexp.MustCompile(`(?i)^(get|post)$`)).OnElements("form")
+		p.AllowAttrs("name", "value", "placeholder", "checked", "selected", "disabled", "readonly", "required", "min", "max",
+			"step", "maxlength", "size", "multiple", "for", "rows", "cols", "autocomplete", "form").OnElements(
+			"input", "select", "option", "textarea", "button", "label", "output", "fieldset")
+		p.AllowAttrs("type").Matching(regexp.MustCompile(`^(text|hidden|number|email|url|tel|search|checkbox|radio|submit|button|reset|image|range|color|date)$`)).OnElements("input", "button")
+		p.AllowAttrs("src", "alt").OnElements("input")
+		p.AllowAttrs("datetime").OnElements("time")
+		p.AllowAttrs("src", "srcset", "type", "media", "sizes").OnElements("source", "video", "audio", "track")
+		p.AllowAttrs("controls", "autoplay", "muted", "loop", "playsinline", "poster", "preload", "kind", "label", "srclang").OnElements("video", "audio", "track")
+		p.RequireNoFollowOnLinks(false)
+		p.AddTargetBlankToFullyQualifiedLinks(false)
+		pluginPolicy = p
+	})
+	return unescapeTextQuotes(pluginPolicy.Sanitize(strings.ReplaceAll(s, "\x00", "")))
+}

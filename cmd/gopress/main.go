@@ -29,9 +29,11 @@ import (
 	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/mcpserver"
 	"github.com/theinvisible/gopress/internal/media"
+	"github.com/theinvisible/gopress/internal/plugins"
 	"github.com/theinvisible/gopress/internal/site"
 	"github.com/theinvisible/gopress/internal/theme"
 	"github.com/theinvisible/gopress/internal/wpimport"
+	"github.com/theinvisible/gopress/plugins/bundled"
 	"github.com/theinvisible/gopress/themes"
 )
 
@@ -186,6 +188,22 @@ func cmdServe(args []string, stderr io.Writer) int {
 	defer store.Close()
 	contentSvc.SetMediaStore(store)
 	public.SetCommentNotifier(contentSvc.NotifyComment)
+	pluginStore, err := plugins.OpenStore(filepath.Join(cfg.DataDir, "plugins"), bundled.FS(), log)
+	if err != nil {
+		log.Error("plugins", "err", err)
+		return 1
+	}
+	defer pluginStore.Close()
+	pluginHost, err := plugins.New(ctx, plugins.Options{DB: d, Store: pluginStore, Site: public, Log: log,
+		CacheDir: filepath.Join(cfg.DataDir, "cache", "wasm"), ClientIP: authSvc.ClientIP})
+	if err != nil {
+		log.Error("plugins", "err", err)
+		return 1
+	}
+	defer pluginHost.Close(context.Background())
+	public.SetExtensions(pluginHost)
+	public.SetCommentFilter(pluginHost.CommentFilter())
+	contentSvc.SetCommentStatusHook(pluginHost.CommentStatusChanged)
 	adm, err := admin.New(d, authSvc, public, contentSvc, admin.Options{Log: log, Mail: mailSvc, MailSink: *mailSink != ""})
 	if err != nil {
 		log.Error("admin", "err", err)

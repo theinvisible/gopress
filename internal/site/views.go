@@ -9,6 +9,7 @@ import (
 	"html"
 	"html/template"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -319,7 +320,30 @@ func (rq *request) render(status int, kind string, v *theme.View) *response {
 	if err := rq.site.theme.Render(&buf, kind, v); err != nil {
 		return errorResponse(err)
 	}
+	if ext := rq.site.ext; ext != nil {
+		return htmlResponse(status, rq.withExtensions(ext, buf.Bytes()))
+	}
 	return htmlResponse(status, buf.Bytes())
+}
+
+// withExtensions adds the plugins' head and footer output and the assets
+// the page's content needs (pages without plugin output stay unchanged).
+func (rq *request) withExtensions(ext Extensions, page []byte) []byte {
+	head := ext.HeadFooter(rq.env, "head")
+	footer := ext.HeadFooter(rq.env, "footer")
+	css, js := ext.AssetTags(rq.env.Assets)
+	head, footer = css+head, footer+js
+	if head != "" {
+		if i := bytes.Index(page, []byte("</head>")); i >= 0 {
+			page = slices.Insert(page, i, []byte(head)...)
+		}
+	}
+	if footer != "" {
+		if i := bytes.LastIndex(page, []byte("</body>")); i >= 0 {
+			page = slices.Insert(page, i, []byte(footer)...)
+		}
+	}
+	return page
 }
 
 func (rq *request) notFound() *response {

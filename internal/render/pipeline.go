@@ -13,6 +13,8 @@ var reBlockEnd = regexp.MustCompile(`</(?:p|li|h[1-6]|div|blockquote|pre|figure|
 type Pipeline struct {
 	Shortcodes map[string]ShortcodeFunc
 	UseSmilies bool
+	// ContentFilter, if set, runs last (plugins' the_content hook).
+	ContentFilter func(env *Env, content string) string
 }
 
 // NewPipeline returns a pipeline with the built-in shortcodes.
@@ -58,6 +60,9 @@ func (p *Pipeline) Filter(env *Env, content, format string) string {
 	content = FilterContentTags(env, content)
 	if p.UseSmilies {
 		content = ConvertSmilies(content)
+	}
+	if p.ContentFilter != nil {
+		content = p.ContentFilter(env, content)
 	}
 	return content
 }

@@ -36,6 +36,8 @@ type Service struct {
 	mail    Mailer
 	media   *media.Store
 	uploads uploadLimiter
+	// statusHook is told about moderated comments (plugins).
+	statusHook func(ctx context.Context, ids []int64, action string)
 }
 
 // New creates the service.

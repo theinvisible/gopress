@@ -217,6 +217,11 @@ func (rq *request) widget(w *db.Widget) (string, string) {
 			return inner, "widget_" + sanitizeClass(w.Type)
 		}
 	}
+	if ext := rq.site.ext; ext != nil {
+		if inner, ok := ext.RenderWidget(rq.env, w.Type, set, widgetTitle(set, "")); ok && inner != "" {
+			return inner, "widget_" + sanitizeClass(w.Type)
+		}
+	}
 	return "", ""
 }
 

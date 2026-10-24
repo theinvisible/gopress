@@ -46,6 +46,7 @@ type Site struct {
 	commentNotify CommentNotifier
 	widgets       map[string]WidgetRenderer
 	previewer     Previewer
+	ext           Extensions
 
 	gen   atomic.Uint64
 	mu    sync.Mutex
@@ -112,6 +113,12 @@ func (s *Site) current(ctx context.Context) (*state, error) {
 	}
 	pipe := render.NewPipeline()
 	pipe.UseSmilies = settings.UseSmilies
+	if s.ext != nil {
+		for name, fn := range s.ext.Shortcodes() {
+			pipe.Register(name, fn)
+		}
+		pipe.ContentFilter = s.ext.ContentFilter()
+	}
 	st := &state{
 		gen:        gen,
 		s:          settings,
@@ -130,6 +137,9 @@ func (s *Site) current(ctx context.Context) (*state, error) {
 
 // ServeHTTP implements http.Handler.
 func (s *Site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.ext != nil && (strings.HasPrefix(r.URL.Path, "/plugins/") || r.URL.RawQuery != "") && s.ext.ServeHTTP(w, r) {
+		return
+	}
 	switch p := r.URL.Path; {
 	case strings.HasPrefix(p, "/static/_core/"):
 		serveCoreAsset(w, r)
@@ -246,4 +256,29 @@ func (s *Site) servePreview(w http.ResponseWriter, r *http.Request, st *state) {
 	resp.header.Set("Cache-Control", "no-store")
 	resp.header.Set("X-Robots-Tag", "noindex, nofollow")
 	resp.write(w, r)
+}
+
+// Extensions are the plugins' parts of the public site (internal/plugins).
+type Extensions interface {
+	// Shortcodes returns the shortcode renderers of the active plugins.
+	Shortcodes() map[string]render.ShortcodeFunc
+	// ContentFilter returns the the_content filter, or nil if no plugin
+	// uses it.
+	ContentFilter() func(env *render.Env, content string) string
+	// RenderWidget renders a plugin widget type (ok false: unknown type).
+	RenderWidget(env *render.Env, typ string, settings map[string]any, titleHTML string) (html string, ok bool)
+	// HeadFooter returns the output of the head or footer hook.
+	HeadFooter(env *render.Env, hook string) string
+	// AssetTags returns the tags for the head (stylesheets) and the end of
+	// the body (scripts) of the assets a page needs.
+	AssetTags(assets []string) (head, footer string)
+	// ServeHTTP answers plugin routes, legacy URLs and asset files; it
+	// reports false for every other request.
+	ServeHTTP(w http.ResponseWriter, r *http.Request) bool
+}
+
+// SetExtensions installs the plugin host.
+func (s *Site) SetExtensions(e Extensions) {
+	s.ext = e
+	s.Invalidate()
 }

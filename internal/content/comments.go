@@ -33,9 +33,10 @@ func (e *Editor) ModerateComments(ctx context.Context, action string, ids []int6
 	}
 	posts := map[int64]bool{}
 	var approved []*db.Comment // pending → approved: the post author is notified
+	var changed []int64
 	n := 0
 	err := e.s.db.Tx(ctx, func(tx *sql.Tx) error {
-		approved = approved[:0]
+		approved, changed = approved[:0], changed[:0]
 		for _, id := range ids {
 			c, err := db.GetComment(ctx, tx, id)
 			if errors.Is(err, sql.ErrNoRows) {
@@ -73,6 +74,7 @@ func (e *Editor) ModerateComments(ctx context.Context, action string, ids []int6
 				return err
 			}
 			posts[c.PostID] = true
+			changed = append(changed, id)
 			n++
 		}
 		for id := range posts {
@@ -88,6 +90,9 @@ func (e *Editor) ModerateComments(ctx context.Context, action string, ids []int6
 	if n > 0 {
 		e.s.audit(ctx, e.r, e.user.ID, "comments_"+action, "comment", 0, map[string]any{"ids": ids})
 		e.s.site.Invalidate()
+		if e.s.statusHook != nil && action != CommentDelete {
+			e.s.statusHook(ctx, changed, action)
+		}
 	}
 	for _, c := range approved {
 		c.Status = db.CommentApproved

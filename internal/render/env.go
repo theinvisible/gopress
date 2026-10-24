@@ -2,6 +2,7 @@ package render
 
 import (
 	"context"
+	"slices"
 
 	"github.com/theinvisible/gopress/internal/db"
 )
@@ -25,7 +26,20 @@ type Env struct {
 	// SizeLimits are the configured image sizes (name → width, height).
 	SizeLimits map[string][2]int
 
+	// Assets are the plugin frontend assets the rendered output needs
+	// ("<plugin>/<path>"), included once per page.
+	Assets []string
+
 	galleryInstance int
 	contentImages   int // images seen by FilterContentTags on this page
 	fetchPriority   bool
+}
+
+// AddAssets records frontend assets (deduplicated).
+func (e *Env) AddAssets(assets ...string) {
+	for _, a := range assets {
+		if !slices.Contains(e.Assets, a) {
+			e.Assets = append(e.Assets, a)
+		}
+	}
 }
