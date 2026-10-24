@@ -23,4 +23,7 @@
 		<button type="button" class="button button-large gp-passkey-button"><span class="dashicons dashicons-admin-network" aria-hidden="true"></span> Sign in with a passkey</button>
 		<p class="gp-passkey-error" role="alert" hidden></p>
 	</div>
+	{{- if .LostPassword}}
+	<p id="nav"><a href="/login/lost">Lost your password?</a></p>
+	{{- end}}
 {{template "login-bottom" .}}{{end}}

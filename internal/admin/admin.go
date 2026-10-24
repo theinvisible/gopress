@@ -42,6 +42,7 @@ type Admin struct {
 	flash    *flashStore
 	mail     *mail.Service
 	mailSink bool
+	sync     bool // run background work synchronously (tests)
 }
 
 // New creates the admin.
@@ -74,6 +75,7 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	mux.Handle("POST /login/2fa/passkey/begin", a.pending(a.secondFactorPasskeyBegin))
 	mux.Handle("POST /login/2fa/passkey/finish", a.pending(a.secondFactorPasskeyFinish))
 	mux.Handle("POST /logout", a.anySession(a.logout))
+	a.registerRecover(mux)
 
 	// WordPress addresses: bookmarks keep working, bots posting to
 	// wp-login.php get nothing.

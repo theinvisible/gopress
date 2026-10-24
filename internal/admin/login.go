@@ -23,6 +23,8 @@ type loginPageData struct {
 	Message    string
 	Login      string
 	RedirectTo string
+	// LostPassword shows the "Lost your password?" link (mail works).
+	LostPassword bool
 	// Second factor step.
 	HasTOTP    bool
 	HasPasskey bool
@@ -40,6 +42,8 @@ var loginMessages = map[string]string{
 	"loggedout": "You are now logged out.",
 	"expired":   "Your login has expired. Please log in again.",
 	"tries":     "Too many failed attempts. Please log in again.",
+	"lost":      "If an account with that username or email address exists, an email with a link to choose a new password is on its way. Check your inbox.",
+	"reset":     "Your password was changed. Please log in.",
 }
 
 // GET /login
@@ -54,6 +58,7 @@ func (a *Admin) loginPage(w http.ResponseWriter, r *http.Request) {
 	d.CSRF = a.auth.LoginFormToken(w, r)
 	d.RedirectTo = safeRedirect(r.URL.Query().Get("redirect_to"))
 	d.Message = loginMessages[r.URL.Query().Get("msg")]
+	d.LostPassword = a.mail.Ready(ctx)
 	a.render(w, "login", d)
 }
 

@@ -105,6 +105,7 @@ func newEnv(t *testing.T) *testEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ad.sync = true
 	pub.SetPreviewer(ad.Previewer())
 	mux := http.NewServeMux()
 	mux.Handle("/", pub)

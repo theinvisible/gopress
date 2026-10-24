@@ -47,6 +47,7 @@ type Service struct {
 	ipLimit      *ipLimiter
 	netLimit     *ipLimiter
 	passkeyLimit *ipLimiter
+	lostLimit    *ipLimiter
 	ceremonies   *ceremonyStore
 	deviceKey    []byte
 }
@@ -68,6 +69,7 @@ func New(d *db.DB, opts Options) *Service {
 	s.ipLimit = newIPLimiter(loginIPMax, loginIPWindow)
 	s.netLimit = newIPLimiter(loginNetMax, loginIPWindow)
 	s.passkeyLimit = newIPLimiter(passkeyBeginMax, loginIPWindow)
+	s.lostLimit = newIPLimiter(lostIPMax, lostIPWindow)
 	s.ceremonies = newCeremonyStore()
 	return s
 }
@@ -197,6 +199,9 @@ func (s *Service) Maintain(ctx context.Context) {
 		}
 		if err := db.PruneAudit(ctx, s.db.W, now-365*24*3600); err != nil {
 			s.log.Error("prune audit log", "err", err)
+		}
+		if err := db.PruneUserTokens(ctx, s.db.W, now); err != nil {
+			s.log.Error("prune tokens", "err", err)
 		}
 		s.ceremonies.prune(s.now())
 		select {
