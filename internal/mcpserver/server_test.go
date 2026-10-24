@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -74,6 +75,13 @@ func newEnv(t *testing.T) *env {
 		Title: "Members", Content: "<p>members only</p>", Password: "pw", Date: now, DateGMT: now, Modified: now, ModifiedGMT: now})
 	db.InsertPost(ctx, d.W, &db.Post{ID: 30, Type: db.TypePost, Status: db.StatusDraft, AuthorID: e.users["editor"].ID,
 		Title: "Editor's secret draft", Content: "<p>draft text</p>", Date: now, Modified: now, ModifiedGMT: now})
+	db.InsertPost(ctx, d.W, &db.Post{ID: 50, Type: db.TypePage, Status: db.StatusPrivate, Slug: "secret-plan", AuthorID: e.users["administrator"].ID,
+		Title: "Secret plan", Content: "<p>x</p>", Date: now, DateGMT: now, Modified: now, ModifiedGMT: now})
+	db.InsertPost(ctx, d.W, &db.Post{ID: 51, Type: db.TypePost, Status: db.StatusDraft, AuthorID: e.users["administrator"].ID,
+		Title: "Embed", Content: `<p>video</p><iframe src="https://video.example/1"></iframe>`, Date: now, Modified: now, ModifiedGMT: now})
+	db.InsertPost(ctx, d.W, &db.Post{ID: 52, Type: db.TypeAttachment, Status: db.StatusInherit, ParentID: 30, AuthorID: e.users["editor"].ID,
+		Title: "draft image", MimeType: "image/png", Date: now, DateGMT: now, Modified: now, ModifiedGMT: now})
+	db.InsertMedia(ctx, d.W, &db.Media{PostID: 52, File: "2026/10/draft.png", Mime: "image/png", Width: 1, Height: 1})
 	th, err := theme.Load(themes.FS, "twentytwelve")
 	if err != nil {
 		t.Fatal(err)
@@ -358,7 +366,7 @@ func TestCategoriesAndMedia(t *testing.T) {
 		t.Errorf("bad base64: %q", errText)
 	}
 	media := mustCall(t, cs, "list_media", nil)
-	if media["total"].(float64) != 1 {
+	if media["total"].(float64) != 2 { // the upload and the editor's own draft image
 		t.Errorf("media: %v", media)
 	}
 }
@@ -474,5 +482,85 @@ func TestSecureHome(t *testing.T) {
 		if SecureHome(h) != want {
 			t.Errorf("SecureHome(%q) = %v", h, !want)
 		}
+	}
+}
+
+// Regression tests for the M2c security review.
+func TestReviewFindings(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tok := e.token(auth.RoleAuthor, auth.ScopeWrite)
+
+	// JSON-RPC batches would bypass the per-request rate limit.
+	batch := `[` + strings.TrimSuffix(strings.Repeat(`{"jsonrpc":"2.0","id":1,"method":"tools/list"},`, 3), ",") + `]`
+	if rec := e.raw("POST", map[string]string{"Authorization": "Bearer " + tok}, "\n "+batch); rec.Code != http.StatusBadRequest {
+		t.Errorf("batch: %d", rec.Code)
+	}
+
+	// The text of others' password protected posts is not searchable.
+	cs := e.client(tok)
+	if l := mustCall(t, cs, "list_posts", map[string]any{"search": "members only"}); l["total"].(float64) != 0 {
+		t.Errorf("protected text found: %v", l)
+	}
+	if l := mustCall(t, cs, "list_posts", map[string]any{"search": "Members"}); l["total"].(float64) != 1 {
+		t.Errorf("title search: %v", l)
+	}
+
+	// Content size.
+	if _, errText := tryCall(t, cs, "create_post", map[string]any{"title": "big", "content": strings.Repeat("a", maxContent+1)}); !strings.Contains(errText, "larger") {
+		t.Errorf("oversized content: %q", errText)
+	}
+
+	// Parent pages and featured images must be visible to the user.
+	ed := e.client(e.token(auth.RoleEditor, auth.ScopeWrite))
+	if _, errText := tryCall(t, ed, "create_post", map[string]any{"type": "page", "title": "child", "parent": 50}); !strings.Contains(errText, "does not exist") {
+		t.Errorf("private parent: %q", errText)
+	}
+	if _, errText := tryCall(t, cs, "create_post", map[string]any{"title": "x", "featured_media": 52}); !strings.Contains(errText, "does not exist") {
+		t.Errorf("foreign draft's image as featured image: %q", errText)
+	}
+
+	// A title change keeps the stored content as it is.
+	adm := e.client(e.token(auth.RoleAdministrator, auth.ScopeWrite))
+	got := mustCall(t, adm, "get_post", map[string]any{"id": 51})
+	up := mustCall(t, adm, "update_post", map[string]any{"id": 51, "expected_modified": got["modified"], "title": "Embed 2"})
+	if !strings.Contains(up["content"].(string), "<iframe") {
+		t.Errorf("kept content was filtered: %s", up["content"])
+	}
+
+	// Upload metadata needs content:write; refused before storing.
+	mo := e.client(e.token(auth.RoleAuthor, auth.ScopeMedia))
+	if _, errText := tryCall(t, mo, "upload_media", map[string]any{"filename": "a.jpg", "data": base64.StdEncoding.EncodeToString(photo(t)), "alt": "x"}); !strings.Contains(errText, "content:write") {
+		t.Errorf("metadata without content:write: %q", errText)
+	}
+	var n int
+	e.d.R.QueryRow(`SELECT COUNT(*) FROM posts WHERE type = 'attachment' AND author_id = ?`, e.users[auth.RoleAuthor].ID).Scan(&n)
+	if n != 0 {
+		t.Errorf("file stored although refused: %d", n)
+	}
+	mustCall(t, mo, "upload_media", map[string]any{"filename": "a.jpg", "data": base64.StdEncoding.EncodeToString(photo(t))})
+
+	// The media list leaves out files of others' unpublished posts.
+	if l := mustCall(t, mo, "list_media", nil); l["total"].(float64) != 1 {
+		t.Errorf("media list: %v", l)
+	}
+	_ = ctx
+}
+
+func TestLimiterBounded(t *testing.T) {
+	l := newLimiter(2, time.Minute)
+	now := time.Now()
+	for i := range maxKeys {
+		l.add(strconv.Itoa(i), now)
+	}
+	if !l.full("new", now) || l.allow("new", now) {
+		t.Error("new key accepted while full of live keys")
+	}
+	if l.full("1", now) || !l.allow("1", now) {
+		t.Error("known key refused")
+	}
+	later := now.Add(2 * time.Minute) // all expired: pruned
+	if l.full("new", later) || len(l.hits) > 1 {
+		t.Errorf("not pruned: %d keys", len(l.hits))
 	}
 }

@@ -39,7 +39,7 @@ create their setup code on the server. Break-glass commands for whoever has acce
 ./bin/gopress user list --data ./data
 ./bin/gopress user add --data ./data --login alice --email alice@example.org --role editor   # asks for the password, prints the setup code
 ./bin/gopress user setup-code --data ./data alice       # new setup code (72 h, single use)
-./bin/gopress user set-password --data ./data alice      # also ends all sessions and lifts login locks
+./bin/gopress user set-password --data ./data alice      # also ends all sessions, revokes access tokens, lifts login locks
 ./bin/gopress user reset-2fa --data ./data alice         # set up two-factor authentication again (prints a setup code)
 ./bin/gopress user unlock --data ./data alice
 ./bin/gopress user revoke-sessions --data ./data alice
@@ -68,6 +68,50 @@ created in pure Go. Images can also be pasted (Ctrl+V) or dropped into the edito
 ./bin/gopress media regenerate --data ./data [--missing]   # after changing the image sizes
 ./bin/gopress media strip-metadata --data ./data [--apply]  # older uploads: list (or clean) files with metadata
 ```
+
+### AI agents (MCP)
+
+GoPress has an [MCP](https://modelcontextprotocol.io) server at `/mcp` (Streamable HTTP), so agents
+such as Claude Code can read the site and write posts, e.g. release announcements. It is off by
+default:
+
+1. An administrator turns it on under Settings › Writing ("AI agents (MCP)"). The site must be
+   served over HTTPS (or `http://localhost` for development).
+2. Each author creates a personal access token under Profile › Access Tokens (after confirming
+   their identity). The token is shown once, together with the client configuration.
+3. Connect the agent, e.g. Claude Code:
+
+   ```sh
+   claude mcp add --transport http --scope user gopress https://example.org/mcp \
+     --header "Authorization: Bearer gpat_…"
+   ```
+
+   or in a project's `.mcp.json`, with the token in an environment variable (never commit it):
+
+   ```json
+   { "mcpServers": { "gopress": { "type": "http", "url": "https://example.org/mcp",
+       "headers": { "Authorization": "Bearer ${GOPRESS_TOKEN}" } } } }
+   ```
+
+Tools: `get_site_info`, `list_posts`, `get_post`, `create_post` and `update_post` (Markdown or HTML),
+`list_terms`, `create_category`, `upload_media` (images and PDF as base64) and `list_media`.
+
+A token acts as its user, limited to the scopes chosen when it was created:
+
+| Scope | Allows |
+|---|---|
+| (always) | read published posts and pages and the user's own drafts |
+| `content:write` | create posts and pages as drafts or for review, edit the user's own unpublished ones |
+| `content:publish` | publish and schedule, edit the user's own published posts (off by default) |
+| `media:upload` | upload images and PDF files, list the media library |
+| `terms:manage` | create categories |
+
+No scope allows editing other users' content, deleting anything, unfiltered HTML (agent content is
+always filtered, even for administrators), comments, users or settings. Tokens expire after at
+most a year, can be revoked at any time (administrators can revoke other users' tokens under
+Users › Edit) and are revoked automatically by a password change or reset, a 2FA reset, a role change or "log out
+everywhere". Every change made with a token is recorded in the activity log with the token's
+name. Failed token checks are rate limited per network, calls per token.
 
 Behind a reverse proxy, pass `--trusted-proxies` and make sure the proxy sets (overwrites)
 `X-Real-Ip` or appends to `X-Forwarded-For` (Traefik and nginx with `proxy_set_header` do);

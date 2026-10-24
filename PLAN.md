@@ -229,6 +229,12 @@ GoPress serves a public, internet-facing site. Security follows current best pra
 - Logged-in visitors (toolbar, customizer preview, commenting): the session is validated by the admin; personal pages are never cached; customizer drafts only in the same-origin preview frame; logged-in comments need the session's CSRF token.
 - SQL: values only as parameters; a `go/ast` guard test checks every query in the module.
 
+**MCP interface (M2c)**
+- Off by default; an administrator turns it on (with re-authentication); only over HTTPS (or loopback in development).
+- Personal access tokens: 256-bit, only the SHA-256 stored, shown once, expire after at most a year, at most 10 per user; created only in a full 2FA session with a recent re-authentication (security notice by mail); revoked by the user, an administrator, a password change or reset, a 2FA reset, a role change and "log out everywhere".
+- A token acts with its user's role limited to its scopes (`content:write`, `content:publish`, `media:upload`, `terms:manage`) through the normal capability checks; no scope allows unfiltered HTML, others' content, deleting or administration; agents see published content and their own only; updates use optimistic locking.
+- `/mcp` accepts only Bearer tokens (no cookies, no CORS), refuses foreign `Origin`/cross-site fetches and JSON-RPC batches, limits failed authentication per network, calls per token, content and body size and concurrency; no tool fetches URLs; uploads only images and PDF through the media pipeline. Every change is audited with the token.
+
 **Plugins (M3)**
 - WASM sandbox: no filesystem or network access except the host functions; HTTP only to allowlisted hosts; per-call timeout and memory limit; plugin zip uploads validated (size, paths, manifest).
 
@@ -288,10 +294,12 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [x] SQL injection guard test for every query
 - [x] Security review (see devlog)
 
-### M2c – MCP interface for AI agents (*to be planned*)
-- [ ] Generic MCP server (Streamable HTTP, `/mcp`) so any MCP-capable agent (e.g. Claude Code) can write posts, e.g. release announcements
-- [ ] Tools: list/read/draft/edit posts and pages, media upload, categories/tags, optional publish
-- [ ] Highly secure: per-user scoped tokens or OAuth 2.1 (MCP authorization), created only after re-authentication, drafts-only by default, expiry and revocation, rate limits, audit log, content sanitized like for authors without `unfiltered_html`
+### M2c – MCP interface for AI agents
+- [x] Generic MCP server (Streamable HTTP, `/mcp`, official Go SDK, stateless) so any MCP-capable agent (e.g. Claude Code) can write posts, e.g. release announcements
+- [x] Tools: site info, list/get/create/update posts and pages (Markdown or HTML), terms, create category, media upload/list; publishing only with the `content:publish` scope
+- [x] Personal access tokens with scopes, expiry and revocation (Profile › Access Tokens), switch in Settings › Writing, rate limits, audit log, agent content always sanitized
+- [x] Tests (unit, HTTP with the SDK client, e2e), tried with Claude Code, security review (see devlog)
+- [ ] Later, if needed: OAuth 2.1 authorization (MCP authorization spec) as an alternative to copying tokens
 
 ### M3 – Plugin host
 - [ ] Manifest format `plugin.json` and zip install/delete

@@ -41,7 +41,7 @@ type profileData struct {
 
 var profileMessages = map[string]notice{
 	"saved":    {"success", "Profile updated."},
-	"password": {"success", "Password changed. All other sessions were logged out."},
+	"password": {"success", "Password changed. All other sessions were logged out and access tokens revoked."},
 }
 
 // GET /admin/profile
@@ -195,8 +195,12 @@ func (a *Admin) passwordSave(w http.ResponseWriter, r *http.Request, c *reqCtx) 
 	if err := db.SetUserPassHash(ctx, a.db.W, c.user.ID, hash); err != nil {
 		return err
 	}
-	// A new password ends every other session.
+	// A new password ends every other session and revokes access tokens
+	// (the password may have been changed because of a compromise).
 	if err := db.DeleteUserSessions(ctx, a.db.W, c.user.ID, c.cur.Session.IDHash); err != nil {
+		return err
+	}
+	if err := a.auth.RevokeAccessTokens(ctx, r, c.user.ID, c.user.ID); err != nil {
 		return err
 	}
 	a.auth.Audit(ctx, r, c.user.ID, auth.ActPasswordChange, "user", c.user.ID, nil)

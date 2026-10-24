@@ -152,10 +152,16 @@ func (e *Editor) Save(ctx context.Context, p *db.Post, in *PostInput) (*db.Post,
 	if !in.KeepExcerpt {
 		p.Excerpt = strings.TrimSpace(in.Excerpt)
 	}
+	// Only submitted text is filtered: kept content was filtered when it
+	// was written (or written by someone allowed to post unfiltered HTML).
 	if !auth.Can(e.user, auth.CapUnfilteredHTML) {
 		p.Title = render.SanitizeText(p.Title)
-		p.Content = render.SanitizePost(p.Content)
-		p.Excerpt = render.SanitizeText(p.Excerpt)
+		if !in.KeepContent {
+			p.Content = render.SanitizePost(p.Content)
+		}
+		if !in.KeepExcerpt {
+			p.Excerpt = render.SanitizeText(p.Excerpt)
+		}
 	}
 
 	// Status and visibility.

@@ -223,6 +223,12 @@ func (a *Admin) changeRole(ctx context.Context, tx *sql.Tx, userID int64, role s
 	if err := db.SetUserRole(ctx, tx, userID, role); err != nil {
 		return err
 	}
+	// Access tokens were created for the old role; a demoted user could
+	// neither see nor revoke them, and they would work again after a
+	// promotion.
+	if _, err := db.DeleteAccessTokens(ctx, tx, userID); err != nil {
+		return err
+	}
 	if u.Role == auth.RoleAdministrator {
 		counts, err := db.RoleCounts(ctx, tx)
 		if err != nil {

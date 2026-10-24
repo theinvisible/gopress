@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -164,5 +165,41 @@ func TestTokensRevokedWithSessions(t *testing.T) {
 		if _, _, err := e.auth.VerifyAccessToken(ctx, tok); err == nil {
 			t.Errorf("token survives %s", action)
 		}
+	}
+}
+
+func TestTokensRevokedOnRoleAndPasswordChange(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	u := e.users[auth.RoleAuthor]
+	tok, _, err := e.auth.CreateAccessToken(ctx, nil, u, "bot", []string{auth.ScopeWrite}, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A role change (here a promotion) revokes the tokens.
+	admin := e.adminWithReauth()
+	if res := post(e, "/admin/users/bulk", admin, url.Values{"action": {"role"}, "new_role": {auth.RoleEditor},
+		"users[]": {strconv.FormatInt(u.ID, 10)}}); res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("role change: %d", res.StatusCode)
+	}
+	if _, _, err := e.auth.VerifyAccessToken(ctx, tok); err == nil {
+		t.Error("token survives a role change")
+	}
+	// So does changing one's own password.
+	u, _ = db.GetUser(ctx, e.d.R, u.ID)
+	if tok, _, err = e.auth.CreateAccessToken(ctx, nil, u, "bot", []string{auth.ScopeWrite}, 7); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	cur, err := e.auth.StartSession(ctx, rec, httptest.NewRequest("GET", home+"/login", nil), u, db.SessionFull, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur.Session.UserAgent = rec.Result().Cookies()[0].Value
+	if res := post(e, "/admin/profile/password", cur, url.Values{"pass1": {"a brand new passphrase"}, "pass2": {"a brand new passphrase"}}); res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("password: %d", res.StatusCode)
+	}
+	if _, _, err := e.auth.VerifyAccessToken(ctx, tok); err == nil {
+		t.Error("token survives a password change")
 	}
 }

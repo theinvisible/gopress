@@ -123,7 +123,7 @@ func (s *Server) addTools(srv *mcp.Server, scopes []string) {
 			Description: "Upload an image (JPEG, PNG, GIF, WebP) or PDF as base64. Photo metadata (EXIF, GPS) is removed. " +
 				"Returns the URL, the generated sizes and HTML to put into post content."}, s.uploadMedia)
 		mcp.AddTool(srv, &mcp.Tool{Name: "list_media", Annotations: readOnly,
-			Description: "List files in the media library, newest first."}, s.listMedia)
+			Description: "List the user's own files and those of published posts, newest first."}, s.listMedia)
 	}
 }
 
@@ -418,8 +418,15 @@ type createPostIn struct {
 	Parent        int64    `json:"parent,omitempty" jsonschema:"parent page id; pages only"`
 }
 
-// html converts submitted content to HTML (sanitized later by Save).
+// maxContent is the largest content or excerpt an agent may submit (the
+// admin allows 4 MB form bodies; agents' posts need far less).
+const maxContent = 1 << 20
+
+// toHTML converts submitted content to HTML (sanitized later by Save).
 func toHTML(text, format string) (string, error) {
+	if len(text) > maxContent {
+		return "", fmt.Errorf("the content is larger than %d bytes", maxContent)
+	}
 	switch format {
 	case "", "markdown":
 		return render.MarkdownToHTML(text)
@@ -461,6 +468,12 @@ func (s *Server) createPost(ctx context.Context, req *mcp.CallToolRequest, in cr
 	if strings.TrimSpace(in.Title) == "" {
 		return nil, postOut{}, errors.New("title is required")
 	}
+	if err := checkSizes(in.Title, in.Excerpt, in.Tags); err != nil {
+		return nil, postOut{}, err
+	}
+	if err := s.checkRefs(c, in.Parent, in.FeaturedMedia); err != nil {
+		return nil, postOut{}, err
+	}
 	body, err := toHTML(in.Content, in.ContentFormat)
 	if err != nil {
 		return nil, postOut{}, err
@@ -481,6 +494,52 @@ func (s *Server) createPost(ctx context.Context, req *mcp.CallToolRequest, in cr
 	o, err := s.postOut(c, p, true, nil)
 	o.Note = statusNote(in.Status, p)
 	return nil, o, err
+}
+
+// checkSizes limits the small fields (the content is checked by toHTML).
+func checkSizes(title, excerpt string, tags []string) error {
+	if len(title) > 1000 {
+		return errors.New("the title is too long")
+	}
+	if len(excerpt) > 64<<10 {
+		return errors.New("the excerpt is too long")
+	}
+	if len(tags) > 100 {
+		return errors.New("too many tags")
+	}
+	return nil
+}
+
+// checkRefs verifies that a parent page and a featured image are ones the
+// user may see: published or their own.
+func (s *Server) checkRefs(c *call, parent, featured int64) error {
+	if parent > 0 {
+		p, err := db.GetPost(c.ctx, s.opts.DB.R, parent)
+		if err != nil || p.Type != db.TypePage || !visible(c.user, p) {
+			return fmt.Errorf("page %d does not exist", parent)
+		}
+	}
+	if featured > 0 && !s.mediaVisible(c, featured) {
+		return fmt.Errorf("attachment %d does not exist", featured)
+	}
+	return nil
+}
+
+// mediaVisible reports whether attachment id belongs to the user or to a
+// published post.
+func (s *Server) mediaVisible(c *call, id int64) bool {
+	a, err := db.GetPost(c.ctx, s.opts.DB.R, id)
+	if err != nil || a.Type != db.TypeAttachment {
+		return false
+	}
+	if a.AuthorID == c.user.ID {
+		return true
+	}
+	if a.ParentID == 0 {
+		return false
+	}
+	parent, err := db.GetPost(c.ctx, s.opts.DB.R, a.ParentID)
+	return err == nil && parent.Status == db.StatusPublish
 }
 
 // checkTerms verifies that ids are categories.
@@ -529,6 +588,26 @@ func (s *Server) updatePost(ctx context.Context, req *mcp.CallToolRequest, in up
 	if in.ExpectedModified != p.ModifiedGMT.UTC().Format(time.RFC3339) {
 		return nil, postOut{}, errors.New("the post was changed since you read it (modified " +
 			p.ModifiedGMT.UTC().Format(time.RFC3339) + "); call get_post again and redo your change")
+	}
+	var title, excerpt string
+	if in.Title != nil {
+		title = *in.Title
+	}
+	if in.Excerpt != nil {
+		excerpt = *in.Excerpt
+	}
+	if err := checkSizes(title, excerpt, in.Tags); err != nil {
+		return nil, postOut{}, err
+	}
+	var parent, featured int64
+	if in.Parent != nil && *in.Parent != p.ParentID {
+		parent = *in.Parent
+	}
+	if in.FeaturedMedia != nil && *in.FeaturedMedia != p.FeaturedMediaID {
+		featured = *in.FeaturedMedia
+	}
+	if err := s.checkRefs(c, parent, featured); err != nil {
+		return nil, postOut{}, err
 	}
 	pi := c.ed.InputFrom(c.ctx, p)
 	pi.KeepContent, pi.KeepExcerpt, pi.KeepTerms = true, true, true
@@ -740,6 +819,10 @@ func (s *Server) uploadMedia(ctx context.Context, req *mcp.CallToolRequest, in u
 	if !auth.Can(c.user, auth.CapUploadFiles) {
 		return nil, mediaOut{}, s.userError(content.ErrForbidden)
 	}
+	if (in.Alt != "" || in.Caption != "" || in.Title != "") && !auth.Can(c.user, auth.CapEditPosts) {
+		// Checked before storing the file, so a retry creates no duplicate.
+		return nil, mediaOut{}, errors.New("setting alt, caption or title needs the content:write scope; upload without them")
+	}
 	name := path.Base(strings.ReplaceAll(in.Filename, `\`, "/"))
 	if !uploadTypes[strings.ToLower(path.Ext(name))] {
 		return nil, mediaOut{}, errors.New("file type not allowed: upload JPEG, PNG, GIF, WebP or PDF")
@@ -841,7 +924,7 @@ func (s *Server) listMedia(ctx context.Context, req *mcp.CallToolRequest, in lis
 	per = min(per, 50)
 	page := max(in.Page, 1)
 	posts, media, total, err := db.AdminMedia(c.ctx, s.opts.DB.R, db.MediaQuery{Search: in.Search, Type: in.Type,
-		Limit: per, Offset: (page - 1) * per})
+		VisibleTo: c.user.ID, Limit: per, Offset: (page - 1) * per})
 	if err != nil {
 		return nil, listMediaOut{}, s.internal(err)
 	}

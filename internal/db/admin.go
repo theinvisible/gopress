@@ -34,8 +34,13 @@ func (aq AdminPostQuery) where() (string, []any) {
 	}
 	if s := strings.TrimSpace(aq.Search); s != "" {
 		like := "%" + escapeLike(s) + "%"
-		conds = append(conds, `(title LIKE ? ESCAPE '\' OR content LIKE ? ESCAPE '\' OR excerpt LIKE ? ESCAPE '\')`)
-		args = append(args, like, like, like)
+		if aq.VisibleTo > 0 { // the text of others' password protected posts is not searchable
+			conds = append(conds, `(title LIKE ? ESCAPE '\' OR ((password = '' OR author_id = ?) AND (content LIKE ? ESCAPE '\' OR excerpt LIKE ? ESCAPE '\')))`)
+			args = append(args, like, aq.VisibleTo, like, like)
+		} else {
+			conds = append(conds, `(title LIKE ? ESCAPE '\' OR content LIKE ? ESCAPE '\' OR excerpt LIKE ? ESCAPE '\')`)
+			args = append(args, like, like, like)
+		}
 	}
 	if len(aq.Month) == 6 {
 		conds = append(conds, "substr(date_local, 1, 4) = ? AND substr(date_local, 6, 2) = ?")
@@ -515,8 +520,11 @@ type MediaQuery struct {
 	Type       string // "image", "audio", "video", "document" (other), "" = all
 	Month      string // "YYYYMM" of the local upload date
 	Unattached bool
-	Limit      int
-	Offset     int
+	// VisibleTo limits the list to the user's own files and those attached
+	// to published posts (access tokens).
+	VisibleTo int64
+	Limit     int
+	Offset    int
 }
 
 // AdminMedia returns attachments (newest first) with their file details
@@ -546,6 +554,10 @@ func AdminMedia(ctx context.Context, q Querier, mq MediaQuery) ([]Post, map[int6
 	}
 	if mq.Unattached {
 		conds = append(conds, "parent_id = 0")
+	}
+	if mq.VisibleTo > 0 {
+		conds = append(conds, "(author_id = ? OR parent_id IN (SELECT id FROM posts WHERE status = 'publish'))")
+		args = append(args, mq.VisibleTo)
 	}
 	where := strings.Join(conds, " AND ")
 	var total int
