@@ -1,0 +1,9 @@
+{{define "main"}}
+	<div id="primary" class="site-content">
+		<div id="content" role="main">
+{{template "content-page" .Post}}
+{{.Comments}}
+		</div><!-- #content -->
+	</div><!-- #primary -->
+{{template "sidebar" .}}
+{{end}}

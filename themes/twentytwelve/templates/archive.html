@@ -1,0 +1,19 @@
+{{define "main"}}
+	<section id="primary" class="site-content">
+		<div id="content" role="main">
+{{- if .Posts}}
+			<header class="archive-header">
+				<h1 class="archive-title">{{.ArchiveTitle}}</h1>
+{{- if .ArchiveMeta}}
+				<div class="archive-meta">{{.ArchiveMeta}}</div>
+{{- end}}
+			</header><!-- .archive-header -->
+			{{.NavAbove}}
+			{{.AuthorInfo}}
+{{- range .Posts}}{{template "content" .}}{{end}}
+		{{.NavBelow}}
+{{- else}}{{template "content-none" .}}{{end}}
+		</div><!-- #content -->
+	</section><!-- #primary -->
+{{template "sidebar" .}}
+{{end}}

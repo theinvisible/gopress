@@ -1,0 +1,13 @@
+{{define "main"}}
+	<div id="primary" class="site-content">
+		<div id="content" role="main">
+{{template "content" .Post}}
+				<nav class="nav-single">
+					<h3 class="assistive-text">Post navigation</h3>
+					{{.SingleNav}}
+				</nav><!-- .nav-single -->
+{{.Comments}}
+		</div><!-- #content -->
+	</div><!-- #primary -->
+{{template "sidebar" .}}
+{{end}}

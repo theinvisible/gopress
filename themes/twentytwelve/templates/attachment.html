@@ -1,0 +1,35 @@
+{{define "main"}}
+	<div id="primary" class="site-content">
+		<div id="content" role="main">
+{{- with .Post}}
+			<article id="post-{{.ID}}" class="{{.Class}}">
+				<header class="entry-header">
+					<h1 class="entry-title">{{.Title}}</h1>
+					<footer class="entry-meta">
+						{{.AttachmentMeta}}
+					</footer><!-- .entry-meta -->
+					<nav id="image-navigation" class="navigation">
+						{{.ImageNav}}
+					</nav><!-- #image-navigation -->
+				</header><!-- .entry-header -->
+				<div class="entry-content">
+					<div class="entry-attachment">
+						<div class="attachment">
+							{{.Attachment}}
+{{- if .Caption}}
+							<div class="entry-caption">
+								{{.Caption}}
+							</div>
+{{- end}}
+						</div><!-- .attachment -->
+					</div><!-- .entry-attachment -->
+					<div class="entry-description">
+						{{.Content}}
+					</div><!-- .entry-description -->
+				</div><!-- .entry-content -->
+			</article><!-- #post -->
+{{- end}}
+{{.Comments}}
+		</div><!-- #content -->
+	</div><!-- #primary -->
+{{end}}

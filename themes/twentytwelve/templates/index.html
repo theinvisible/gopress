@@ -1,0 +1,11 @@
+{{define "main"}}
+	<div id="primary" class="site-content">
+		<div id="content" role="main">
+{{- if .Posts}}
+{{- range .Posts}}{{template "content" .}}{{end}}
+		{{.NavBelow}}
+{{- else}}{{template "content-none" .}}{{end}}
+		</div><!-- #content -->
+	</div><!-- #primary -->
+{{template "sidebar" .}}
+{{end}}

@@ -39,7 +39,8 @@ CREATE TABLE posts (
 	template          TEXT NOT NULL DEFAULT '',
 	mime_type         TEXT NOT NULL DEFAULT '',
 	featured_media_id INTEGER NOT NULL DEFAULT 0,
-	comment_count     INTEGER NOT NULL DEFAULT 0
+	comment_count     INTEGER NOT NULL DEFAULT 0,
+	guid              TEXT NOT NULL DEFAULT '' -- feed item id, kept from WordPress
 );
 CREATE INDEX posts_type_status_date ON posts (type, status, date_gmt DESC);
 CREATE INDEX posts_slug ON posts (slug, type);

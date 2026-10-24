@@ -64,6 +64,7 @@ type Post struct {
 	MimeType        string
 	FeaturedMediaID int64
 	CommentCount    int
+	GUID            string
 }
 
 type Term struct {

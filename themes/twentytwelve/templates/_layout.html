@@ -1,0 +1,45 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="{{.Lang}}">
+<head>
+<meta charset="{{.Charset}}" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{{.Title}}</title>
+<link rel="profile" href="https://gmpg.org/xfn/11" />
+{{.Head}}
+</head>
+<body class="{{.BodyClass}}">
+<div id="page" class="hfeed site">
+	<a class="screen-reader-text skip-link" href="#content">Skip to content</a>
+	<header id="masthead" class="site-header">
+		<hgroup>
+{{- if .SiteName}}
+			<h1 class="site-title"><a href="{{.HomeURL}}" rel="home"{{if .IsFront}} aria-current="page"{{end}}>{{.SiteName}}</a></h1>
+{{- end}}
+{{- if .SiteDescription}}
+			<h2 class="site-description">{{.SiteDescription}}</h2>
+{{- end}}
+		</hgroup>
+		<nav id="site-navigation" class="main-navigation">
+			<button class="menu-toggle">Menu</button>
+			{{.Menu}}
+		</nav><!-- #site-navigation -->
+	</header><!-- #masthead -->
+	<div id="main" class="wrapper">
+{{template "main" .}}
+	</div><!-- #main .wrapper -->
+	<footer id="colophon" role="contentinfo">
+		<div class="site-info">
+			{{.Credit}}
+		</div><!-- .site-info -->
+	</footer><!-- #colophon -->
+</div><!-- #page -->
+{{.FooterScripts}}
+</body>
+</html>
+{{end}}
+
+{{define "sidebar"}}{{if .Sidebar}}
+			<div id="secondary" class="widget-area" role="complementary">
+			{{.Sidebar}}
+		</div><!-- #secondary -->
+{{end}}{{end}}

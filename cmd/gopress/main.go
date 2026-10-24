@@ -11,13 +11,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"syscall"
 	"time"
 
 	"github.com/theinvisible/gopress/internal/buildinfo"
 	"github.com/theinvisible/gopress/internal/config"
+	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/site"
+	"github.com/theinvisible/gopress/internal/theme"
 	"github.com/theinvisible/gopress/internal/wpimport"
+	"github.com/theinvisible/gopress/themes"
 )
 
 const usage = `usage: gopress <command> [flags]
@@ -66,19 +71,55 @@ func cmdServe(args []string, stderr io.Writer) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg.RegisterFlags(fs)
+	baseURL := fs.String("base-url", os.Getenv("GOPRESS_BASE_URL"), "public base URL (default: the home option)")
+	cacheMB := fs.Int("cache-mb", 256, "page cache size in MiB (0 disables)")
+	trustProxy := fs.Bool("trust-proxy", os.Getenv("GOPRESS_TRUST_PROXY") == "1", "trust X-Real-Ip/X-Forwarded-For (behind a reverse proxy)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 
 	log := slog.New(slog.NewTextHandler(stderr, nil))
-	srv := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           newMux(),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		log.Error("data dir", "err", err)
+		return 1
+	}
+	secret, err := config.LoadOrCreateSecret(filepath.Join(cfg.DataDir, "secret.key"))
+	if err != nil {
+		log.Error("secret", "err", err)
+		return 1
+	}
+	d, err := db.Open(ctx, filepath.Join(cfg.DataDir, "gopress.db"))
+	if err != nil {
+		log.Error("open database", "err", err)
+		return 1
+	}
+	defer d.Close()
+	th, err := theme.Load(themes.FS, "twentytwelve")
+	if err != nil {
+		log.Error("load theme", "err", err)
+		return 1
+	}
+	public := site.New(d, th, site.Options{
+		BaseURL:    *baseURL,
+		UploadsDir: filepath.Join(cfg.DataDir, "uploads"),
+		Secret:     secret,
+		CacheBytes: int64(*cacheMB) << 20,
+		TrustProxy: *trustProxy,
+		Log:        log,
+	})
+
+	srv := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           site.SecurityHeaders(newMux(public)),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    64 << 10,
+	}
 
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
@@ -144,15 +185,12 @@ func cmdImportWP(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func newMux() *http.ServeMux {
+func newMux(public http.Handler) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		io.WriteString(w, "ok")
 	})
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		io.WriteString(w, "<!doctype html><title>GoPress</title><h1>GoPress</h1><p>Under construction.</p>")
-	})
+	mux.Handle("/", public)
 	return mux
 }

@@ -195,6 +195,37 @@ Plugins are bundled in the binary but can be deactivated and replaced by upload,
   - `comment_status_changed` → `submit-spam`/`submit-ham`.
 - **Dashboard widget** with counters.
 
+## Security (high priority)
+
+GoPress serves a public, internet-facing site. Security follows current best practice (OWASP ASVS 5, OWASP Top 10) in every milestone; each milestone ends with a security review recorded in the devlog.
+
+**Public site**
+- Treat all input as hostile: comment HTML sanitized with an allowlist (kses equivalent), output escaped by `html/template`, raw HTML only from trusted sources.
+- No path traversal or directory listings when serving uploads and theme assets; request body limits; strict timeouts on the HTTP server.
+- Security headers on every response: CSP without inline scripts (`script-src 'self'`), `frame-ancestors`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, HSTS behind TLS.
+- Comment spam: honeypot, signed time token, per-IP rate limit, link limit, Akismet plugin.
+- Only same-site redirects; no open redirects.
+- `xmlrpc.php` and pingback receiving removed (common attack surface).
+
+**Admin & login (M2)**
+- Passwords hashed with argon2id; WordPress hashes (phpass, `$wp$` bcrypt) verified once and rehashed on login.
+- Two-factor authentication: TOTP and passkeys (WebAuthn); recovery codes.
+- Login rate limiting and progressive lockout per IP and account; generic error messages (no user enumeration); constant-time comparisons.
+- Sessions: random 256-bit ids stored hashed, `__Host-` cookie with `Secure`, `HttpOnly`, `SameSite=Strict`; id rotation on login and privilege change; idle and absolute timeouts; logout everywhere.
+- CSRF tokens on every state-changing request plus `Origin`/`Sec-Fetch-Site` checks.
+- Re-authentication for sensitive actions (password, 2FA, users, plugin upload).
+- Role-based authorization checked server-side on every admin handler.
+- Audit log for logins, failed logins and admin changes.
+- Admin responses are never cached (`Cache-Control: no-store`).
+
+**Plugins (M3)**
+- WASM sandbox: no filesystem or network access except the host functions; HTTP only to allowlisted hosts; per-call timeout and memory limit; plugin zip uploads validated (size, paths, manifest).
+
+**Operations (M5)**
+- Run as non-root in a `FROM scratch` image, read-only root filesystem, data volume only.
+- Secrets (session/HMAC keys) generated on first start and stored in the data dir with 0600 permissions.
+- Dependency updates and `govulncheck` in the build.
+
 ## Milestones & checklists
 
 Legend: `[ ]` open · `[x]` done · `[~]` in progress
@@ -221,9 +252,12 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [ ] RSS feeds, sitemaps, robots.txt, canonical, search (FTS5)
 - [ ] Page cache (br/gzip, ETag), load test
 - [ ] Parity check against a local reference WordPress (`dev/parity`)
+- [ ] Security: headers/CSP, comment sanitizing, file serving hardening, server limits, security review
 
 ### M2 – Admin
-- [ ] Auth: login, sessions, CSRF, rate limit, WP hash verification + rehash
+- [ ] Auth: login, sessions, CSRF, rate limit + lockout, argon2id, WP hash verification + rehash (see Security)
+- [ ] 2FA: TOTP and passkeys (WebAuthn), recovery codes
+- [ ] Audit log, re-authentication for sensitive actions
 - [ ] Admin layout (menu, admin bar), dashboard
 - [ ] Posts/pages: list table, filters, bulk/row actions, duplicate, quick edit
 - [ ] Editor screen incl. side boxes, autosave, revisions
@@ -242,6 +276,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [ ] Shortcodes, widgets, routes, admin pages (form schema), on-demand assets, editor scripts
 - [ ] `pdk/go`, `gopress plugin-pack`, example plugin
 - [ ] Plugins admin: list, activate/deactivate, upload
+- [ ] Security review of the plugin sandbox and upload
 
 ### M4 – Plugins
 - [ ] foto-slider-lightbox: gallery admin, shortcode, assets, editor button, import of `fslb_gallery`
@@ -253,6 +288,7 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [ ] `gopress backup` (`VACUUM INTO` + tar of the uploads)
 - [ ] Staging `new.hadler.me` behind Traefik
 - [ ] URL parity crawl and visual comparison with live
+- [ ] Hardening: non-root, read-only rootfs, secrets in data dir, `govulncheck`
 - [ ] Cutover: switch the router, stop (not delete) the WP containers
 
 ## Verification

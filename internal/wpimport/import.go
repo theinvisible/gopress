@@ -293,15 +293,10 @@ func (im *importer) importTerms(ctx context.Context) error {
 	return rows.Err()
 }
 
-type wpPost struct {
-	db.Post
-	guid string
-}
-
 func (im *importer) importPosts(ctx context.Context) error {
 	rows, err := im.src.QueryContext(ctx, `SELECT ID, post_type, post_status, post_name, post_parent, post_author,
 		post_title, post_content, post_excerpt, post_date, post_date_gmt, post_modified, post_modified_gmt,
-		comment_status, ping_status, post_password, menu_order, post_mime_type
+		comment_status, ping_status, post_password, menu_order, post_mime_type, guid
 		FROM `+im.table("posts")+`
 		WHERE (post_type IN ('post', 'page') AND post_status IN ('publish', 'draft', 'pending', 'private', 'future'))
 		   OR (post_type = 'attachment')
@@ -315,7 +310,7 @@ func (im *importer) importPosts(ctx context.Context) error {
 		var date, dateGMT, mod, modGMT string
 		if err := rows.Scan(&p.ID, &p.Type, &p.Status, &p.Slug, &p.ParentID, &p.AuthorID, &p.Title, &p.Content,
 			&p.Excerpt, &date, &dateGMT, &mod, &modGMT, &p.CommentStatus, &p.PingStatus, &p.Password,
-			&p.MenuOrder, &p.MimeType); err != nil {
+			&p.MenuOrder, &p.MimeType, &p.GUID); err != nil {
 			return err
 		}
 		p.Date, p.DateGMT = parseTime(date), parseTime(dateGMT)
@@ -576,6 +571,13 @@ func (im *importer) importWidgets(ctx context.Context) error {
 				instances[typ], _ = opt("widget_" + typ).(map[string]any)
 			}
 			settings, _ := instances[typ][num].(map[string]any)
+			if content, ok := settings["content"].(string); ok && typ == "block" {
+				converted, warnings := convertContent(content, im.home)
+				for _, w := range warnings {
+					im.rep.warn("widget %s: %s", id, w)
+				}
+				settings["content"] = converted
+			}
 			if err := db.InsertWidget(ctx, im.tx, &db.Widget{ID: id, Sidebar: sidebar, Position: pos, Type: typ, Settings: settings}); err != nil {
 				return err
 			}

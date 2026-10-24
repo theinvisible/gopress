@@ -1,0 +1,66 @@
+{{define "content"}}
+	<article id="post-{{.ID}}" class="{{.Class}}">
+{{- if .Featured}}
+		<div class="featured-post">
+			Featured post
+		</div>
+{{- end}}
+		<header class="entry-header">
+			{{.Thumbnail}}
+{{- if .Summary}}
+			<h1 class="entry-title">
+				<a href="{{.URL}}" rel="bookmark">{{.Title}}</a>
+			</h1>
+{{- else if .URL}}
+			<h1 class="entry-title">
+				<a href="{{.URL}}" rel="bookmark">{{.Title}}</a>
+			</h1>
+{{- else}}
+			<h1 class="entry-title">{{.Title}}</h1>
+{{- end}}
+{{- if .CommentsLink}}
+			<div class="comments-link">
+				{{.CommentsLink}}
+			</div><!-- .comments-link -->
+{{- end}}
+		</header><!-- .entry-header -->
+{{- if .Summary}}
+		<div class="entry-summary">
+			{{.Summary}}
+		</div><!-- .entry-summary -->
+{{- else}}
+		<div class="entry-content">
+			{{.Content}}
+		</div><!-- .entry-content -->
+{{- end}}
+		<footer class="entry-meta">
+			{{.Meta}}
+		</footer><!-- .entry-meta -->
+	</article><!-- #post -->
+{{end}}
+
+{{define "content-page"}}
+	<article id="post-{{.ID}}" class="{{.Class}}">
+		<header class="entry-header">
+			{{.Thumbnail}}
+			<h1 class="entry-title">{{.Title}}</h1>
+		</header>
+		<div class="entry-content">
+			{{.Content}}
+		</div><!-- .entry-content -->
+		<footer class="entry-meta">
+		</footer><!-- .entry-meta -->
+	</article><!-- #post -->
+{{end}}
+
+{{define "content-none"}}
+	<article id="post-0" class="post no-results not-found">
+		<header class="entry-header">
+			<h1 class="entry-title">Nothing Found</h1>
+		</header>
+		<div class="entry-content">
+			<p>Apologies, but no results were found. Perhaps searching will help find a related post.</p>
+			{{.SearchForm}}
+		</div><!-- .entry-content -->
+	</article><!-- #post-0 -->
+{{end}}

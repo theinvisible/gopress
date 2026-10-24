@@ -1,0 +1,25 @@
+{{define "main"}}
+	<section id="primary" class="site-content">
+		<div id="content" role="main">
+{{- if .Posts}}
+			<header class="page-header">
+				<h1 class="page-title">Search Results for: <span>{{.SearchQuery}}</span></h1>
+			</header>
+			{{.NavAbove}}
+{{- range .Posts}}{{template "content" .}}{{end}}
+		{{.NavBelow}}
+{{- else}}
+			<article id="post-0" class="post no-results not-found">
+				<header class="entry-header">
+					<h1 class="entry-title">Nothing Found</h1>
+				</header>
+				<div class="entry-content">
+					<p>Sorry, but nothing matched your search criteria. Please try again with some different keywords.</p>
+					{{.SearchForm}}
+				</div><!-- .entry-content -->
+			</article><!-- #post-0 -->
+{{- end}}
+		</div><!-- #content -->
+	</section><!-- #primary -->
+{{template "sidebar" .}}
+{{end}}
