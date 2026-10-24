@@ -61,6 +61,34 @@ type Settings struct {
 
 	AttachmentPages bool
 	ThemeMods       map[string]any
+
+	// Media.
+	ImageSizes       []ImageSize // generated for uploaded images
+	UploadsYearMonth bool        // store uploads in YYYY/MM folders
+	UploadMaxBytes   int64
+}
+
+// ImageSize is a registered image size.
+type ImageSize struct {
+	Name          string
+	Width, Height int
+	Crop          bool
+}
+
+// Image size defaults (WordPress) and the theme's post thumbnail size
+// (Twenty Twelve: set_post_thumbnail_size( 624, 9999 )).
+const (
+	DefaultUploadMax   = 64 << 20
+	postThumbnailWidth = 624
+)
+
+// ImageSizeLimits returns the sizes as name → [width, height].
+func (s *Settings) ImageSizeLimits() map[string][2]int {
+	m := make(map[string][2]int, len(s.ImageSizes))
+	for _, sz := range s.ImageSizes {
+		m[sz.Name] = [2]int{sz.Width, sz.Height}
+	}
+	return m
 }
 
 // LoadSettings reads the options table.
@@ -131,6 +159,20 @@ func LoadSettings(ctx context.Context, q db.Querier) (*Settings, error) {
 		}
 	} else if off, err := strconv.ParseFloat(o.str("gmt_offset", "0"), 64); err == nil && off != 0 {
 		s.Loc = time.FixedZone("", int(off*3600))
+	}
+	s.ImageSizes = []ImageSize{
+		{"thumbnail", o.int("thumbnail_size_w", 150), o.int("thumbnail_size_h", 150), o.bool("thumbnail_crop", true)},
+		{"medium", o.int("medium_size_w", 300), o.int("medium_size_h", 300), false},
+		{"medium_large", o.int("medium_large_size_w", 768), o.int("medium_large_size_h", 0), false},
+		{"large", o.int("large_size_w", 1024), o.int("large_size_h", 1024), false},
+		{"1536x1536", 1536, 1536, false},
+		{"2048x2048", 2048, 2048, false},
+		{"post-thumbnail", postThumbnailWidth, 9999, false},
+	}
+	s.UploadsYearMonth = o.bool("uploads_use_yearmonth_folders", true)
+	s.UploadMaxBytes = int64(o.int("upload_max_size", DefaultUploadMax))
+	if s.UploadMaxBytes <= 0 || s.UploadMaxBytes > 1<<30 {
+		s.UploadMaxBytes = DefaultUploadMax
 	}
 	if mods, ok := o["theme_mods"].(map[string]any); ok {
 		s.ThemeMods = mods

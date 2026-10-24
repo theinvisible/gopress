@@ -20,6 +20,7 @@ import (
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
 	"github.com/theinvisible/gopress/internal/mail"
+	"github.com/theinvisible/gopress/internal/media"
 	"github.com/theinvisible/gopress/internal/site"
 	"github.com/theinvisible/gopress/internal/theme"
 	"github.com/theinvisible/gopress/themes"
@@ -37,6 +38,7 @@ type testEnv struct {
 	mailDir string
 	pub     *site.Site
 	cs      *content.Service
+	uploads string
 }
 
 // mails delivers the queued mail and returns the messages sent so far
@@ -91,7 +93,8 @@ func newEnv(t *testing.T) *testEnv {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	pub := site.New(d, th, site.Options{BaseURL: home, Secret: []byte("k"), Log: log})
+	e.uploads = t.TempDir()
+	pub := site.New(d, th, site.Options{BaseURL: home, Secret: []byte("k"), Log: log, UploadsDir: e.uploads})
 	e.mailDir = t.TempDir()
 	e.mail = mail.New(d, mail.Options{Secret: []byte("0123456789abcdef0123456789abcdef"), Home: func() string { return home },
 		Sink: e.mailDir, Log: log})
@@ -99,6 +102,12 @@ func newEnv(t *testing.T) *testEnv {
 		Notify: func(ctx context.Context, to string, data map[string]any) { e.mail.Enqueue(ctx, to, "security", data) }})
 	cs := content.New(d, pub, e.auth, log)
 	cs.SetMailer(e.mail)
+	store, err := media.Open(e.uploads)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	cs.SetMediaStore(store)
 	pub.SetCommentNotifier(cs.NotifyComment)
 	e.pub, e.cs = pub, cs
 	ad, err := New(d, e.auth, pub, cs, Options{Log: log, Mail: e.mail, MailSink: true})

@@ -113,6 +113,7 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	a.registerSettings(mux)
 	a.registerUsers(mux)
 	a.registerTerms(mux)
+	a.registerMedia(mux)
 
 	mux.Handle("/admin/", a.page(auth.CapRead, func(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 		return errNotFound
@@ -215,7 +216,11 @@ func (a *Admin) serve(w http.ResponseWriter, r *http.Request, allow func(*auth.C
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
+		limit := int64(maxFormBytes)
+		if r.URL.Path == "/admin/api/media" { // uploads
+			limit = c.settings.UploadMaxBytes + 16<<10 // multipart overhead
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		if !a.auth.CheckCSRF(r, cur) {
 			a.fail(w, r, c, errBadCSRF)
 			return

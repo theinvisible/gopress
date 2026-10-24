@@ -62,7 +62,8 @@ type state struct {
 	pipe  *render.Pipeline
 	perma *permalinkMatcher
 	// uploads is the set of servable files below the uploads directory.
-	uploads map[string]bool
+	uploads    map[string]bool
+	sizeLimits map[string][2]int
 }
 
 // New creates the site handler.
@@ -110,13 +111,14 @@ func (s *Site) current(ctx context.Context) (*state, error) {
 	pipe := render.NewPipeline()
 	pipe.UseSmilies = settings.UseSmilies
 	st := &state{
-		gen:     gen,
-		s:       settings,
-		ix:      ix,
-		links:   &Links{home: settings.Home, s: settings, ix: ix},
-		pipe:    pipe,
-		perma:   newPermalinkMatcher(settings.Permalink),
-		uploads: uploads,
+		gen:        gen,
+		s:          settings,
+		ix:         ix,
+		links:      &Links{home: settings.Home, s: settings, ix: ix},
+		pipe:       pipe,
+		perma:      newPermalinkMatcher(settings.Permalink),
+		uploads:    uploads,
+		sizeLimits: settings.ImageSizeLimits(),
 	}
 	s.state.Store(st)
 	s.cache.reset(gen)

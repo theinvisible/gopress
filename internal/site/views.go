@@ -43,7 +43,7 @@ type commenter struct {
 
 func newRequest(s *Site, st *state, r *http.Request) *request {
 	rq := &request{site: s, st: st, r: r, ctx: r.Context()}
-	rq.env = &render.Env{Ctx: r.Context(), Q: s.db.R, Links: st.links}
+	rq.env = &render.Env{Ctx: r.Context(), Q: s.db.R, Links: st.links, SizeLimits: st.sizeLimits}
 	return rq
 }
 

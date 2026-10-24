@@ -15,6 +15,7 @@ import (
 
 	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/media"
 	"github.com/theinvisible/gopress/internal/render"
 	"github.com/theinvisible/gopress/internal/site"
 )
@@ -27,12 +28,13 @@ type Site interface {
 
 // Service performs content changes.
 type Service struct {
-	db   *db.DB
-	site Site
-	auth *auth.Service
-	log  *slog.Logger
-	now  func() time.Time
-	mail Mailer
+	db    *db.DB
+	site  Site
+	auth  *auth.Service
+	log   *slog.Logger
+	now   func() time.Time
+	mail  Mailer
+	media *media.Store
 }
 
 // New creates the service.

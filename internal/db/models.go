@@ -98,6 +98,7 @@ type Media struct {
 	Filesize int64
 	Alt      string
 	Sizes    map[string]MediaSize
+	Original string // unscaled original of a -scaled image, same directory
 }
 
 type Comment struct {

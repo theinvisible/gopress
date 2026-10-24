@@ -46,7 +46,6 @@ func (a *Admin) registerPosts(mux *http.ServeMux) {
 		mux.Handle("GET "+pt.Base+"{id}/revisions", a.page(editCap, a.withType(pt, a.revisionsPage)))
 	}
 	mux.Handle("POST /admin/api/autosave", a.page(auth.CapEditPosts+"|"+auth.CapEditPages, a.apiAutosave))
-	mux.Handle("GET /admin/api/media", a.page(auth.CapUploadFiles, a.apiMedia))
 	mux.Handle("GET /admin/api/tags", a.page(auth.CapEditPosts, a.apiTags))
 	mux.Handle("POST /admin/api/categories", a.page(auth.CapManageCategories, a.apiAddCategory))
 }
@@ -539,6 +538,8 @@ func (a *Admin) contentError(err error) error {
 		return errForbidden
 	case errors.Is(err, content.ErrInvalid):
 		return badRequest("Invalid request.")
+	case errors.Is(err, content.ErrNotFound):
+		return errNotFound
 	case errors.As(err, &ve):
 		return badRequest(ve.Msg)
 	}
@@ -1145,55 +1146,6 @@ func (a *Admin) apiAutosave(w http.ResponseWriter, r *http.Request, c *reqCtx) e
 		return a.contentError(err)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"post_id": p.ID, "saved": "autosave"})
-	return nil
-}
-
-type mediaItem struct {
-	ID      int64             `json:"id"`
-	Title   string            `json:"title"`
-	Alt     string            `json:"alt"`
-	Caption string            `json:"caption"`
-	Mime    string            `json:"mime"`
-	Width   int               `json:"width"`
-	Height  int               `json:"height"`
-	URL     string            `json:"url"`
-	Thumb   string            `json:"thumb"`
-	Page    string            `json:"page"`
-	Sizes   map[string]sizeJS `json:"sizes"`
-}
-
-type sizeJS struct {
-	URL    string `json:"url"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-}
-
-// GET /admin/api/media?s=&page=&images=1
-func (a *Admin) apiMedia(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
-	q := r.URL.Query()
-	page := max(1, int(atoi64(q.Get("page"))))
-	const n = 40
-	posts, media, total, err := db.AdminMedia(r.Context(), a.db.R, db.MediaQuery{Search: q.Get("s"),
-		ImagesOnly: q.Get("images") == "1", Limit: n, Offset: (page - 1) * n})
-	if err != nil {
-		return err
-	}
-	items := make([]mediaItem, 0, len(posts))
-	for i := range posts {
-		p := &posts[i]
-		m := media[p.ID]
-		if m == nil {
-			continue
-		}
-		it := mediaItem{ID: p.ID, Title: p.Title, Alt: m.Alt, Caption: p.Excerpt, Mime: m.Mime, Width: m.Width,
-			Height: m.Height, URL: c.links.UploadURL(m.File), Thumb: mediaURL(c, m, "thumbnail"), Page: c.links.PostURL(p),
-			Sizes: map[string]sizeJS{"full": {c.links.UploadURL(m.File), m.Width, m.Height}}}
-		for name, s := range m.Sizes {
-			it.Sizes[name] = sizeJS{mediaURL(c, m, name), s.Width, s.Height}
-		}
-		items = append(items, it)
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total, "pages": (total + n - 1) / n})
 	return nil
 }
 

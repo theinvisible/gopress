@@ -507,6 +507,9 @@ func PendingCommentCounts(ctx context.Context, q Querier, postIDs []int64) (map[
 type MediaQuery struct {
 	Search     string
 	ImagesOnly bool
+	Type       string // "image", "audio", "video", "document" (other), "" = all
+	Month      string // "YYYYMM" of the local upload date
+	Unattached bool
 	Limit      int
 	Offset     int
 }
@@ -521,8 +524,23 @@ func AdminMedia(ctx context.Context, q Querier, mq MediaQuery) ([]Post, map[int6
 		conds = append(conds, `(title LIKE ? ESCAPE '\' OR excerpt LIKE ? ESCAPE '\' OR id IN (SELECT post_id FROM media WHERE file LIKE ? ESCAPE '\' OR alt LIKE ? ESCAPE '\'))`)
 		args = append(args, like, like, like, like)
 	}
-	if mq.ImagesOnly {
+	if mq.ImagesOnly || mq.Type == "image" {
 		conds = append(conds, "mime_type LIKE 'image/%'")
+	}
+	switch mq.Type {
+	case "audio":
+		conds = append(conds, "mime_type LIKE 'audio/%'")
+	case "video":
+		conds = append(conds, "mime_type LIKE 'video/%'")
+	case "document":
+		conds = append(conds, "mime_type NOT LIKE 'image/%' AND mime_type NOT LIKE 'audio/%' AND mime_type NOT LIKE 'video/%'")
+	}
+	if len(mq.Month) == 6 {
+		conds = append(conds, "substr(date_local, 1, 4) = ? AND substr(date_local, 6, 2) = ?")
+		args = append(args, mq.Month[:4], mq.Month[4:])
+	}
+	if mq.Unattached {
+		conds = append(conds, "parent_id = 0")
 	}
 	where := strings.Join(conds, " AND ")
 	var total int

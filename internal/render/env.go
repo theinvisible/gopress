@@ -22,6 +22,8 @@ type Env struct {
 	Links  Linker
 	Post   *db.Post // post whose content is rendered, may be nil
 	IsFeed bool
+	// SizeLimits are the configured image sizes (name → width, height).
+	SizeLimits map[string][2]int
 
 	galleryInstance int
 	contentImages   int // images seen by FilterContentTags on this page

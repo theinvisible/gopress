@@ -10,6 +10,7 @@ require (
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/microcosm-cc/bluemonday v1.0.27
 	golang.org/x/crypto v0.58.0
+	golang.org/x/image v0.47.0
 	golang.org/x/net v0.61.0
 	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0

@@ -9,15 +9,21 @@ import (
 	"github.com/theinvisible/gopress/internal/db"
 )
 
-// imageSizeLimits are the configured intermediate sizes (width, height, crop).
-var imageSizeLimits = map[string][2]int{
+// defaultSizeLimits are the WordPress default intermediate sizes (width,
+// height), used when Env.SizeLimits is not set.
+var defaultSizeLimits = map[string][2]int{
 	"thumbnail": {150, 150}, "medium": {300, 300}, "medium_large": {768, 0}, "large": {1024, 1024},
 	"post-thumbnail": {624, 9999},
 }
 
 // attachmentImageSrc is image_downsize(): the file and dimensions of an
-// attachment in the requested size, falling back to the full image.
-func attachmentImageSrc(m *db.Media, size string) (file string, w, h int) {
+// attachment in the requested size, falling back to the full image
+// scaled to the size's limits.
+func attachmentImageSrc(env *Env, m *db.Media, size string) (file string, w, h int) {
+	limits := defaultSizeLimits
+	if env != nil && env.SizeLimits != nil {
+		limits = env.SizeLimits
+	}
 	dir := ""
 	if i := strings.LastIndexByte(m.File, '/'); i >= 0 {
 		dir = m.File[:i+1]
@@ -26,7 +32,7 @@ func attachmentImageSrc(m *db.Media, size string) (file string, w, h int) {
 		return dir + s.File, s.Width, s.Height
 	}
 	w, h = m.Width, m.Height
-	if lim, ok := imageSizeLimits[size]; ok && size != "full" {
+	if lim, ok := limits[size]; ok && size != "full" {
 		w, h = constrainDimensions(w, h, lim[0], lim[1])
 	}
 	return m.File, w, h
@@ -35,7 +41,7 @@ func attachmentImageSrc(m *db.Media, size string) (file string, w, h int) {
 // AttachmentImage is wp_get_attachment_image() for image attachments.
 // extra attributes are appended after alt (e.g. aria-describedby).
 func AttachmentImage(env *Env, att *db.Post, m *db.Media, size string, extra map[string]string) string {
-	file, w, h := attachmentImageSrc(m, size)
+	file, w, h := attachmentImageSrc(env, m, size)
 	if file == "" {
 		return ""
 	}

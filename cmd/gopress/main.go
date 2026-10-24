@@ -25,6 +25,7 @@ import (
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
 	"github.com/theinvisible/gopress/internal/mail"
+	"github.com/theinvisible/gopress/internal/media"
 	"github.com/theinvisible/gopress/internal/site"
 	"github.com/theinvisible/gopress/internal/theme"
 	"github.com/theinvisible/gopress/internal/wpimport"
@@ -171,6 +172,13 @@ func cmdServe(args []string, stderr io.Writer) int {
 	})
 	contentSvc := content.New(d, public, authSvc, log)
 	contentSvc.SetMailer(mailSvc)
+	store, err := media.Open(filepath.Join(cfg.DataDir, "uploads"))
+	if err != nil {
+		log.Error("uploads", "err", err)
+		return 1
+	}
+	defer store.Close()
+	contentSvc.SetMediaStore(store)
 	public.SetCommentNotifier(contentSvc.NotifyComment)
 	adm, err := admin.New(d, authSvc, public, contentSvc, admin.Options{Log: log, Mail: mailSvc, MailSink: *mailSink != ""})
 	if err != nil {

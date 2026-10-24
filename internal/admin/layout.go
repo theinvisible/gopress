@@ -109,6 +109,11 @@ func (a *Admin) menu(u *db.User, screen string, pending int) []menuItem {
 			{ID: "pages-new", Label: "Add Page", URL: "/admin/pages/new"},
 		}})
 	}
+	if auth.Can(u, auth.CapUploadFiles) {
+		m = append(m, menuItem{ID: "media", Label: "Media", Icon: "admin-media", URL: "/admin/media/", Sub: []subItem{
+			{ID: "media-library", Label: "Library", URL: "/admin/media/"},
+		}})
+	}
 	if auth.Can(u, auth.CapModerateComments) {
 		m = append(m, menuItem{ID: "comments", Label: "Comments", Icon: "admin-comments", URL: "/admin/comments/", Badge: pending})
 	}
