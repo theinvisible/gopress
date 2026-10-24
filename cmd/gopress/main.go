@@ -33,7 +33,7 @@ commands:
   serve        run the web server
   import-wp    import a WordPress site (M1)
   backup       create a backup of the data directory (M5)
-  user         manage users (M2)
+  user         manage users and reset passwords or two-factor authentication
   plugin-pack  build a plugin .zip (M3)
   version      print version information
 `
@@ -56,7 +56,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	case "import-wp":
 		return cmdImportWP(rest, stdout, stderr)
-	case "backup", "user", "plugin-pack":
+	case "user":
+		return cmdUser(rest, os.Stdin, stdout, stderr)
+	case "backup", "plugin-pack":
 		fmt.Fprintf(stderr, "gopress %s: not implemented yet\n", cmd)
 		return 2
 	case "help", "-h", "--help":
