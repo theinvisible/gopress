@@ -141,9 +141,22 @@ func (s *Service) lockIfNeeded(ctx context.Context, netKey, acct string, n1, n2 
 func secs(d time.Duration) int64 { return int64(d / time.Second) }
 
 // UnlockUser clears all login and second-factor counters of a user
-// (CLI unlock, password reset).
+// (CLI and admin unlock, new password set by an administrator).
 func (s *Service) UnlockUser(ctx context.Context, userID int64) error {
 	return UnlockUser(ctx, s.db, userID)
+}
+
+// UnlockPassword lifts only the password locks of a user (after a
+// password reset by email link): proving control of the mailbox must not
+// reset the second-factor throttling.
+func UnlockPassword(ctx context.Context, d *db.DB, userID int64) error {
+	id := strconv.FormatInt(userID, 10)
+	for _, prefix := range []string{"u:" + id + "|", "u:" + id} {
+		if err := db.ClearAttemptsPrefix(ctx, d.W, prefix); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // UnlockUser clears all login and second-factor counters of a user.

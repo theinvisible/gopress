@@ -114,7 +114,12 @@ func (s *Service) SaveConfig(ctx context.Context, c *Config, password string, ke
 		return err
 	}
 	if keep {
-		if old, err := s.Config(ctx); err == nil && old != nil {
+		if old, err := s.Config(ctx); err == nil && old != nil && old.PasswordEnc != "" {
+			// The stored password only goes to the server it was entered
+			// for: a changed server needs it again.
+			if old.Host != c.Host || old.Port != c.Port || old.Security != c.Security || old.User != c.User {
+				return errors.New("Please enter the password again when you change the server, port, security or username.")
+			}
 			c.PasswordEnc = old.PasswordEnc
 		}
 	} else {
@@ -201,6 +206,12 @@ func (s *Service) render(name string, data Data) (subject, body string, err erro
 // Enqueue renders template name for to and queues it. Invalid addresses
 // are an error; delivery problems are not (they are retried).
 func (s *Service) Enqueue(ctx context.Context, to, name string, data Data) error {
+	return s.EnqueueUntil(ctx, to, name, data, time.Time{})
+}
+
+// EnqueueUntil queues a message with a one-time link that expires at
+// expires: afterwards it is neither sent nor kept.
+func (s *Service) EnqueueUntil(ctx context.Context, to, name string, data Data, expires time.Time) error {
 	to, err := ParseAddress(strings.TrimSpace(to))
 	if err != nil {
 		return err
@@ -210,7 +221,11 @@ func (s *Service) Enqueue(ctx context.Context, to, name string, data Data) error
 		return err
 	}
 	now := s.now().Unix()
-	if err := db.EnqueueMail(ctx, s.db.W, &db.QueuedMail{To: to, Subject: subject, Body: body, Created: now, NextTry: now}); err != nil {
+	var exp int64
+	if !expires.IsZero() {
+		exp = expires.Unix()
+	}
+	if err := db.EnqueueMail(ctx, s.db.W, &db.QueuedMail{To: to, Subject: subject, Body: body, Created: now, NextTry: now, Expires: exp}); err != nil {
 		return err
 	}
 	s.Wake()
@@ -259,7 +274,7 @@ func (s *Service) Run(ctx context.Context) {
 // Flush delivers the messages that are due now.
 func (s *Service) Flush(ctx context.Context) {
 	now := s.now()
-	if err := db.PruneMail(ctx, s.db.W, now.Add(-keepMail).Unix()); err != nil {
+	if err := db.PruneMail(ctx, s.db.W, now.Add(-keepMail).Unix(), now.Unix()); err != nil {
 		s.opts.Log.Error("prune mail", "err", err)
 	}
 	if !s.Ready(ctx) {

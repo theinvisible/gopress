@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"html"
+	"math"
 	"net/http"
 	"regexp"
 	"sort"
@@ -385,7 +386,7 @@ func (a *Admin) optionsSave(screen string) handler {
 				if tz == "UTC" {
 					off, err = 0, nil
 				}
-				if err != nil || off < -12 || off > 14 {
+				if err != nil || math.IsNaN(off) || math.IsInf(off, 0) || off < -12 || off > 14 {
 					f.fail("Please choose a valid time zone.")
 				}
 				f.vals["timezone_string"], f.vals["gmt_offset"] = "", strconv.FormatFloat(off, 'f', -1, 64)
@@ -422,8 +423,9 @@ func (a *Admin) optionsSave(screen string) handler {
 					if err != nil {
 						return err
 					}
-					if err := a.mail.Enqueue(ctx, email, "email_confirm", mail.Data{"Email": email, "Valid": "48 hours",
-						"Link": strings.TrimRight(a.auth.Home(), "/") + "/admin/settings/general/confirm-email?token=" + tok}); err != nil {
+					if err := a.mail.EnqueueUntil(ctx, email, "email_confirm", mail.Data{"Email": email, "Valid": "48 hours",
+						"Link": strings.TrimRight(a.auth.Home(), "/") + "/admin/settings/general/confirm-email?token=" + tok},
+						time.Now().Add(auth.AdminEmailTTL)); err != nil {
 						return err
 					}
 					f.vals["new_admin_email"] = email
@@ -589,7 +591,13 @@ func contains(list []string, s string) bool {
 // GET /admin/settings/general/confirm-email?token=…
 func (a *Admin) confirmAdminEmail(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 	ctx := r.Context()
-	_, tok, err := a.auth.UseUserToken(ctx, r.URL.Query().Get("token"), auth.TokenAdminEmail)
+	tu, tok, err := a.auth.CheckUserToken(ctx, r.URL.Query().Get("token"), auth.TokenAdminEmail)
+	if err == nil && tu.ID != c.user.ID {
+		return &httpError{http.StatusForbidden, "Please confirm the change while logged in as the administrator who requested it."}
+	}
+	if err == nil {
+		_, tok, err = a.auth.UseUserToken(ctx, r.URL.Query().Get("token"), auth.TokenAdminEmail)
+	}
 	if err != nil {
 		return &httpError{http.StatusNotFound, "This confirmation link is invalid or has expired."}
 	}

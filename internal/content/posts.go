@@ -28,13 +28,14 @@ type Site interface {
 
 // Service performs content changes.
 type Service struct {
-	db    *db.DB
-	site  Site
-	auth  *auth.Service
-	log   *slog.Logger
-	now   func() time.Time
-	mail  Mailer
-	media *media.Store
+	db      *db.DB
+	site    Site
+	auth    *auth.Service
+	log     *slog.Logger
+	now     func() time.Time
+	mail    Mailer
+	media   *media.Store
+	uploads uploadLimiter
 }
 
 // New creates the service.

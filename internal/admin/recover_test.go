@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -200,4 +201,23 @@ func cookieReq(v string) *http.Request {
 	r := httptest.NewRequest("GET", home+"/admin/", nil)
 	r.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: v})
 	return r
+}
+
+// Review fix: a password reset by email link keeps the second-factor
+// lock (control of the mailbox is not a second factor).
+func TestResetKeepsSecondFactorLock(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	u := e.users[auth.RoleEditor]
+	key := "mfa:" + strconv.FormatInt(u.ID, 10)
+	db.SetLoginFailure(ctx, e.d.W, key, db.LoginFailure{Count: 10, LockedUntil: time.Now().Add(time.Hour).Unix(), Last: time.Now().Unix()})
+	tok, _ := e.auth.NewUserToken(ctx, u, auth.TokenReset, auth.ResetTTL, "")
+	b := e.browser()
+	b.req("GET", "/login/reset/"+tok, nil)
+	if res := b.form("/login/reset", "/login/reset", url.Values{"pass1": {"another long passphrase"}, "pass2": {"another long passphrase"}}); res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("reset: %d", res.StatusCode)
+	}
+	if f, _ := db.GetLoginFailure(ctx, e.d.R, key); f.LockedUntil == 0 {
+		t.Error("second-factor lock lifted by the reset")
+	}
 }

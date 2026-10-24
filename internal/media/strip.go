@@ -65,7 +65,17 @@ func stripJPEG(data []byte) (out []byte, icc [][]byte, err error) {
 			if keep {
 				icc = append(icc, seg)
 			}
-		case marker == 0xE0 || marker == 0xEE: // JFIF, Adobe
+		case marker == 0xE0:
+			// JFIF header without its embedded thumbnail (which may show
+			// the uncropped original); JFXX extensions are dropped.
+			keep = false
+			if bytes.HasPrefix(payload, []byte("JFIF\x00")) && len(payload) >= 14 {
+				jfif := append([]byte{0xFF, 0xE0, 0, 16}, payload[:14]...)
+				jfif[4+12], jfif[4+13] = 0, 0
+				b.Write(jfif)
+			}
+		case marker == 0xEE: // Adobe color transform
+			keep = bytes.HasPrefix(payload, []byte("Adobe"))
 		case marker >= 0xE1 && marker <= 0xEF, marker == 0xFE: // other APPn, COM
 			keep = false
 		}
@@ -172,12 +182,13 @@ func stripWebP(data []byte) ([]byte, error) {
 		chunk := append([]byte(nil), data[pos:end]...)
 		pos = end
 		switch typ {
-		case "EXIF", "XMP ":
-			continue
+		case "VP8 ", "VP8L", "ALPH", "ANIM", "ANMF", "ICCP":
 		case "VP8X":
 			if len(chunk) > 8 {
 				chunk[8] &^= 0x08 | 0x04 // EXIF and XMP flags
 			}
+		default: // EXIF, XMP and unknown chunks
+			continue
 		}
 		body.Write(chunk)
 	}

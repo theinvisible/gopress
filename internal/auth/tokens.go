@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/theinvisible/gopress/internal/db"
@@ -107,9 +108,17 @@ func (s *Service) AllowLostPassword(r *http.Request) bool {
 	return s.lostLimit.allow(httpx.NetKey(s.ClientIP(r)), s.now())
 }
 
-// ResetRequestTooSoon reports whether a reset link was sent to the user
-// shortly before (a pending token newer than lostAccountGap).
+// lostPerDay is the most reset mails one account gets per day.
+const lostPerDay = 5
+
+// ResetRequestTooSoon reports whether no reset link may be sent now: one
+// was sent shortly before (a pending token newer than lostAccountGap), or
+// the account got lostPerDay links already (mail flooding).
 func (s *Service) ResetRequestTooSoon(ctx context.Context, userID int64) bool {
-	ok, err := db.HasUserToken(ctx, s.db.R, userID, TokenReset, s.now().Add(ResetTTL-lostAccountGap).Unix())
-	return err != nil || ok
+	if ok, err := db.HasUserToken(ctx, s.db.R, userID, TokenReset, s.now().Add(ResetTTL-lostAccountGap).Unix()); err != nil || ok {
+		return true
+	}
+	now := s.now().Unix()
+	n, _, err := db.ReserveAttempt(ctx, s.db.W, "lost:"+strconv.FormatInt(userID, 10), now, now-24*3600)
+	return err != nil || n > lostPerDay
 }

@@ -23,12 +23,13 @@ type QueuedMail struct {
 	Tries     int
 	Status    string
 	LastError string
+	Expires   int64 // 0 = never; messages with one-time links expire with them
 }
 
 // EnqueueMail adds a message to the queue.
 func EnqueueMail(ctx context.Context, q Querier, m *QueuedMail) error {
-	res, err := q.ExecContext(ctx, `INSERT INTO mail_queue (recipient, subject, body, created, next_try)
-		VALUES (?, ?, ?, ?, ?)`, m.To, m.Subject, m.Body, m.Created, m.NextTry)
+	res, err := q.ExecContext(ctx, `INSERT INTO mail_queue (recipient, subject, body, created, next_try, expires)
+		VALUES (?, ?, ?, ?, ?, ?)`, m.To, m.Subject, m.Body, m.Created, m.NextTry, m.Expires)
 	if err != nil {
 		return err
 	}
@@ -36,14 +37,14 @@ func EnqueueMail(ctx context.Context, q Querier, m *QueuedMail) error {
 	return err
 }
 
-const mailCols = `id, recipient, subject, body, created, next_try, tries, status, last_error`
+const mailCols = `id, recipient, subject, body, created, next_try, tries, status, last_error, expires`
 
 func scanMails(rows *sql.Rows) ([]QueuedMail, error) {
 	defer rows.Close()
 	var out []QueuedMail
 	for rows.Next() {
 		var m QueuedMail
-		if err := rows.Scan(&m.ID, &m.To, &m.Subject, &m.Body, &m.Created, &m.NextTry, &m.Tries, &m.Status, &m.LastError); err != nil {
+		if err := rows.Scan(&m.ID, &m.To, &m.Subject, &m.Body, &m.Created, &m.NextTry, &m.Tries, &m.Status, &m.LastError, &m.Expires); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -54,7 +55,7 @@ func scanMails(rows *sql.Rows) ([]QueuedMail, error) {
 // DueMail returns up to limit pending messages due at now, oldest first.
 func DueMail(ctx context.Context, q Querier, now int64, limit int) ([]QueuedMail, error) {
 	rows, err := q.QueryContext(ctx, `SELECT `+mailCols+` FROM mail_queue
-		WHERE status = 'pending' AND next_try <= ? ORDER BY next_try, id LIMIT ?`, now, limit)
+		WHERE status = 'pending' AND next_try <= ? AND (expires = 0 OR expires > ?) ORDER BY next_try, id LIMIT ?`, now, now, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -113,10 +114,10 @@ func RetryMail(ctx context.Context, q Querier, id, now int64) error {
 	return err
 }
 
-// PruneMail deletes messages created before cutoff (their links have
-// expired long ago).
-func PruneMail(ctx context.Context, q Querier, cutoff int64) error {
-	_, err := q.ExecContext(ctx, `DELETE FROM mail_queue WHERE created < ?`, cutoff)
+// PruneMail deletes messages created before cutoff and messages whose
+// link has expired at now.
+func PruneMail(ctx context.Context, q Querier, cutoff, now int64) error {
+	_, err := q.ExecContext(ctx, `DELETE FROM mail_queue WHERE created < ? OR (expires != 0 AND expires <= ?)`, cutoff, now)
 	return err
 }
 

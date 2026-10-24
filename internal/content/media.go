@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/theinvisible/gopress/internal/auth"
@@ -40,6 +41,10 @@ func (e *Editor) Upload(ctx context.Context, tmp, name string, parentID int64) (
 	if !auth.Can(e.user, auth.CapUploadFiles) {
 		s.media.RemoveTemp(tmp)
 		return nil, nil, ErrForbidden
+	}
+	if !s.uploads.allow(e.user.ID, s.now()) {
+		s.media.RemoveTemp(tmp)
+		return nil, nil, &ValidationError{"Too many uploads. Please wait a while."}
 	}
 	if parentID != 0 {
 		parent, err := db.GetPost(ctx, s.db.R, parentID)
@@ -287,4 +292,34 @@ func (s *Service) PrepareSiteIcon(ctx context.Context, id int64) error {
 		return err
 	}
 	return db.SetMediaSizes(ctx, s.db.W, id, all)
+}
+
+// Uploads per user and hour: generous for pasting or dropping many
+// images, but a stolen author account cannot fill the disk unnoticed.
+const (
+	uploadsPerWindow = 200
+	uploadWindow     = time.Hour
+)
+
+type uploadLimiter struct {
+	mu   sync.Mutex
+	hits map[int64][]time.Time
+}
+
+func (l *uploadLimiter) allow(user int64, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.hits == nil {
+		l.hits = map[int64][]time.Time{}
+	}
+	h := l.hits[user]
+	for len(h) > 0 && now.Sub(h[0]) > uploadWindow {
+		h = h[1:]
+	}
+	if len(h) >= uploadsPerWindow {
+		l.hits[user] = h
+		return false
+	}
+	l.hits[user] = append(h, now)
+	return true
 }

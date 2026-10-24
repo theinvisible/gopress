@@ -351,3 +351,85 @@ func itoa(n int) string { return strconv.Itoa(n) }
 func mediaOf(r *Result) *db.Media {
 	return &db.Media{File: r.File, Mime: r.Mime, Width: r.Width, Height: r.Height, Sizes: r.Sizes, Original: r.Original}
 }
+
+// Review fix: a small 16-bit PNG that decodes to a huge image is refused
+// before decoding (the pixel count alone was below the limit).
+func TestDecodedSizeLimit(t *testing.T) {
+	s, _ := newStore(t)
+	img := image.NewNRGBA64(image.Rect(0, 0, 7000, 7000)) // 392 MB decoded, a small file
+	var buf bytes.Buffer
+	if err := (&png.Encoder{CompressionLevel: png.BestSpeed}).Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	if buf.Len() > 5<<20 {
+		t.Fatalf("test image too large: %d", buf.Len())
+	}
+	if _, err := s.put(t, "bomb.png", buf.Bytes()); !errors.Is(err, ErrTooLarge) {
+		t.Errorf("16-bit image: %v", err)
+	}
+}
+
+// Review fix: regenerating sizes never overwrites another upload's file.
+func TestRegenerateKeepsForeignFiles(t *testing.T) {
+	s, dir := newStore(t)
+	var p bytes.Buffer
+	png.Encode(&p, twoColor(800, 600))
+	logo, err := s.put(t, "logo.png", p.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Another upload is called like a size the next regeneration creates.
+	var q bytes.Buffer
+	png.Encode(&q, twoColor(64, 64))
+	other, err := s.put(t, "logo-200x150.png", q.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := mustRead(t, filepath.Join(dir, other.File))
+	sizes, err := s.Regenerate(context.Background(), mediaOf(logo), logo.Original, []Size{{Name: "medium", Width: 200, Height: 200}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, mustRead(t, filepath.Join(dir, other.File))) {
+		t.Error("another upload was overwritten")
+	}
+	if sizes["medium"].File == "logo-200x150.png" {
+		t.Error("size uses the other upload's name")
+	}
+}
+
+// Review fix: other files are moved into place, not read into memory.
+func TestNonImageMoved(t *testing.T) {
+	s, dir := newStore(t)
+	data := append([]byte("PK\x03\x04"), bytes.Repeat([]byte{7}, 3<<20)...)
+	res, err := s.put(t, "archive.zip", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Filesize != int64(len(data)) || !bytes.Equal(mustRead(t, filepath.Join(dir, res.File)), data) {
+		t.Errorf("zip stored wrongly: %d", res.Filesize)
+	}
+}
+
+// Review fix: JFIF thumbnails, JFXX and foreign APP14 data are removed.
+func TestJFIFThumbnailRemoved(t *testing.T) {
+	var buf bytes.Buffer
+	jpeg.Encode(&buf, twoColor(40, 20), nil)
+	enc := buf.Bytes()
+	jfif := append([]byte("JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x02\x01"), []byte("THUMBDATA-THUMB")...) // 2×1 thumbnail
+	data := append(append(append([]byte{}, enc[:2]...), segment(0xE0, jfif)...), segment(0xE0, []byte("JFXX\x00\x10secret-thumbnail"))...)
+	data = append(data, segment(0xEE, []byte("NotAdobe hidden"))...)
+	data = append(data, enc[2:]...)
+	out, _, err := stripJPEG(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, leak := range []string{"THUMBDATA", "secret-thumbnail", "hidden"} {
+		if bytes.Contains(out, []byte(leak)) {
+			t.Errorf("%q kept", leak)
+		}
+	}
+	if _, err := jpeg.Decode(bytes.NewReader(out)); err != nil {
+		t.Errorf("does not decode: %v", err)
+	}
+}

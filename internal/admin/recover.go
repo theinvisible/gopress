@@ -100,8 +100,8 @@ func (a *Admin) sendResetLink(ctx context.Context, login, ip string) error {
 		return err
 	}
 	a.auth.Audit(ctx, nil, u.ID, "password_reset_requested", "user", u.ID, map[string]any{"ip": ip})
-	return a.mail.Enqueue(ctx, u.Email, "password_reset", mail.Data{"Login": u.Login, "IP": ip, "Valid": "one hour",
-		"Link": strings.TrimRight(a.auth.Home(), "/") + "/login/reset/" + tok})
+	return a.mail.EnqueueUntil(ctx, u.Email, "password_reset", mail.Data{"Login": u.Login, "IP": ip, "Valid": "one hour",
+		"Link": strings.TrimRight(a.auth.Home(), "/") + "/login/reset/" + tok}, time.Now().Add(auth.ResetTTL))
 }
 
 // background runs f after the response (synchronously in tests).
@@ -237,7 +237,7 @@ func (a *Admin) resetSubmit(invite bool) http.HandlerFunc {
 			return db.DeleteUserSessions(ctx, tx, u.ID, nil)
 		})
 		if err == nil {
-			err = auth.UnlockUser(ctx, a.db, u.ID)
+			err = auth.UnlockPassword(ctx, a.db, u.ID)
 		}
 		if err != nil {
 			a.fail(w, r, nil, err)

@@ -51,12 +51,17 @@ func TestEmailSettings(t *testing.T) {
 	if strings.Contains(page, "smtp secret pw") || !strings.Contains(page, "smtp.example.org") || !strings.Contains(page, "(unchanged)") {
 		t.Error("password shown or settings missing on the page")
 	}
-	// Saving without a password keeps it.
+	// Saving without a password keeps it for the same server, but a new
+	// server needs it again.
 	form.Del("password")
-	form.Set("port", "2525")
+	form.Set("from_name", "Site")
 	post(e, "/admin/settings/email", admin, form)
-	if c, _ := e.mail.Config(ctx); c == nil || c.Port != 2525 || c.PasswordEnc == "" {
+	if c, _ := e.mail.Config(ctx); c == nil || c.FromName != "Site" || c.PasswordEnc == "" {
 		t.Errorf("config = %+v", c)
+	}
+	form.Set("port", "2525")
+	if res := post(e, "/admin/settings/email", admin, form); res.StatusCode != http.StatusBadRequest {
+		t.Errorf("new port without password: %d", res.StatusCode)
 	}
 	// Test mail goes to the admin's own address only.
 	post(e, "/admin/settings/email/test", admin, url.Values{"to": {"someone@example.com"}})

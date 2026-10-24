@@ -53,6 +53,7 @@ func TestSettingsScreens(t *testing.T) {
 		t.Error("site title not escaped")
 	}
 	for _, bad := range []map[string]string{{"timezone_string": "Mars/Base"}, {"timezone_string": "UTC+99"}, {"blogname": ""},
+		{"timezone_string": "UTCNaN"}, {"timezone_string": "UTC+Inf"},
 		{"date_format": "custom", "date_format_custom": "<script>"}} {
 		f := url.Values{}
 		for k, v := range general {

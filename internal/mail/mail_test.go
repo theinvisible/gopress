@@ -87,14 +87,20 @@ func TestConfig(t *testing.T) {
 	if pw, err := s.password(got); pw != "s3cret password" || err != nil {
 		t.Errorf("password = %q, %v", pw, err)
 	}
-	// Keeping the password on save.
-	got.Port = 2525
+	// Keeping the password on save (same server).
+	got.FromName = "Site"
 	if err := s.SaveConfig(ctx, got, "", true); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = s.Config(ctx)
-	if pw, _ := s.password(got); pw != "s3cret password" || got.Port != 2525 {
+	if pw, _ := s.password(got); pw != "s3cret password" || got.FromName != "Site" {
 		t.Errorf("password not kept: %q", pw)
+	}
+	// Review fix: the stored password does not follow a new server.
+	moved := *got
+	moved.Host = "attacker.example"
+	if err := s.SaveConfig(ctx, &moved, "", true); err == nil {
+		t.Error("stored password kept for another server")
 	}
 	// Another secret cannot decrypt it.
 	other := New(d, Options{Secret: []byte("another secret of thirty-two by!")})
@@ -194,5 +200,23 @@ func TestTemplates(t *testing.T) {
 		if err != nil || subject == "" || !strings.HasSuffix(body, "Test Site\nhttps://example.org\n") {
 			t.Errorf("%s: %q, %v", name, subject, err)
 		}
+	}
+}
+
+// Review fix: messages with expired one-time links are neither sent nor
+// kept in the queue.
+func TestExpiredLinkMail(t *testing.T) {
+	s, d := newTestService(t)
+	ctx := context.Background()
+	s.opts.Sink = t.TempDir()
+	s.EnqueueUntil(ctx, "user@example.org", "password_reset", Data{"Link": "https://example.org/login/reset/x"}, time.Now().Add(-time.Minute))
+	s.EnqueueUntil(ctx, "user@example.org", "invitation", Data{"Link": "https://example.org/login/invite/y"}, time.Now().Add(time.Hour))
+	s.Flush(ctx)
+	files, _ := filepath.Glob(filepath.Join(s.opts.Sink, "*.eml"))
+	if len(files) != 1 {
+		t.Fatalf("sent %d messages, want 1", len(files))
+	}
+	if q, _ := db.MailQueue(ctx, d.R, 10); len(q) != 0 {
+		t.Errorf("queue keeps %d messages", len(q))
 	}
 }

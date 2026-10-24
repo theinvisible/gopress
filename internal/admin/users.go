@@ -383,8 +383,8 @@ func (a *Admin) inviteUser(ctx context.Context, r *http.Request, c *reqCtx, u *d
 	a.flash.put(a.flashKey(c, "user"), userFlash{Link: link})
 	a.auth.Audit(ctx, r, c.user.ID, "user_invited", "user", u.ID, map[string]any{"mailed": send})
 	if send && a.mail.Ready(ctx) {
-		return a.mail.Enqueue(ctx, u.Email, "invitation", mail.Data{"Login": u.Login, "Role": auth.RoleLabel(u.Role),
-			"Inviter": c.user.DisplayName, "Link": link, "Valid": "72 hours"})
+		return a.mail.EnqueueUntil(ctx, u.Email, "invitation", mail.Data{"Login": u.Login, "Role": auth.RoleLabel(u.Role),
+			"Inviter": c.user.DisplayName, "Link": link, "Valid": "72 hours"}, time.Now().Add(auth.InviteTTL))
 	}
 	return nil
 }
@@ -604,8 +604,8 @@ func (a *Admin) userSecurity(w http.ResponseWriter, r *http.Request, c *reqCtx) 
 			return err
 		}
 		a.auth.Audit(ctx, r, c.user.ID, "password_reset_sent", "user", u.ID, nil)
-		if err := a.mail.Enqueue(ctx, u.Email, "password_reset", mail.Data{"Login": u.Login, "IP": a.auth.ClientIP(r),
-			"Valid": "one hour", "Link": strings.TrimRight(a.auth.Home(), "/") + "/login/reset/" + tok}); err != nil {
+		if err := a.mail.EnqueueUntil(ctx, u.Email, "password_reset", mail.Data{"Login": u.Login, "IP": a.auth.ClientIP(r),
+			"Valid": "one hour", "Link": strings.TrimRight(a.auth.Home(), "/") + "/login/reset/" + tok}, time.Now().Add(auth.ResetTTL)); err != nil {
 			return err
 		}
 		return seeOther(w, r, back+"?msg=reset")

@@ -165,6 +165,10 @@ func (a *Admin) profileSave(w http.ResponseWriter, r *http.Request, c *reqCtx) e
 	}
 	a.auth.Audit(ctx, r, u.ID, auth.ActProfileUpdate, "user", u.ID, map[string]any{"email_changed": u.Email != c.user.Email})
 	if u.Email != c.user.Email {
+		// Links sent to the old address stop working.
+		if err := db.DeleteUserTokens(ctx, a.db.W, u.ID, ""); err != nil {
+			return err
+		}
 		a.notifyEmailChanged(ctx, &u, c.user.Email)
 	}
 	a.site.Invalidate() // author names appear on the site

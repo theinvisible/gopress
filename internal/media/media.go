@@ -12,9 +12,11 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/gif"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -26,6 +28,7 @@ import (
 	"unicode"
 
 	"golang.org/x/image/draw"
+	"golang.org/x/sync/semaphore"
 	_ "golang.org/x/image/webp"
 	"golang.org/x/text/unicode/norm"
 
@@ -42,6 +45,8 @@ type Size struct {
 // Limits.
 const (
 	MaxPixels       = 50_000_000 // decoded images larger than this are refused
+	memBudget       = 768 << 20  // memory for decoding and resizing, shared by all uploads
+	maxDecoded      = 256 << 20  // decoded pixel data of one image
 	BigImageMax     = 2560       // big_image_size_threshold: larger images get a -scaled copy
 	jpegQuality     = 82         // WordPress' default
 	jpegQualityFull = 90         // re-encoded originals (orientation applied)
@@ -95,7 +100,7 @@ var (
 // through an os.Root, so no path can leave that directory.
 type Store struct {
 	root *os.Root
-	sem  chan struct{}
+	mem  *semaphore.Weighted // memory budget of image processing (bytes)
 	now  func() time.Time
 }
 
@@ -108,7 +113,7 @@ func Open(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Store{root: root, sem: make(chan struct{}, 2), now: time.Now}, nil
+	return &Store{root: root, mem: semaphore.NewWeighted(memBudget), now: time.Now}, nil
 }
 
 // Close releases the directory.
@@ -159,11 +164,11 @@ func (s *Store) Save(ctx context.Context, up Upload) (*Result, error) {
 	if !ok {
 		return nil, ErrType
 	}
-	data, err := s.root.ReadFile(up.Temp)
+	head, err := s.readHead(up.Temp)
 	if err != nil {
 		return nil, err
 	}
-	if !sniffOK(data, ft) {
+	if !sniffOK(head, ft) {
 		return nil, ErrMismatch
 	}
 	dir := ""
@@ -172,19 +177,23 @@ func (s *Store) Save(ctx context.Context, up Upload) (*Result, error) {
 	}
 	res := &Result{Mime: ft.mime, Title: base}
 	var out *processed
+	move := false // other files: the temp file is moved into place
 	if ft.image {
-		select {
-		case s.sem <- struct{}{}:
-			defer func() { <-s.sem }()
-		case <-ctx.Done():
-			return nil, ctx.Err()
+		release, err := s.reserve(ctx, up.Temp)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+		data, err := s.root.ReadFile(up.Temp)
+		if err != nil {
+			return nil, err
 		}
 		if out, err = processImage(data, ext, up.Sizes); err != nil {
 			return nil, err
 		}
 		res.Width, res.Height = out.width, out.height
 	} else {
-		out = &processed{main: data}
+		out, move = &processed{}, true
 	}
 	// Pick a name for which none of the files exists yet.
 	var names map[string]string
@@ -233,10 +242,24 @@ func (s *Store) Save(ctx context.Context, up Upload) (*Result, error) {
 		}
 		return nil, err
 	}
-	if err := write(names["main"], out.main); err != nil {
-		return fail(err)
+	res.File = path.Join(dir, names["main"])
+	if move {
+		if err := s.root.Rename(up.Temp, res.File); err != nil {
+			return fail(err)
+		}
+		written = append(written, res.File)
+		fi, err := s.root.Stat(res.File)
+		if err != nil {
+			return fail(err)
+		}
+		res.Filesize = fi.Size()
+		s.root.Chmod(res.File, 0o640)
+	} else {
+		if err := write(names["main"], out.main); err != nil {
+			return fail(err)
+		}
+		res.Filesize = int64(len(out.main))
 	}
-	res.File, res.Filesize = path.Join(dir, names["main"]), int64(len(out.main))
 	if out.original != nil {
 		if err := write(names["original"], out.original); err != nil {
 			return fail(err)
@@ -254,6 +277,77 @@ func (s *Store) Save(ctx context.Context, up Upload) (*Result, error) {
 		res.Mime = out.mainMime
 	}
 	return res, nil
+}
+
+// readHead returns the first 512 bytes of a file (for content sniffing).
+func (s *Store) readHead(name string) ([]byte, error) {
+	f, err := s.root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	head := make([]byte, 512)
+	n, err := io.ReadFull(f, head)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	return head[:n], nil
+}
+
+// reserve takes the memory an image needs from the budget, waiting for
+// other uploads if necessary. Images that would need more than the whole
+// budget (e.g. huge 16-bit PNGs that are small files) are refused before
+// they are decoded.
+func (s *Store) reserve(ctx context.Context, name string) (func(), error) {
+	f, err := s.root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	cfg, _, err := image.DecodeConfig(f)
+	f.Close()
+	if err != nil {
+		return nil, ErrCorrupt
+	}
+	cost, err := imageCost(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.mem.Acquire(ctx, cost); err != nil {
+		return nil, err
+	}
+	return func() { s.mem.Release(cost) }, nil
+}
+
+// imageCost estimates the memory to decode, orient and resize an image:
+// the decoded pixels plus two RGBA copies.
+func imageCost(cfg image.Config) (int64, error) {
+	px := int64(cfg.Width) * int64(cfg.Height)
+	if cfg.Width <= 0 || cfg.Height <= 0 || px > MaxPixels || cfg.Width > 30000 || cfg.Height > 30000 {
+		return 0, ErrTooLarge
+	}
+	decoded := px * bytesPerPixel(cfg.ColorModel)
+	cost := decoded + px*8
+	if decoded > maxDecoded || cost > memBudget {
+		return 0, ErrTooLarge
+	}
+	return cost, nil
+}
+
+func bytesPerPixel(m color.Model) int64 {
+	switch m {
+	case color.GrayModel, color.AlphaModel:
+		return 1
+	case color.Gray16Model, color.Alpha16Model:
+		return 2
+	case color.YCbCrModel:
+		return 3
+	case color.RGBA64Model, color.NRGBA64Model:
+		return 8
+	}
+	if _, ok := m.(color.Palette); ok {
+		return 1
+	}
+	return 4
 }
 
 // sniffOK compares the content with the expected type.
@@ -358,8 +452,8 @@ func processImage(data []byte, ext string, sizes []Size) (*processed, error) {
 	if want := map[string]string{".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".gif": "gif", ".webp": "webp"}[ext]; want != format {
 		return nil, ErrMismatch
 	}
-	if cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width*cfg.Height > MaxPixels || cfg.Width > 30000 || cfg.Height > 30000 {
-		return nil, ErrTooLarge
+	if _, err := imageCost(cfg); err != nil {
+		return nil, err
 	}
 	p := &processed{width: cfg.Width, height: cfg.Height}
 	var icc [][]byte
@@ -559,12 +653,11 @@ func (s *Store) Regenerate(ctx context.Context, m *db.Media, original string, si
 	if !strings.HasPrefix(m.Mime, "image/") || m.Mime == "image/gif" {
 		return m.Sizes, nil
 	}
-	select {
-	case s.sem <- struct{}{}:
-		defer func() { <-s.sem }()
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	release, err := s.reserve(ctx, m.File)
+	if err != nil {
+		return nil, err
 	}
+	defer release()
 	dir := path.Dir(m.File)
 	data, err := s.root.ReadFile(m.File)
 	if err != nil {
@@ -609,8 +702,8 @@ func (s *Store) Regenerate(ctx context.Context, m *db.Media, original string, si
 		if format == "jpeg" {
 			data = insertICC(data, icc)
 		}
-		name := fmt.Sprintf("%s-%dx%d%s", base, w, h, sext)
-		if err := s.root.WriteFile(path.Join(dir, name), data, 0o640); err != nil {
+		name, err := s.writeSize(dir, base, w, h, sext, data, m)
+		if err != nil {
 			return nil, err
 		}
 		out[sz.Name] = db.MediaSize{File: name, Width: w, Height: h, Mime: mime}
@@ -622,6 +715,43 @@ func (s *Store) Regenerate(ctx context.Context, m *db.Media, original string, si
 		}
 	}
 	return out, nil
+}
+
+// writeSize stores a generated size of m. A file of that name is only
+// replaced if it already belongs to m; otherwise (another upload happens
+// to have the name) a free name with a numeric suffix is used.
+func (s *Store) writeSize(dir, base string, w, h int, ext string, data []byte, m *db.Media) (string, error) {
+	own := map[string]bool{}
+	for _, sz := range m.Sizes {
+		own[sz.File] = true
+	}
+	for n := 0; n < 100; n++ {
+		name := fmt.Sprintf("%s-%dx%d%s", base, w, h, ext)
+		if n > 0 {
+			name = fmt.Sprintf("%s-%dx%d-%d%s", base, w, h, n, ext)
+		}
+		p := path.Join(dir, name)
+		if p == m.File || name == m.Original {
+			continue
+		}
+		flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
+		if own[name] {
+			flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+		}
+		f, err := s.root.OpenFile(p, flags, 0o640)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		_, err = f.Write(data)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		return name, err
+	}
+	return "", errors.New("media: no free file name for a size")
 }
 
 // Strip removes metadata from an existing file in place (for uploads from
@@ -669,12 +799,11 @@ func (s *Store) AddSizes(ctx context.Context, m *db.Media, sizes []Size) (map[st
 	if !strings.HasPrefix(m.Mime, "image/") || m.Mime == "image/gif" {
 		return out, nil
 	}
-	select {
-	case s.sem <- struct{}{}:
-		defer func() { <-s.sem }()
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	release, err := s.reserve(ctx, m.File)
+	if err != nil {
+		return nil, err
 	}
+	defer release()
 	data, err := s.root.ReadFile(m.File)
 	if err != nil {
 		return nil, err
@@ -705,8 +834,8 @@ func (s *Store) AddSizes(ctx context.Context, m *db.Media, sizes []Size) (map[st
 		if err != nil {
 			return nil, err
 		}
-		name := fmt.Sprintf("%s-%dx%d%s", base, w, h, sext)
-		if err := s.root.WriteFile(path.Join(dir, name), buf.Bytes(), 0o640); err != nil {
+		name, err := s.writeSize(dir, base, w, h, sext, buf.Bytes(), m)
+		if err != nil {
 			return nil, err
 		}
 		out[sz.Name] = db.MediaSize{File: name, Width: w, Height: h, Mime: mime}
