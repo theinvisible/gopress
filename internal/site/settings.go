@@ -60,8 +60,9 @@ type Settings struct {
 	AvatarRating              string
 	CookiesOptIn              bool
 	CommentsNotify            bool // mail the post author about new comments
-	MCPEnabled                bool // AI agents may use the MCP interface (/mcp)
 	ModerationNotify          bool // mail the admin about comments to moderate
+
+	MCPEnabled bool // AI agents may use the MCP interface (/mcp)
 
 	AttachmentPages bool
 	ThemeMods       map[string]any

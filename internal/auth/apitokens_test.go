@@ -36,7 +36,11 @@ func TestAccessTokenLifecycle(t *testing.T) {
 	if !Can(got, CapEditPosts) || !Can(got, CapUploadFiles) || Can(got, CapPublishPosts) || Can(got, CapEditPublishedPosts) {
 		t.Fatalf("caps of the scoped user wrong: %v", got.CapLimit)
 	}
-	for _, bad := range []string{"", tok + "x", tok[:len(tok)-1] + "A", "Bearer " + tok, strings.ToUpper(tok)} {
+	last := "A"
+	if strings.HasSuffix(tok, last) {
+		last = "B"
+	}
+	for _, bad := range []string{"", tok + "x", tok[:len(tok)-1] + last, "Bearer " + tok, strings.ToUpper(tok)} {
 		if _, _, err := s.VerifyAccessToken(ctx, bad); !errors.Is(err, ErrTokenRejected) {
 			t.Errorf("token %q accepted", bad)
 		}

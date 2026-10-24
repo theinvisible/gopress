@@ -56,6 +56,17 @@ func InsertPost(ctx context.Context, q Querier, p *Post) error {
 	return err
 }
 
+// PostBySlug returns the post or page with a slug (not in the trash).
+func PostBySlug(ctx context.Context, q Querier, typ, slug string) (*Post, error) {
+	var p Post
+	err := scanPost(q.QueryRowContext(ctx, `SELECT `+postColumns+` FROM posts
+		WHERE type = ? AND slug = ? AND status NOT IN ('trash', 'auto-draft') ORDER BY id LIMIT 1`, typ, slug), &p)
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 // GetPost returns the post with id, or sql.ErrNoRows.
 func GetPost(ctx context.Context, q Querier, id int64) (*Post, error) {
 	var p Post

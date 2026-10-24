@@ -16,6 +16,7 @@ type AdminPostQuery struct {
 	CategoryID int64
 	TagID      int64
 	AuthorID   int64
+	VisibleTo  int64  // only published posts and those of this user (access tokens)
 	OrderBy    string // "date" (default), "title", "comments", "menu_order"
 	Ascending  bool
 	Limit      int
@@ -51,6 +52,10 @@ func (aq AdminPostQuery) where() (string, []any) {
 	if aq.AuthorID > 0 {
 		conds = append(conds, "author_id = ?")
 		args = append(args, aq.AuthorID)
+	}
+	if aq.VisibleTo > 0 {
+		conds = append(conds, "(status = 'publish' OR author_id = ?)")
+		args = append(args, aq.VisibleTo)
 	}
 	return strings.Join(conds, " AND "), args
 }

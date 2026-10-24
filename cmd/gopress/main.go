@@ -27,6 +27,7 @@ import (
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
 	"github.com/theinvisible/gopress/internal/mail"
+	"github.com/theinvisible/gopress/internal/mcpserver"
 	"github.com/theinvisible/gopress/internal/media"
 	"github.com/theinvisible/gopress/internal/site"
 	"github.com/theinvisible/gopress/internal/theme"
@@ -193,6 +194,10 @@ func cmdServe(args []string, stderr io.Writer) int {
 	public.SetPreviewer(adm.Previewer())
 	mux := newMux(public)
 	adm.Register(mux)
+	mux.Handle("/mcp", mcpserver.New(mcpserver.Options{DB: d, Auth: authSvc, Content: contentSvc, Site: public, Next: public, Log: log}))
+	if st := settings(); st.MCPEnabled && !mcpserver.SecureHome(st.Home) {
+		log.Warn("the MCP interface is on but the base URL is not https; it stays off", "base_url", st.Home)
+	}
 	go authSvc.Maintain(ctx)
 	go contentSvc.RunScheduler(ctx)
 	go mailSvc.Run(ctx)

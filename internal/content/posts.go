@@ -546,7 +546,7 @@ func (e *Editor) RestoreRevision(ctx context.Context, p *db.Post, rev *db.Revisi
 	if !auth.CanEditPost(e.user, p) {
 		return nil, ErrForbidden
 	}
-	in := e.inputFrom(ctx, p)
+	in := e.InputFrom(ctx, p)
 	in.Title, in.Content, in.Excerpt = rev.Title, rev.Content, rev.Excerpt
 	if rev.ContentFormat == db.FormatWPAutop {
 		in.Content = ClassicToHTML(rev.Content)
@@ -555,8 +555,8 @@ func (e *Editor) RestoreRevision(ctx context.Context, p *db.Post, rev *db.Revisi
 	return e.Save(ctx, p, in)
 }
 
-// inputFrom returns the PostInput that reproduces p.
-func (e *Editor) inputFrom(ctx context.Context, p *db.Post) *PostInput {
+// InputFrom returns the PostInput that reproduces p (without terms).
+func (e *Editor) InputFrom(ctx context.Context, p *db.Post) *PostInput {
 	in := &PostInput{Type: p.Type, Title: p.Title, Content: p.Content, Excerpt: p.Excerpt, Status: p.Status,
 		Slug: p.Slug, Password: p.Password, CommentStatus: p.CommentStatus, PingStatus: p.PingStatus,
 		ParentID: p.ParentID, MenuOrder: p.MenuOrder, Template: p.Template, FeaturedMedia: p.FeaturedMediaID}
@@ -680,7 +680,7 @@ func (e *Editor) Duplicate(ctx context.Context, p *db.Post) (*db.Post, error) {
 	if !auth.CanEditType(e.user, p.Type) || !auth.CanEditPost(e.user, p) {
 		return nil, ErrForbidden
 	}
-	in := e.inputFrom(ctx, p)
+	in := e.InputFrom(ctx, p)
 	in.Status, in.Slug, in.Date, in.Sticky = db.StatusDraft, "", "", false
 	in.Content = EditorContent(p)
 	terms, err := db.PostTerms(ctx, e.s.db.R, []int64{p.ID})
