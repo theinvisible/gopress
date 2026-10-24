@@ -28,8 +28,8 @@ import (
 	"unicode"
 
 	"golang.org/x/image/draw"
-	"golang.org/x/sync/semaphore"
 	_ "golang.org/x/image/webp"
+	"golang.org/x/sync/semaphore"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/theinvisible/gopress/internal/db"

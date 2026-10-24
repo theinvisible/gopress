@@ -23,7 +23,7 @@ type basePage struct {
 	Color     string // admin color scheme
 	Menu      []menuItem
 	NewItems  []subItem // the toolbar's "New" menu (by capability)
-	Pending   int // comments awaiting moderation
+	Pending   int       // comments awaiting moderation
 	Notice    *notice
 	Assets    *assets
 	Scripts   []string // extra scripts (asset paths)
