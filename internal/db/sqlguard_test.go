@@ -108,7 +108,7 @@ func isSQLCall(call *ast.CallExpr) bool {
 type guard struct {
 	fn      *ast.FuncDecl
 	funcs   map[string][]*ast.FuncDecl // all functions of the module by name
-	assigns map[string][]ast.Expr // local variable → assigned expressions
+	assigns map[string][]ast.Expr      // local variable → assigned expressions
 	params  map[string]bool
 }
 

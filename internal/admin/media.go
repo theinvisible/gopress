@@ -225,4 +225,3 @@ func (a *Admin) mediaLibrary(w http.ResponseWriter, r *http.Request, c *reqCtx) 
 	}
 	return a.render(w, "media", d)
 }
-

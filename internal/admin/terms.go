@@ -42,19 +42,19 @@ func (a *Admin) registerTerms(mux *http.ServeMux) {
 
 type termListData struct {
 	basePage
-	Tx       taxonomy
-	Rows     []termRow
-	Search   string
-	Total    int
-	Paged    int
-	Pages    int
-	PageURL  func(int) string
-	SortURL  func(string) string
-	Parents  []option
-	Form     content.TermInput
-	Error    string
-	Default  int64
-	CanDflt  bool
+	Tx      taxonomy
+	Rows    []termRow
+	Search  string
+	Total   int
+	Paged   int
+	Pages   int
+	PageURL func(int) string
+	SortURL func(string) string
+	Parents []option
+	Form    content.TermInput
+	Error   string
+	Default int64
+	CanDflt bool
 }
 
 type termRow struct {

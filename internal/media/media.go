@@ -67,9 +67,9 @@ var types = map[string]fileType{
 	".gz":   {"application/gzip", false, []string{"application/x-gzip"}}, ".tgz": {"application/gzip", false, []string{"application/x-gzip"}},
 	".bz2": {"application/x-bzip2", false, nil}, ".xz": {"application/x-xz", false, nil}, ".7z": {"application/x-7z-compressed", false, nil},
 	".tar": {"application/x-tar", false, nil}, ".deb": {"application/vnd.debian.binary-package", false, nil},
-	".rpm":  {"application/x-rpm", false, nil},
-	".mp4":  {"video/mp4", false, []string{"video/mp4"}}, ".webm": {"video/webm", false, []string{"video/webm"}},
-	".mp3":  {"audio/mpeg", false, []string{"audio/mpeg"}}, ".ogg": {"audio/ogg", false, []string{"application/ogg", "audio/ogg"}},
+	".rpm": {"application/x-rpm", false, nil},
+	".mp4": {"video/mp4", false, []string{"video/mp4"}}, ".webm": {"video/webm", false, []string{"video/webm"}},
+	".mp3": {"audio/mpeg", false, []string{"audio/mpeg"}}, ".ogg": {"audio/ogg", false, []string{"application/ogg", "audio/ogg"}},
 	".m4a": {"audio/mp4", false, []string{"video/mp4", "audio/mp4"}}, ".wav": {"audio/wav", false, []string{"audio/wave"}},
 }
 

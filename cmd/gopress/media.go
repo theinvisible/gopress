@@ -32,8 +32,10 @@ A running server picks up the changes after its next content change or restart.
 // cliSite provides the settings to the content service outside the server.
 type cliSite struct{ d *db.DB }
 
-func (s cliSite) Settings(ctx context.Context) (*site.Settings, error) { return site.LoadSettings(ctx, s.d.R) }
-func (s cliSite) Invalidate()                                         {}
+func (s cliSite) Settings(ctx context.Context) (*site.Settings, error) {
+	return site.LoadSettings(ctx, s.d.R)
+}
+func (s cliSite) Invalidate() {}
 
 func cmdMedia(args []string, stdout, stderr io.Writer) int {
 	var cfg config.Config
