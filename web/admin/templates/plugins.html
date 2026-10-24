@@ -1,0 +1,52 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-plugins">
+	<h1 class="wp-heading-inline">Plugins</h1>
+	<button type="button" class="page-title-action" data-toggle="#gp-plugin-upload">Upload Plugin</button>
+	<hr class="wp-header-end">
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+
+	<div id="gp-plugin-upload" class="gp-upload-plugin"{{if not .Error}} hidden{{end}}>
+		<p class="install-help">Plugins are WebAssembly packages (.zip, at most {{.MaxMB}} MB). They run in a sandbox and can only do what you approve when you activate them.
+			{{- if not .Reauth}} Uploading asks you to confirm your identity first.{{end}}</p>
+		<form method="post" action="/admin/plugins/upload" enctype="multipart/form-data" class="wp-upload-form">
+			{{template "csrf" .CSRF}}
+			<label class="screen-reader-text" for="pluginzip">Plugin zip file</label>
+			<input type="file" id="pluginzip" name="plugin" accept=".zip,application/zip" required>
+			<input type="submit" class="button" value="Install Now">
+		</form>
+	</div>
+
+	<table class="wp-list-table widefat plugins gp-plugin-list">
+		<thead><tr><th scope="col" class="column-name">Plugin</th><th scope="col" class="column-description">Description</th></tr></thead>
+		<tbody>
+		{{- range .Rows}}
+		<tr class="{{if .Active}}active{{else}}inactive{{end}}" data-plugin="{{.Name}}">
+			<td class="plugin-title column-primary"><strong>{{.Title}}</strong>
+				<div class="row-actions visible">
+					{{- if .Active}}
+					<form method="post" action="/admin/plugins/{{.Name}}/deactivate" class="gp-inline-form"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="button-link">Deactivate</button></form>
+					{{- range .Pages}} | <a href="{{.URL}}">{{.Title}}</a>{{end}}
+					{{- if .CanImport}} | <form method="post" action="/admin/plugins/{{.Name}}/import" class="gp-inline-form" data-confirm="Import the plugin's WordPress data again?"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="button-link">Import WordPress data</button></form>{{end}}
+					{{- else}}
+					<a href="/admin/plugins/{{.Name}}/activate" class="edit">{{if .Extra}}Review and activate{{else}}Activate{{end}}</a>
+					{{- if eq .Source "uploaded"}} | <form method="post" action="/admin/plugins/{{.Name}}/delete" class="gp-inline-form" data-confirm="Delete the plugin “{{.Title}}”?{{if .Bundled}} The bundled version takes its place again.{{end}} Its data is kept."><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button type="submit" class="button-link button-link-delete">Delete</button></form>{{end}}
+					{{- end}}
+				</div>
+			</td>
+			<td class="column-description desc">
+				<p>{{.Description}}</p>
+				<p class="gp-plugin-meta">Version {{.Version}}{{if .Author}} | By {{.Author}}{{end}}{{if .URL}} | <a href="{{.URL}}" rel="noopener noreferrer" target="_blank">Plugin site</a>{{end}}
+					| <span class="gp-badge">{{if eq .Source "bundled"}}Bundled{{else}}Uploaded{{end}}</span>
+					{{- if and .Active .Paused}} <span class="gp-badge gp-badge-warn">Paused after errors</span>{{end}}
+					{{- if and .Active (not .Running)}} <span class="gp-badge gp-badge-warn">Failed to load</span>{{end}}
+					{{- if and (not .Active) .Extra}} <span class="gp-badge gp-badge-warn">Needs approval</span>{{end}}</p>
+				{{- if and .Active .LastError}}<p class="gp-plugin-error"><span class="dashicons dashicons-warning" aria-hidden="true"></span> Last error: {{.LastError}}</p>{{end}}
+			</td>
+		</tr>
+		{{- else}}
+		<tr class="no-items"><td colspan="2">No plugins are installed.</td></tr>
+		{{- end}}
+		</tbody>
+	</table>
+</div>
+{{template "admin-bottom" .}}{{end}}

@@ -21,6 +21,8 @@ import (
 	"github.com/theinvisible/gopress/internal/db"
 	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/media"
+	"github.com/theinvisible/gopress/internal/plugins"
+	"github.com/theinvisible/gopress/internal/plugins/plugintest"
 	"github.com/theinvisible/gopress/internal/site"
 	"github.com/theinvisible/gopress/internal/theme"
 	"github.com/theinvisible/gopress/themes"
@@ -39,6 +41,7 @@ type testEnv struct {
 	pub     *site.Site
 	cs      *content.Service
 	uploads string
+	plugins *plugins.Host
 }
 
 // mails delivers the queued mail and returns the messages sent so far
@@ -62,6 +65,13 @@ func (e *testEnv) mails() map[string][]string {
 }
 
 func newEnv(t *testing.T) *testEnv {
+	t.Helper()
+	return newEnvWith(t, false)
+}
+
+// newEnvWith creates the test environment, with the plugin host and the
+// test plugin installed (not active) if withPlugins.
+func newEnvWith(t *testing.T, withPlugins bool) *testEnv {
 	t.Helper()
 	ctx := context.Background()
 	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "t.db"))
@@ -114,7 +124,29 @@ func newEnv(t *testing.T) *testEnv {
 	cs.SetMediaStore(store)
 	pub.SetCommentNotifier(cs.NotifyComment)
 	e.pub, e.cs = pub, cs
-	ad, err := New(d, e.auth, pub, cs, Options{Log: log, Mail: e.mail, MailSink: true})
+	var host *plugins.Host
+	if withPlugins {
+		pstore, err := plugins.OpenStore(t.TempDir(), nil, log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if host, err = plugins.New(ctx, plugins.Options{DB: d, Store: pstore, Site: pub, Log: log}); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { host.Close(context.Background()) })
+		zip, err := plugins.PackDir(plugintest.Tester(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := host.Install(ctx, zip); err != nil {
+			t.Fatal(err)
+		}
+		pub.SetExtensions(host)
+		pub.SetCommentFilter(host.CommentFilter())
+		cs.SetCommentStatusHook(host.CommentStatusChanged)
+		e.plugins = host
+	}
+	ad, err := New(d, e.auth, pub, cs, Options{Log: log, Mail: e.mail, MailSink: true, Plugins: host})
 	if err != nil {
 		t.Fatal(err)
 	}

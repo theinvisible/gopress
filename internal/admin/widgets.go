@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -72,10 +73,16 @@ var widgetTypes = []widgetType{
 		{Key: "filter", Label: "Automatically add paragraphs", Kind: "checkbox"}}},
 }
 
-func findWidgetType(t string) *widgetType {
-	for i := range widgetTypes {
-		if widgetTypes[i].Type == t {
-			return &widgetTypes[i]
+// allWidgetTypes are the core widget types and those of active plugins.
+func (a *Admin) allWidgetTypes() []widgetType {
+	return append(slices.Clone(widgetTypes), a.pluginWidgetTypes()...)
+}
+
+func (a *Admin) findWidgetType(t string) *widgetType {
+	types := a.allWidgetTypes()
+	for i := range types {
+		if types[i].Type == t {
+			return &types[i]
 		}
 	}
 	return nil
@@ -111,7 +118,7 @@ func (a *Admin) widgetCard(w db.Widget, menus []option) widgetCard {
 	if t, _ := w.Settings["title"].(string); t != "" {
 		c.Title = t
 	}
-	wt := findWidgetType(w.Type)
+	wt := a.findWidgetType(w.Type)
 	if wt == nil {
 		return c // plugin widget: no form yet (M3)
 	}
@@ -142,7 +149,7 @@ func (a *Admin) widgetCard(w db.Widget, menus []option) widgetCard {
 // GET /admin/widgets
 func (a *Admin) widgetsPage(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 	ctx := r.Context()
-	d := &widgetsData{basePage: a.base(ctx, c, "Widgets", "appearance-widgets"), Types: widgetTypes}
+	d := &widgetsData{basePage: a.base(ctx, c, "Widgets", "appearance-widgets"), Types: a.allWidgetTypes()}
 	d.Scripts = []string{"widgets.js"}
 	if msg, ok := map[string]notice{"saved": {"success", "Widget saved."}, "added": {"success", "Widget added."},
 		"deleted": {"success", "Widget deleted."}}[r.URL.Query().Get("msg")]; ok && d.Notice == nil {
@@ -189,7 +196,7 @@ func validArea(id string) bool {
 // POST /admin/widgets/add (type, sidebar)
 func (a *Admin) widgetAdd(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 	ctx := r.Context()
-	wt := findWidgetType(r.PostFormValue("type"))
+	wt := a.findWidgetType(r.PostFormValue("type"))
 	area := r.PostFormValue("sidebar")
 	if wt == nil || !validArea(area) {
 		return badRequest("Unknown widget or widget area.")
@@ -227,7 +234,7 @@ func (a *Admin) widgetSave(w http.ResponseWriter, r *http.Request, c *reqCtx) er
 	if err != nil {
 		return err
 	}
-	wt := findWidgetType(wd.Type)
+	wt := a.findWidgetType(wd.Type)
 	if wt == nil {
 		return badRequest("This widget has no settings form.")
 	}
@@ -241,6 +248,12 @@ func (a *Admin) widgetSave(w http.ResponseWriter, r *http.Request, c *reqCtx) er
 		case "text":
 			v = strings.TrimSpace(render.SanitizeText(v))
 			if len(v) > 500 {
+				return badRequest("The " + strings.ToLower(f.Label) + " is too long.")
+			}
+			settings[f.Key] = v
+		case "textarea":
+			v = strings.TrimSpace(v)
+			if len(v) > 10000 || strings.ContainsRune(v, 0) {
 				return badRequest("The " + strings.ToLower(f.Label) + " is too long.")
 			}
 			settings[f.Key] = v

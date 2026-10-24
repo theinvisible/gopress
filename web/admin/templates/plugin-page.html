@@ -1,0 +1,72 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-plugin-page gp-plugin-{{.Page.Kind}}">
+	<h1>{{.Page.Title}}</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+
+	{{- if eq .Page.Kind "settings"}}
+	<form method="post" action="{{.Action}}">
+		{{template "csrf" .CSRF}}
+		<table class="form-table" role="presentation"><tbody>
+		{{- range .Fields}}
+			<tr><th scope="row">{{if ne .Type "checkbox"}}<label for="f-{{.Name}}">{{.Label}}</label>{{else}}{{.Label}}{{end}}</th><td>
+			{{- if eq .Type "textarea"}}<textarea name="{{.Name}}" id="f-{{.Name}}" rows="5" class="large-text"{{if .MaxLen}} maxlength="{{.MaxLen}}"{{end}}>{{.Value}}</textarea>
+			{{- else if eq .Type "checkbox"}}<label><input type="checkbox" name="{{.Name}}" value="1"{{if .Checked}} checked{{end}}> {{.Label}}</label>
+			{{- else if eq .Type "select"}}{{$v := .Value}}<select name="{{.Name}}" id="f-{{.Name}}">{{range .Options}}<option value="{{.Value}}"{{if eq .Value $v}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+			{{- else if eq .Type "number"}}<input type="number" name="{{.Name}}" id="f-{{.Name}}" value="{{.Value}}" class="small-text"{{if .Min}} min="{{.Min}}"{{end}}{{if .Max}} max="{{.Max}}"{{end}} step="any">
+			{{- else if or (eq .Type "media") (eq .Type "media_list")}}
+				<div class="gp-media-field" data-media-field data-multiple="{{if eq .Type "media_list"}}1{{end}}">
+					<input type="hidden" name="{{.Name}}" id="f-{{.Name}}" value="{{.Value}}">
+					<ul class="gp-media-thumbs" data-thumbs></ul>
+					<button type="button" class="button" data-pick>{{if eq .Type "media_list"}}Add images{{else}}Choose image{{end}}</button>
+					<button type="button" class="button-link button-link-delete" data-clear>Remove{{if eq .Type "media_list"}} all{{end}}</button>
+				</div>
+			{{- else}}<input type="{{if eq .Type "password"}}password{{else if eq .Type "email"}}email{{else if eq .Type "url"}}url{{else if eq .Type "color"}}color{{else}}text{{end}}" name="{{.Name}}" id="f-{{.Name}}" value="{{.Value}}" class="regular-text"{{if .MaxLen}} maxlength="{{.MaxLen}}"{{end}}{{if eq .Type "password"}} autocomplete="new-password" placeholder="(unchanged)"{{end}}>
+			{{- end}}
+			{{- if .Help}}<p class="description">{{.Help}}</p>{{end}}
+			</td></tr>
+		{{- end}}
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Save Changes"></p>
+	</form>
+
+	{{- else if eq .Page.Kind "table"}}
+	<form method="get" action="{{.Action}}" class="search-form"><p class="search-box">
+		<label class="screen-reader-text" for="plugin-search">Search</label>
+		<input type="search" id="plugin-search" name="s" value="{{.Search}}"> <input type="submit" class="button" value="Search"></p></form>
+	{{- with .Table}}
+	{{- if .Notice}}<div class="notice notice-info inline"><p>{{.Notice}}</p></div>{{end}}
+	<form method="post" action="{{$.Action}}">
+		{{template "csrf" $.CSRF}}
+		{{- if .Actions}}
+		<div class="tablenav top"><div class="alignleft actions bulkactions">
+			<label for="bulk-action" class="screen-reader-text">Bulk action</label>
+			<select name="action" id="bulk-action"><option value="">Bulk actions</option>{{range .Actions}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+			<input type="submit" class="button action" value="Apply">
+		</div><div class="tablenav-pages one-page"><span class="displaying-num">{{.Total}} {{plural .Total "item" "items"}}</span></div></div>
+		{{- end}}
+		<table class="wp-list-table widefat fixed striped">
+			<thead><tr>{{if .Actions}}<td class="manage-column column-cb check-column"><input type="checkbox" data-check-all></td>{{end}}{{range $.Columns}}<th scope="col">{{.Label}}</th>{{end}}</tr></thead>
+			<tbody>
+			{{- range $row := .Rows}}
+			<tr>{{if $.Table.Actions}}<th scope="row" class="check-column"><input type="checkbox" name="ids[]" value="{{$row.ID}}"></th>{{end}}{{range $.Columns}}<td>{{index $row.Cells .Name}}</td>{{end}}</tr>
+			{{- else}}
+			<tr class="no-items"><td colspan="{{add (len $.Columns) 1}}">No items found.</td></tr>
+			{{- end}}
+			</tbody>
+		</table>
+	</form>
+	{{- if gt $.Pages 1}}
+	<div class="tablenav bottom"><div class="tablenav-pages">
+		{{- if gt $.Paged 1}}<a class="button" href="{{$.Action}}?paged={{add $.Paged -1}}&amp;s={{$.Search}}">&lsaquo; Previous</a>{{end}}
+		<span class="paging-input">Page {{$.Paged}} of {{$.Pages}}</span>
+		{{- if lt $.Paged $.Pages}}<a class="button" href="{{$.Action}}?paged={{add $.Paged 1}}&amp;s={{$.Search}}">Next &rsaquo;</a>{{end}}
+	</div></div>
+	{{- end}}
+	{{- end}}
+
+	{{- else if eq .Page.Kind "iframe"}}
+	<iframe class="gp-plugin-frame" src="{{.Frame}}" title="{{.Page.Title}}" sandbox="allow-scripts allow-forms allow-popups allow-modals"
+		referrerpolicy="no-referrer" data-plugin-frame data-api="{{.APIURL}}" data-csrf="{{.CSRF}}"></iframe>
+	{{- end}}
+</div>
+{{template "admin-bottom" .}}{{end}}

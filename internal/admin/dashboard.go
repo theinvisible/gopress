@@ -21,6 +21,7 @@ type dashboardData struct {
 	Drafts                                []postRow
 	AutoApprove                           bool
 	CanPost, CanModerate                  bool
+	Plugins                               []pluginBox
 }
 
 // postRow is a post prepared for lists.
@@ -48,7 +49,7 @@ type commentRow struct {
 // GET /admin/
 func (a *Admin) dashboard(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 	ctx := r.Context()
-	d := &dashboardData{basePage: a.base(ctx, c, "Dashboard", "dashboard")}
+	d := &dashboardData{basePage: a.base(ctx, c, "Dashboard", "dashboard"), Plugins: a.pluginDashboard(ctx, c)}
 	d.Scripts = []string{"comments.js"}
 	d.CanPost = auth.CanEditType(c.user, db.TypePost)
 	d.CanModerate = auth.Can(c.user, auth.CapModerateComments)

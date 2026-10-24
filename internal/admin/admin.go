@@ -19,6 +19,7 @@ import (
 	"github.com/theinvisible/gopress/internal/db"
 	"github.com/theinvisible/gopress/internal/httpx"
 	"github.com/theinvisible/gopress/internal/mail"
+	"github.com/theinvisible/gopress/internal/plugins"
 	"github.com/theinvisible/gopress/internal/site"
 )
 
@@ -28,6 +29,8 @@ type Options struct {
 	Mail *mail.Service
 	// MailSink reports that mail goes to a directory (development).
 	MailSink bool
+	// Plugins is the plugin host (nil: no plugin screens).
+	Plugins *plugins.Host
 }
 
 // Admin serves /admin/ and the login pages.
@@ -44,6 +47,7 @@ type Admin struct {
 	mailSink bool
 	sync     bool // run background work synchronously (tests)
 	regen    regenJob
+	plugins  *plugins.Host
 }
 
 // New creates the admin.
@@ -51,7 +55,8 @@ func New(d *db.DB, a *auth.Service, s *site.Site, cs *content.Service, opts Opti
 	if opts.Log == nil {
 		opts.Log = slog.Default()
 	}
-	ad := &Admin{db: d, auth: a, site: s, content: cs, log: opts.Log, flash: newFlashStore(), mail: opts.Mail, mailSink: opts.MailSink}
+	ad := &Admin{db: d, auth: a, site: s, content: cs, log: opts.Log, flash: newFlashStore(), mail: opts.Mail, mailSink: opts.MailSink,
+		plugins: opts.Plugins}
 	var err error
 	if ad.assets, err = loadAssets(); err != nil {
 		return nil, err
@@ -120,6 +125,7 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	a.registerWidgets(mux)
 	a.registerMenus(mux)
 	a.registerCustomize(mux)
+	a.registerPlugins(mux)
 
 	mux.Handle("/admin/", a.page(auth.CapRead, func(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 		return errNotFound
@@ -223,8 +229,11 @@ func (a *Admin) serve(w http.ResponseWriter, r *http.Request, allow func(*auth.C
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		limit := int64(maxFormBytes)
-		if r.URL.Path == "/admin/api/media" { // uploads
+		switch r.URL.Path {
+		case "/admin/api/media": // uploads
 			limit = c.settings.UploadMaxBytes + 16<<10 // multipart overhead
+		case "/admin/plugins/upload":
+			limit = plugins.MaxZipBytes + 16<<10
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		if !a.auth.CheckCSRF(r, cur) {

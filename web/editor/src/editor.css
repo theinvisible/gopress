@@ -227,3 +227,11 @@ body.gp-focus-mode .gp-focus-toggle { background: #1d2327; color: #fff; }
 .gp-media-drop-hint { display: none; }
 .gp-media-dialog.is-dropping .gp-media-drop-hint { display: flex; position: absolute; inset: 0; z-index: 10; align-items: center; justify-content: center;
 	background: rgba(34,113,177,.85); color: #fff; font-size: 22px; margin: 0; pointer-events: none; }
+
+/* Plugin buttons */
+.gp-plugin-dialog { padding: 0; }
+.gp-plugin-dialog > header { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; border-bottom: 1px solid #dcdcde; }
+.gp-plugin-dialog > header h2 { margin: 0; font-size: 16px; }
+.gp-plugin-dialog-frame { display: block; width: min(960px, 92vw); height: min(640px, 75vh); border: 0; }
+.gp-inline { display: flex; gap: 6px; }
+.gp-inline input { flex: 1; }

@@ -19,6 +19,7 @@ func (a *Admin) registerMedia(mux *http.ServeMux) {
 	mux.Handle("GET /admin/media/{$}", a.page(auth.CapUploadFiles, a.mediaLibrary))
 	mux.Handle("GET /admin/api/media", a.page(auth.CapUploadFiles, a.apiMedia))
 	mux.Handle("POST /admin/api/media", a.page(auth.CapUploadFiles, a.apiUpload))
+	mux.Handle("GET /admin/api/media/{id}", a.page(auth.CapUploadFiles, a.apiMediaGet))
 	mux.Handle("POST /admin/api/media/{id}", a.page(auth.CapUploadFiles, a.apiMediaUpdate))
 	mux.Handle("POST /admin/api/media/{id}/delete", a.page(auth.CapUploadFiles, a.apiMediaDelete))
 }
@@ -224,4 +225,18 @@ func (a *Admin) mediaLibrary(w http.ResponseWriter, r *http.Request, c *reqCtx) 
 		}
 	}
 	return a.render(w, "media", d)
+}
+
+// GET /admin/api/media/{id}: one attachment.
+func (a *Admin) apiMediaGet(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
+	p, err := db.GetPost(r.Context(), a.db.R, atoi64(r.PathValue("id")))
+	if err != nil || p.Type != db.TypeAttachment {
+		return errNotFound
+	}
+	m, err := db.GetMedia(r.Context(), a.db.R, p.ID)
+	if err != nil || m == nil {
+		return errNotFound
+	}
+	writeJSON(w, http.StatusOK, a.mediaItemOf(r, c, p, m))
+	return nil
 }

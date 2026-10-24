@@ -73,6 +73,12 @@
 			</div>
 		</div>
 		{{- end}}
+		{{- range .Plugins}}
+		<div class="postbox gp-plugin-box">
+			<div class="postbox-header"><h2 class="hndle">{{.Title}}</h2></div>
+			<div class="inside">{{if .Error}}<p class="gp-muted">{{.Error}}</p>{{else}}{{.HTML}}{{end}}</div>
+		</div>
+		{{- end}}
 	</div>
 </div>
 {{template "admin-bottom" .}}{{end}}

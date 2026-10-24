@@ -160,6 +160,7 @@ func (a *Admin) menu(u *db.User, screen string, pending int) []menuItem {
 		profile = append(profile, subItem{ID: "tokens", Label: "Access Tokens", URL: "/admin/profile/tokens"})
 	}
 	m = append(m, menuItem{ID: "profile", Label: "Profile", Icon: "id", URL: "/admin/profile", Sub: profile})
+	m = a.menuWithPlugins(m, func(c string) bool { return auth.Can(u, c) })
 	for i := range m {
 		it := &m[i]
 		for j := range it.Sub {

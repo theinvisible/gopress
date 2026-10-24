@@ -539,11 +539,106 @@ function bubbleMenu(api) {
 	return el;
 }
 
+// ---- Plugin buttons ----
+
+// shortcodeText builds a shortcode from a tag and attributes. Values
+// cannot break out of their quotes or the shortcode.
+export function shortcodeText(tag, attrs, content) {
+	const clean = (v) => String(v).replace(/[\u0000-\u001f]/g, ' ').replace(/[[\]"]/g, (c) => ({ '[': '&#91;', ']': '&#93;', '"': '&quot;' }[c]));
+	let s = '[' + tag;
+	for (const [k, v] of Object.entries(attrs || {})) {
+		if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(k) || v === '' || v == null || v === false) continue;
+		s += ' ' + k + '="' + clean(v === true ? '1' : v) + '"';
+	}
+	s += ']';
+	if (content) s += clean(content) + '[/' + tag + ']';
+	return s;
+}
+
+// pluginFields builds the dialog form of a plugin button.
+function pluginFields(fields) {
+	return h('div', { class: 'gp-form-grid' }, ...fields.map((f) => {
+		const name = f.name;
+		const def = f.default == null ? '' : String(f.default);
+		let input;
+		switch (f.type) {
+		case 'checkbox':
+			return h('label', { class: 'gp-check' }, h('input', { type: 'checkbox', name, value: '1', checked: f.default === true }), f.label);
+		case 'textarea':
+			input = h('textarea', { name, rows: 4, text: def });
+			break;
+		case 'select':
+			input = h('select', { name }, ...(f.options || []).map((o) => h('option', { value: o.value, selected: o.value === def, text: o.label })));
+			break;
+		case 'media':
+		case 'media_list': {
+			input = h('input', { type: 'text', name, value: def, placeholder: 'IDs' });
+			const btn = h('button', { type: 'button', class: 'button', text: 'Choose…', onclick: async () => {
+				const res = await window.gopress.media.pick({ multiple: f.type === 'media_list', mode: 'select', title: f.label, button: 'Select', imagesOnly: true });
+				if (res) input.value = res.items.map((it) => it.id).join(',');
+			} });
+			return h('label', {}, h('span', { text: f.label }), h('span', { class: 'gp-inline' }, input, btn));
+		}
+		default:
+			input = h('input', { type: f.type === 'number' ? 'number' : 'text', name, value: def });
+		}
+		return h('label', {}, h('span', { text: f.label }), input);
+	}));
+}
+
+// frameDialog shows a plugin's iframe page as a dialog; the page inserts
+// a shortcode with gopress.insertShortcode(tag, attrs, content).
+function frameDialog(p, onInsert) {
+	const bridge = window.gopress && window.gopress.pluginBridge;
+	if (!bridge) return;
+	const frame = h('iframe', { src: p.frame, title: p.label, sandbox: 'allow-scripts allow-forms allow-popups allow-modals',
+		referrerpolicy: 'no-referrer', class: 'gp-plugin-dialog-frame' });
+	const dlg = h('dialog', { class: 'gp-dialog gp-dialog-wide gp-plugin-dialog' },
+		h('header', {}, h('h2', { text: p.label }),
+			h('button', { type: 'button', class: 'gp-dialog-close', 'aria-label': 'Close', onclick: () => close() }, icon('no-alt'))), frame);
+	let disconnect = () => {};
+	function close() {
+		disconnect();
+		dlg.close();
+		dlg.remove();
+	}
+	dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
+	document.body.append(dlg);
+	disconnect = bridge.connect(frame, p.api, document.body.getAttribute('data-csrf'), {
+		insert: (tag, attrs, content) => { close(); onInsert(tag, attrs, content); },
+		close,
+	});
+	dlg.showModal();
+}
+
+function pluginInsert(p) {
+	return {
+		id: 'plugin-' + p.id, label: p.label, icon: p.icon || 'admin-plugins', keywords: p.shortcode, button: true,
+		onClick: async (api) => {
+			const insert = (attrs, content) => api.editor.chain().focus()
+				.insertContent({ type: 'shortcode', attrs: { text: shortcodeText(p.shortcode, attrs, content) } }).run();
+			if (p.frame) {
+				frameDialog(p, (tag, attrs, content) => { if (tag === p.shortcode) insert(attrs, content); });
+				return;
+			}
+			if (!p.fields || !p.fields.length) { insert({}); return; }
+			const fd = await dialog({ title: p.label, body: pluginFields(p.fields), submit: 'Insert' });
+			if (!fd) { api.editor.commands.focus(); return; }
+			const attrs = {};
+			for (const f of p.fields) attrs[f.name] = f.type === 'checkbox' ? !!fd.get(f.name) : (fd.get(f.name) || '').trim();
+			insert(attrs);
+		},
+	};
+}
+
 // ---- Mount ----
 
 function mount(root) {
 	const textarea = root.querySelector('textarea');
 	const config = JSON.parse(root.getAttribute('data-gp-editor') || '{}');
+	for (const p of config.plugins || []) {
+		if (!inserts.some((i) => i.id === 'plugin-' + p.id)) inserts.push(pluginInsert(p));
+	}
 	const api = { config, editor: null, inserts };
 	const body = h('div', { class: 'gp-editor-body' });
 	const source = h('textarea', { class: 'gp-source', spellcheck: 'false', hidden: true, 'aria-label': 'HTML source' });

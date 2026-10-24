@@ -1,0 +1,42 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-plugin-review">
+	<h1>Activate {{.Plugin.Title}}</h1>
+	<p><a href="/admin/plugins/">&larr; Back to Plugins</a></p>
+	<div class="gp-card">
+		<p><strong>{{.Plugin.Title}}</strong> {{.Plugin.Version}}{{if .Plugin.Author}} by {{.Plugin.Author}}{{end}} · <span class="gp-badge">{{if eq .Plugin.Source "bundled"}}Bundled{{else}}Uploaded{{end}}</span></p>
+		{{- if .Plugin.Description}}<p>{{.Plugin.Description}}</p>{{end}}
+		<p class="description">Package SHA-256: <code>{{.SHA256}}</code></p>
+	</div>
+
+	<h2>This plugin may</h2>
+	{{- if .Permissions}}
+	<ul class="gp-permission-list">
+		{{- range .Permissions}}<li>{{if contains $.New .}}<span class="gp-badge gp-badge-warn">New</span> {{end}}{{.}}</li>{{end}}
+	</ul>
+	{{- else}}
+	<p>Nothing beyond rendering its own content: no network access, no access to your posts, comments or other data.</p>
+	{{- end}}
+	{{- if .New}}<div class="notice notice-warning inline"><p>Compared with what you approved before, this version also asks for: {{range $i, $x := .New}}{{if $i}}; {{end}}{{$x}}{{end}}.</p></div>{{end}}
+
+	<h2>It adds</h2>
+	<ul class="gp-permission-list">
+		{{- if .Shortcodes}}<li>Shortcodes: {{range $i, $x := .Shortcodes}}{{if $i}}, {{end}}<code>{{$x}}</code>{{end}}</li>{{end}}
+		{{- if .Widgets}}<li>Widgets: {{range $i, $x := .Widgets}}{{if $i}}, {{end}}{{$x}}{{end}}</li>{{end}}
+		{{- if .Pages}}<li>Admin pages: {{range $i, $x := .Pages}}{{if $i}}; {{end}}{{$x}}{{end}}</li>{{end}}
+		{{- if .Inserts}}<li>Editor buttons: {{range $i, $x := .Inserts}}{{if $i}}, {{end}}{{$x}}{{end}}</li>{{end}}
+		{{- if not (or .Shortcodes .Widgets .Pages .Inserts)}}<li>Nothing visible.</li>{{end}}
+	</ul>
+	<p class="description">Plugins run in a sandbox: their HTML is filtered, scripts on public pages come only from the files listed above, and their admin pages run isolated from the admin.</p>
+
+	{{- if .Plugin.Active}}
+	<p>The plugin is active.</p>
+	{{- else}}
+	{{- if not .Reauth}}<div class="notice notice-info inline"><p>Activating asks you to confirm your identity first.</p></div>{{end}}
+	<form method="post" action="/admin/plugins/{{.Plugin.Name}}/activate">
+		{{template "csrf" .CSRF}}
+		<input type="hidden" name="sha256" value="{{.SHA256}}">
+		<p class="submit"><button type="submit" class="button button-primary">Approve and Activate</button> <a href="/admin/plugins/" class="button">Cancel</a></p>
+	</form>
+	{{- end}}
+</div>
+{{template "admin-bottom" .}}{{end}}

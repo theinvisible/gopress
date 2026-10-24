@@ -204,7 +204,8 @@ func cmdServe(args []string, stderr io.Writer) int {
 	public.SetExtensions(pluginHost)
 	public.SetCommentFilter(pluginHost.CommentFilter())
 	contentSvc.SetCommentStatusHook(pluginHost.CommentStatusChanged)
-	adm, err := admin.New(d, authSvc, public, contentSvc, admin.Options{Log: log, Mail: mailSvc, MailSink: *mailSink != ""})
+	adm, err := admin.New(d, authSvc, public, contentSvc, admin.Options{Log: log, Mail: mailSvc, MailSink: *mailSink != "",
+		Plugins: pluginHost})
 	if err != nil {
 		log.Error("admin", "err", err)
 		return 1

@@ -782,7 +782,7 @@ func (a *Admin) renderEditor(w http.ResponseWriter, r *http.Request, c *reqCtx, 
 	d := &editorData{basePage: a.base(ctx, c, title, screen), PT: pt, Post: p, IsNew: isNew, Error: errMsg}
 	d.BodyClass += " post-php gp-editor-screen"
 	d.Styles = []string{"editor/editor.css"}
-	d.Scripts = []string{"upload.js", "editor/editor.js", "post.js"}
+	d.Scripts = []string{"upload.js", "plugin-bridge.js", "editor/editor.js", "post.js"}
 	if msg, ok := editorMessages[r.URL.Query().Get("msg")]; ok && errMsg == "" {
 		if d.Notice == nil {
 			d.Notice = &msg
@@ -896,6 +896,7 @@ func (a *Admin) renderEditor(w http.ResponseWriter, r *http.Request, c *reqCtx, 
 		"categories": "/admin/api/categories",
 		"home":       c.links.Home(),
 		"interval":   60,
+		"plugins":    a.editorInserts(c),
 	}
 	if errMsg != "" {
 		w.WriteHeader(http.StatusBadRequest)

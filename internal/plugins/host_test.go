@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,43 +18,19 @@ import (
 	"time"
 
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/plugins/plugintest"
 	"github.com/theinvisible/gopress/internal/site"
 	"github.com/theinvisible/gopress/internal/theme"
 	"github.com/theinvisible/gopress/themes"
 )
 
-var (
-	testerOnce sync.Once
-	testerZip  []byte
-	testerErr  error
-)
-
-// testerPackage builds testdata/tester with the Go toolchain (cached by
-// the build cache) and packs it.
+// testerPackage builds and packs testdata/tester.
 func testerPackage(t *testing.T) []byte {
-	t.Helper()
-	testerOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "gopress-tester")
-		if err != nil {
-			testerErr = err
-			return
-		}
-		defer os.RemoveAll(dir)
-		wasm := filepath.Join(dir, "plugin.wasm")
-		cmd := exec.Command("go", "build", "-buildmode=c-shared", "-o", wasm, ".")
-		cmd.Dir = "testdata/tester"
-		cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm", "GOFLAGS=")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			testerErr = err
-			t.Logf("%s", out)
-			return
-		}
-		testerZip, testerErr = PackDir("testdata/tester", wasm)
-	})
-	if testerErr != nil {
-		t.Fatalf("building the test plugin: %v", testerErr)
+	b, err := PackDir(plugintest.Tester(t))
+	if err != nil {
+		t.Fatal(err)
 	}
-	return testerZip
+	return b
 }
 
 type hostEnv struct {
