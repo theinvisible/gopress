@@ -5,7 +5,7 @@ COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS  := -s -w -X $(PKG)/internal/buildinfo.Version=$(VERSION) -X $(PKG)/internal/buildinfo.Commit=$(COMMIT)
 COMPOSE  := docker compose -f dev/compose.yaml
 
-.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden import serve parity vulncheck editor admin-assets e2e roundtrip
+.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden import serve parity vulncheck editor admin-assets e2e roundtrip plugins hello
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/gopress
@@ -73,6 +73,18 @@ parity: wpref-up serve
 
 vulncheck:
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+# Plugins shipped with GoPress (plugins/<name>, M4) are packed into
+# plugins/bundled/zips, which is committed and embedded in the binary.
+BUNDLED_PLUGINS :=
+
+plugins:
+	@for p in $(BUNDLED_PLUGINS); do go run ./cmd/gopress plugin-pack -o plugins/bundled/zips/$$p.zip plugins/$$p || exit 1; done
+
+# The example plugin (not bundled): bin/hello.zip to upload.
+hello:
+	@mkdir -p bin
+	go run ./cmd/gopress plugin-pack -o bin/hello.zip plugins/hello
 
 # The post editor (web/editor, TipTap) is built into web/admin/static/editor,
 # which is committed: building GoPress itself needs no Node.

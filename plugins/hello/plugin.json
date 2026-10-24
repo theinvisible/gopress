@@ -1,0 +1,26 @@
+{
+	"name": "hello",
+	"version": "1.0.0",
+	"title": "Hello",
+	"description": "The example plugin: a greeting shortcode, a widget, settings, a custom admin page and a route.",
+	"author": "GoPress",
+	"api": 1,
+	"permissions": {
+		"routes": ["/stats"],
+		"hooks": ["the_content"],
+		"frontend_assets": ["assets/hello.css", "assets/hello.js"]
+	},
+	"shortcodes": [{"name": "hello", "assets": ["assets/hello.css", "assets/hello.js"]}],
+	"widgets": [{"type": "hello", "title": "Hello counter", "description": "Shows how often the greeting was shown.",
+		"fields": [{"name": "title", "label": "Title"}]}],
+	"admin": [
+		{"id": "settings", "title": "Hello", "menu": "settings", "capability": "manage_options", "kind": "settings", "fields": [
+			{"name": "greeting", "label": "Greeting", "default": "Hello", "max_length": 60, "required": true},
+			{"name": "signature", "label": "Sign posts with a greeting", "type": "checkbox", "default": false}
+		]},
+		{"id": "board", "title": "Hello board", "menu": "plugin", "capability": "edit_posts", "kind": "iframe", "file": "admin/board.html"}
+	],
+	"editor": [{"id": "greet", "label": "Greeting", "icon": "smiley", "shortcode": "hello",
+		"fields": [{"name": "name", "label": "Whom to greet", "default": "world"}]}],
+	"dashboard": [{"id": "summary", "title": "Hello", "capability": "edit_posts"}]
+}

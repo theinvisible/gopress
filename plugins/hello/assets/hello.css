@@ -1,0 +1,4 @@
+.hello-greeting { font-size: 1.25em; font-weight: 600; }
+.hello-greeting.hello-wave::after { content: " 👋"; display: inline-block; animation: hello-wave 1.2s ease-in-out 2; }
+@keyframes hello-wave { 50% { transform: rotate(20deg); } }
+.hello-signature { font-style: italic; opacity: .8; }
