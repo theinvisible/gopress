@@ -17,9 +17,12 @@ type View struct {
 	Head            template.HTML // feed links, canonical, styles, inline CSS
 	Menu            template.HTML // primary navigation
 	Sidebar         template.HTML // empty: no sidebar rendered
-	FooterScripts   template.HTML
-	Credit          template.HTML // footer site-info content
-	SearchForm      template.HTML
+	// FrontWidgets is the front page template's widget area
+	// (sidebar-front.php); it replaces the sidebar.
+	FrontWidgets  template.HTML
+	FooterScripts template.HTML
+	Credit        template.HTML // footer site-info content
+	SearchForm    template.HTML
 
 	// Loops (index, archive, search).
 	Posts        []*Post
@@ -38,6 +41,9 @@ type View struct {
 
 // Post is one entry in a loop or the singular post.
 type Post struct {
+	// PageImage is the featured image of the front page template
+	// (div.entry-page-image).
+	PageImage    template.HTML
 	ID           int64
 	Class        string
 	Title        template.HTML

@@ -1,0 +1,79 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-widgets">
+	<h1>Widgets</h1>
+	<p class="gp-widgets-hint">Drag widgets between the areas to arrange them, or use the arrows. Changes to the order are saved right away.</p>
+	<div class="gp-widgets-layout">
+		<section class="gp-widget-catalog" aria-labelledby="gp-available">
+			<h2 id="gp-available">Available Widgets</h2>
+			<ul>
+			{{- range .Types}}
+				<li class="gp-widget-type">
+					<details>
+						<summary><strong>{{.Label}}</strong><span class="description">{{.Description}}</span></summary>
+						<form method="post" action="/admin/widgets/add" class="gp-widget-add">
+							{{template "csrf" $.CSRF}}<input type="hidden" name="type" value="{{.Type}}">
+							<label>Add to <select name="sidebar">{{range $.Areas}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label>
+							<button type="submit" class="button button-primary">Add Widget</button>
+						</form>
+					</details>
+				</li>
+			{{- end}}
+			</ul>
+		</section>
+		<div class="gp-widget-areas">
+			{{- range .Areas}}{{template "widget-area" (dict "A" . "CSRF" $.CSRF "Areas" $.Areas)}}{{end}}
+			{{template "widget-area" (dict "A" .Inactive "CSRF" .CSRF "Areas" .Areas)}}
+		</div>
+	</div>
+	<p class="gp-widgets-status" role="status" aria-live="polite"></p>
+</div>
+{{template "admin-bottom" .}}{{end}}
+
+{{define "widget-area"}}{{$a := .A}}{{$csrf := .CSRF}}{{$areas := .Areas}}
+<section class="gp-widget-area postbox" id="{{$a.ID}}" aria-labelledby="h-{{$a.ID}}">
+	<div class="postbox-header"><h2 id="h-{{$a.ID}}" class="hndle">{{$a.Name}}</h2></div>
+	<div class="inside">
+		<p class="description">{{$a.Description}}</p>
+		<ul class="gp-widget-list" data-area="{{$a.ID}}">
+		{{- range $a.Widgets}}
+			<li class="gp-widget" draggable="true" data-id="{{.ID}}">
+				<details>
+					<summary>
+						<span class="gp-drag dashicons dashicons-menu" aria-hidden="true"></span>
+						<strong>{{.Label}}</strong>{{if .Title}}<span class="gp-widget-title">: {{.Title}}</span>{{end}}
+						<span class="gp-widget-move">
+							<button type="button" class="button-link" data-move="up" aria-label="Move up"><span class="dashicons dashicons-arrow-up-alt2" aria-hidden="true"></span></button>
+							<button type="button" class="button-link" data-move="down" aria-label="Move down"><span class="dashicons dashicons-arrow-down-alt2" aria-hidden="true"></span></button>
+						</span>
+					</summary>
+					{{- if .Known}}
+					<form method="post" action="/admin/widgets/{{.ID}}" class="gp-widget-form">
+						{{template "csrf" $csrf}}
+						{{- range .Fields}}
+						<p>{{if eq .Kind "checkbox"}}<label><input type="checkbox" name="{{.Key}}" value="1"{{if .Checked}} checked{{end}}> {{.Label}}</label>
+						{{- else}}<label>{{.Label}}
+							{{- if eq .Kind "html"}}<textarea name="{{.Key}}" rows="8" class="widefat code">{{.Value}}</textarea>
+							{{- else if eq .Kind "textarea"}}<textarea name="{{.Key}}" rows="4" class="widefat">{{.Value}}</textarea>
+							{{- else if eq .Kind "number"}}<input type="number" name="{{.Key}}" value="{{.Value}}" min="{{.Min}}" max="{{.Max}}" class="tiny-text">
+							{{- else if eq .Kind "select"}}{{$v := .Value}}<select name="{{.Key}}" class="widefat">{{range .Options}}<option value="{{.Value}}"{{if eq .Value $v}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+							{{- else}}<input type="text" name="{{.Key}}" value="{{.Value}}" class="widefat">{{end}}</label>{{end}}
+							{{- if .Help}}<br><span class="description">{{.Help}}</span>{{end}}</p>
+						{{- end}}
+						<div class="gp-widget-actions">
+							<button type="submit" class="button-link button-link-delete" formaction="/admin/widgets/{{.ID}}/delete" data-confirm="Delete this widget?">Delete</button>
+							<label class="gp-move-to">Move to <select data-move-to>{{range $areas}}<option value="{{.ID}}"{{if eq .ID $a.ID}} selected{{end}}>{{.Name}}</option>{{end}}<option value="wp_inactive_widgets"{{if eq $a.ID "wp_inactive_widgets"}} selected{{end}}>Inactive Widgets</option></select></label>
+							<button type="submit" class="button button-primary">Save</button>
+						</div>
+					</form>
+					{{- else}}
+					<p class="description">This widget comes from a plugin and has no settings here.</p>
+					<form method="post" action="/admin/widgets/{{.ID}}/delete">{{template "csrf" $csrf}}<button type="submit" class="button-link button-link-delete">Delete</button></form>
+					{{- end}}
+				</details>
+			</li>
+		{{- end}}
+		</ul>
+		<p class="gp-widget-empty">{{if not $a.Widgets}}No widgets yet. {{end}}Drop widgets here.</p>
+	</div>
+</section>
+{{end}}

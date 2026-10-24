@@ -38,7 +38,11 @@ func (rq *request) sidebar(id string) string {
 		if inner == "" {
 			continue
 		}
-		fmt.Fprintf(&b, `<aside id="%s" class="widget %s">%s</aside>`, esc(w.ID), class, inner)
+		cls := "widget " + class
+		if w.Type == "custom_html" { // WP_Widget_Custom_HTML adds widget_text first
+			cls = "widget_text widget " + class
+		}
+		fmt.Fprintf(&b, `<aside id="%s" class="%s">%s</aside>`, esc(w.ID), cls, inner)
 	}
 	return b.String()
 }
@@ -86,6 +90,26 @@ func (rq *request) widget(w *db.Widget) (string, string) {
 	switch w.Type {
 	case "search":
 		return widgetTitle(set, "") + rq.searchForm(), "widget_search"
+
+	case "custom_html":
+		content, _ := set["content"].(string)
+		return widgetTitle(set, "") + `<div class="textwidget custom-html-widget">` + content + `</div>`, "widget_custom_html"
+
+	case "pages":
+		var b strings.Builder
+		fmt.Fprintf(&b, "%s\n\t\t\t<ul>\n", widgetTitle(set, "Pages"))
+		exclude := map[int64]bool{}
+		if ex, _ := set["exclude"].(string); ex != "" {
+			for _, f := range strings.Split(ex, ",") {
+				if n, err := strconv.ParseInt(strings.TrimSpace(f), 10, 64); err == nil {
+					exclude[n] = true
+				}
+			}
+		}
+		sortBy, _ := set["sortby"].(string)
+		rq.pageTree(&b, 0, sortBy, exclude, 4)
+		b.WriteString("\t\t\t</ul>\n\n\t\t\t")
+		return b.String(), "widget_pages"
 
 	case "block":
 		content, _ := set["content"].(string)
@@ -304,4 +328,60 @@ func (rq *request) tagCloud() string {
 // WordPress' mysql2date() does for post_date and comment_date.
 func localTime(t db.Time, loc *time.Location) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, loc)
+}
+
+// pageTree writes wp_list_pages() items (published pages below parent).
+func (rq *request) pageTree(b *strings.Builder, parent int64, sortBy string, exclude map[int64]bool, indent int) {
+	pages := append([]*db.Post(nil), rq.st.ix.childPages(parent)...)
+	switch sortBy {
+	case "post_title":
+		sort.SliceStable(pages, func(i, j int) bool { return strings.ToLower(pages[i].Title) < strings.ToLower(pages[j].Title) })
+	case "ID":
+		sort.SliceStable(pages, func(i, j int) bool { return pages[i].ID < pages[j].ID })
+	}
+	tabs := strings.Repeat("\t", indent)
+	for _, p := range pages {
+		if exclude[p.ID] || p.Status != db.StatusPublish {
+			continue
+		}
+		cls := "page_item page-item-" + strconv.FormatInt(p.ID, 10)
+		kids := rq.st.ix.childPages(p.ID)
+		if len(kids) > 0 {
+			cls += " page_item_has_children"
+		}
+		if p.ID == rq.curPost {
+			cls += " current_page_item"
+		}
+		fmt.Fprintf(b, "%s<li class=\"%s\"><a href=\"%s\">%s</a>", tabs, cls, esc(rq.st.links.PostURL(p)), rq.title(p.Title))
+		if len(kids) > 0 {
+			fmt.Fprintf(b, "\n%s<ul class='children'>\n", tabs)
+			rq.pageTree(b, p.ID, sortBy, exclude, indent+1)
+			fmt.Fprintf(b, "%s</ul>\n%s", tabs, tabs)
+		}
+		b.WriteString("</li>\n")
+	}
+}
+
+// sidebarActive is is_active_sidebar().
+func (rq *request) sidebarActive(id string) bool {
+	n, err := db.WidgetCount(rq.ctx, rq.site.db.R, id)
+	return err == nil && n > 0
+}
+
+// frontWidgets is Twenty Twelve's sidebar-front.php.
+func (rq *request) frontWidgets() string {
+	first, second := rq.sidebar("sidebar-2"), rq.sidebar("sidebar-3")
+	if first == "" && second == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n<div id=\"secondary\" class=\"widget-area\" role=\"complementary\">\n")
+	if first != "" {
+		b.WriteString("\t<div class=\"first front-widgets\">\n\t\t" + first + "\t</div><!-- .first -->\n")
+	}
+	if second != "" {
+		b.WriteString("\n\t<div class=\"second front-widgets\">\n\t\t" + second + "\t</div><!-- .second -->\n")
+	}
+	b.WriteString("</div><!-- #secondary -->")
+	return b.String()
 }

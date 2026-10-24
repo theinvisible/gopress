@@ -66,20 +66,23 @@ func (rq *request) title(t string) string {
 // --- common view ---
 
 type viewOpts struct {
-	title       string // HTML: callers escape user input
-	bodyClass   []string
-	bodyClass2  []string // classes after "paged" (archive specifics)
-	paged       int
-	pagedClass  string // e.g. "category" for category-paged-2
-	feeds       []feedLink
-	canonical   string
-	shortlink   string
-	fullWidth   bool
-	noSidebar   bool
-	isFront     bool
-	singular    *db.Post
-	replyJS     bool
-	commentForm bool
+	title      string // HTML: callers escape user input
+	bodyClass  []string
+	bodyClass2 []string // classes after "paged" (archive specifics)
+	paged      int
+	pagedClass string // e.g. "category" for category-paged-2
+	feeds      []feedLink
+	canonical  string
+	shortlink  string
+	fullWidth  bool
+	noSidebar  bool
+	// frontTemplate is Twenty Twelve's front page template.
+	frontTemplate bool
+	themeClass    []string // twentytwelve_body_class() additions
+	isFront       bool
+	singular      *db.Post
+	replyJS       bool
+	commentForm   bool
 }
 
 type feedLink struct{ title, href string }
@@ -150,9 +153,12 @@ func (rq *request) baseView(o viewOpts) *theme.View {
 		}
 	}
 	classes = append(classes, "wp-theme-"+th.Name)
-	if o.fullWidth {
+	// twentytwelve_body_class(): full width without an active main
+	// sidebar or with the full-width template.
+	if o.fullWidth || !rq.sidebarActive("sidebar-1") {
 		classes = append(classes, "full-width")
 	}
+	classes = append(classes, o.themeClass...)
 	classes = append(classes, "custom-font-enabled")
 	if !rq.st.ix.multiAuthor {
 		classes = append(classes, "single-author")
@@ -160,7 +166,7 @@ func (rq *request) baseView(o viewOpts) *theme.View {
 	v.BodyClass = strings.Join(classes, " ")
 
 	v.Menu = template.HTML(rq.pageMenu(o.isFront, o.singular))
-	if !o.noSidebar && !o.fullWidth {
+	if !o.noSidebar && !o.fullWidth && !o.frontTemplate {
 		v.Sidebar = template.HTML(rq.sidebar("sidebar-1"))
 	}
 	v.SearchForm = template.HTML(rq.searchForm())

@@ -100,6 +100,17 @@ func (rq *request) singularPost(p *db.Post, rt *route) *response {
 			opts.bodyClass = append(opts.bodyClass, "page-child", "parent-pageid-"+strconv.FormatInt(p.ParentID, 10))
 		}
 		opts.fullWidth = p.Template == "page-templates/full-width.php"
+		opts.frontTemplate = p.Template == "page-templates/front-page.php"
+		if opts.frontTemplate {
+			// twentytwelve_body_class()
+			opts.themeClass = append(opts.themeClass, "template-front-page")
+			if p.FeaturedMediaID != 0 {
+				opts.themeClass = append(opts.themeClass, "has-post-thumbnail")
+			}
+			if rq.sidebarActive("sidebar-2") && rq.sidebarActive("sidebar-3") {
+				opts.themeClass = append(opts.themeClass, "two-sidebars")
+			}
+		}
 	case db.TypeAttachment:
 		kind = "attachment"
 		mimeSub := p.MimeType[strings.IndexByte(p.MimeType, '/')+1:]
@@ -118,6 +129,16 @@ func (rq *request) singularPost(p *db.Post, rt *route) *response {
 		entry = rq.entry(p, terms[p.ID], modeSingle)
 		if p.Type == db.TypePage {
 			entry.Meta = ""
+		}
+		if opts.frontTemplate {
+			// page-templates/front-page.php: the featured image above the
+			// page, the front widget areas instead of the sidebar, no
+			// comments.
+			if m, err := db.GetMedia(rq.ctx, rq.site.db.R, p.FeaturedMediaID); err == nil && m != nil && p.Password == "" {
+				entry.PageImage = template.HTML(render.PostThumbnail(rq.env, m))
+			}
+			v.FrontWidgets = template.HTML(rq.frontWidgets())
+			*comments = ""
 		}
 	}
 	v.Post = entry

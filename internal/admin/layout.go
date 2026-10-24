@@ -119,6 +119,11 @@ func (a *Admin) menu(u *db.User, screen string, pending int) []menuItem {
 		m = append(m, menuItem{ID: "comments", Label: "Comments", Icon: "admin-comments", URL: "/admin/comments/", Badge: pending})
 	}
 	m = append(m, menuItem{Separator: true})
+	if auth.Can(u, auth.CapEditThemeOptions) {
+		m = append(m, menuItem{ID: "appearance", Label: "Appearance", Icon: "admin-appearance", URL: "/admin/widgets", Sub: []subItem{
+			{ID: "appearance-widgets", Label: "Widgets", URL: "/admin/widgets"},
+		}})
+	}
 	if auth.Can(u, auth.CapListUsers) {
 		sub := []subItem{{ID: "users-all", Label: "All Users", URL: "/admin/users/"}}
 		if auth.Can(u, auth.CapCreateUsers) {

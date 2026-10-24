@@ -1,9 +1,12 @@
 {{define "main"}}
 	<div id="primary" class="site-content">
-		<div id="content" role="main">
+		<div id="content" role="main">{{if .Post.PageImage}}
+					<div class="entry-page-image">
+						{{.Post.PageImage}}
+					</div><!-- .entry-page-image -->{{end}}
 {{template "content-page" .Post}}
 {{.Comments}}
 		</div><!-- #content -->
 	</div><!-- #primary -->
-{{template "sidebar" .}}
+{{if .FrontWidgets}}{{.FrontWidgets}}{{else}}{{template "sidebar" .}}{{end}}
 {{end}}
