@@ -400,3 +400,13 @@ func PruneAudit(ctx context.Context, q Querier, cutoff int64) error {
 	_, err := q.ExecContext(ctx, `DELETE FROM audit_log WHERE time < ?`, cutoff)
 	return err
 }
+
+// UserIDByMeta returns the id of the user whose meta key has value, or 0.
+func UserIDByMeta(ctx context.Context, q Querier, key, value string) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx, `SELECT user_id FROM user_meta WHERE key = ? AND value = ?`, key, value).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
+}

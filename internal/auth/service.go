@@ -37,6 +37,7 @@ type Service struct {
 	csrfKey  []byte
 	loginKey []byte
 	totpKey  []byte
+	recovKey []byte
 
 	ipLimit    *ipLimiter
 	ceremonies *ceremonyStore
@@ -54,6 +55,7 @@ func New(d *db.DB, opts Options) *Service {
 	s.csrfKey = deriveKey(opts.Secret, "gopress csrf")
 	s.loginKey = deriveKey(opts.Secret, "gopress login form")
 	s.totpKey = deriveKey(opts.Secret, "gopress totp secret encryption")
+	s.recovKey = deriveKey(opts.Secret, "gopress recovery codes")
 	s.ipLimit = newIPLimiter(loginIPMax, loginIPWindow)
 	s.ceremonies = newCeremonyStore()
 	return s
