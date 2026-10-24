@@ -59,6 +59,24 @@ func commentError(w http.ResponseWriter, status int, msg string) {
 		"<body><p><strong>Error:</strong> %s</p><p>Please use your browser's back button to return.</p></body></html>", html.EscapeString(msg))
 }
 
+// commentToken returns a fresh form token for a post (comment-guard.js).
+func (s *Site) commentToken(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	st, err := s.current(r.Context())
+	if err != nil {
+		http.Error(w, `{}`, http.StatusInternalServerError)
+		return
+	}
+	id, _ := strconv.ParseInt(r.URL.Query().Get("post"), 10, 64)
+	p := st.ix.posts[id]
+	if p == nil || !st.ix.isPublic(p) || p.CommentStatus != "open" {
+		http.Error(w, `{}`, http.StatusNotFound)
+		return
+	}
+	fmt.Fprintf(w, `{"token":%q}`, s.guard.Token(id, time.Now()))
+}
+
 // postComment handles POST /wp-comments-post.php.
 func (s *Site) postComment(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxCommentBody)

@@ -58,11 +58,12 @@ func (rq *request) singular(indexed *db.Post, rt *route) *response {
 	}
 
 	opts := viewOpts{
-		title:     render.StripTags(rq.title(p.Title)) + " | " + esc(s.Name),
-		canonical: url,
-		shortlink: s.Home + "/?p=" + strconv.FormatInt(p.ID, 10),
-		singular:  p,
-		replyJS:   p.CommentStatus == "open" && s.ThreadComments,
+		title:       render.StripTags(rq.title(p.Title)) + " | " + esc(s.Name),
+		canonical:   url,
+		shortlink:   s.Home + "/?p=" + strconv.FormatInt(p.ID, 10),
+		singular:    p,
+		replyJS:     p.CommentStatus == "open" && s.ThreadComments,
+		commentForm: p.CommentStatus == "open" && p.Password == "",
 	}
 	if cpage > 0 {
 		opts.canonical = CommentPageURL(url, cpage) + "#comments"

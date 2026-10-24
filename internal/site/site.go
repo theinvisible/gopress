@@ -112,6 +112,9 @@ func (s *Site) current(ctx context.Context) (*state, error) {
 // ServeHTTP implements http.Handler.
 func (s *Site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch p := r.URL.Path; {
+	case strings.HasPrefix(p, "/static/_core/"):
+		serveCoreAsset(w, r)
+		return
 	case strings.HasPrefix(p, "/static/"):
 		s.static.ServeHTTP(w, r)
 		return
@@ -119,6 +122,10 @@ func (s *Site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.uploads.ServeHTTP(w, r)
 		return
 	case p == "/wp-comments-post.php":
+		if r.Method == http.MethodGet && r.URL.Query().Get("gp_token") == "1" {
+			s.commentToken(w, r)
+			return
+		}
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return

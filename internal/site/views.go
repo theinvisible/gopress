@@ -80,19 +80,20 @@ func (rq *request) title(t string) string {
 // --- common view ---
 
 type viewOpts struct {
-	title      string // HTML: callers escape user input
-	bodyClass  []string
-	bodyClass2 []string // classes after "paged" (archive specifics)
-	paged      int
-	pagedClass string // e.g. "category" for category-paged-2
-	feeds      []feedLink
-	canonical  string
-	shortlink  string
-	fullWidth  bool
-	noSidebar  bool
-	isFront    bool
-	singular   *db.Post
-	replyJS    bool
+	title       string // HTML: callers escape user input
+	bodyClass   []string
+	bodyClass2  []string // classes after "paged" (archive specifics)
+	paged       int
+	pagedClass  string // e.g. "category" for category-paged-2
+	feeds       []feedLink
+	canonical   string
+	shortlink   string
+	fullWidth   bool
+	noSidebar   bool
+	isFront     bool
+	singular    *db.Post
+	replyJS     bool
+	commentForm bool
 }
 
 type feedLink struct{ title, href string }
@@ -130,6 +131,9 @@ func (rq *request) baseView(o viewOpts) *theme.View {
 	fmt.Fprintf(&head, "<script defer id=\"twentytwelve-navigation-js\" src=\"%s\"></script>\n", th.AssetPath("js/navigation.js"))
 	if o.replyJS {
 		fmt.Fprintf(&head, "<script async id=\"comment-reply-js\" src=\"%s\"></script>\n", th.AssetPath("js/comment-reply.min.js"))
+	}
+	if o.commentForm {
+		fmt.Fprintf(&head, "<script defer id=\"gopress-comment-guard-js\" src=\"%s\"></script>\n", coreAssetPath("comment-guard.js"))
 	}
 	if o.canonical != "" {
 		fmt.Fprintf(&head, "<link rel=\"canonical\" href=\"%s\" />\n", esc(o.canonical))
