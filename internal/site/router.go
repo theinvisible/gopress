@@ -25,6 +25,14 @@ var permalinkTokens = map[string]string{
 
 var rePermalinkToken = regexp.MustCompile(`%[a-z_]+%`)
 
+func oldPermalinkMatchers(structures []string) []*permalinkMatcher {
+	var out []*permalinkMatcher
+	for _, s := range structures {
+		out = append(out, newPermalinkMatcher(s))
+	}
+	return out
+}
+
 func newPermalinkMatcher(structure string) *permalinkMatcher {
 	m := &permalinkMatcher{}
 	structure = "/" + strings.Trim(structure, "/") + "/"
@@ -404,6 +412,17 @@ func (rq *request) withSuffix(base string, rt *route) string {
 // former slug of exactly one published post or page; otherwise 404.
 func (rq *request) guess404(segs []string) *response {
 	ix := rq.st.ix
+	// URLs of an earlier permalink structure.
+	path := "/" + strings.Join(segs, "/")
+	for _, m := range rq.st.oldPerma {
+		for _, p := range []string{path + "/", path} {
+			if vals := m.match(p); vals != nil {
+				if post := rq.findPost(vals); post != nil {
+					return redirect(rq.st.links.PostURL(post))
+				}
+			}
+		}
+	}
 	slug := segs[len(segs)-1]
 	var found []*db.Post
 	found = append(found, ix.postsBySlug[slug]...)

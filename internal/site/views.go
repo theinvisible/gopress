@@ -382,7 +382,7 @@ func (rq *request) entry(p *db.Post, terms []db.Term, mode entryMode) *theme.Pos
 	if mode != modeSingle {
 		e.URL = url
 	}
-	if p.CommentStatus == "open" {
+	if rq.st.s.CommentsOpen(p) {
 		e.CommentsLink = template.HTML(rq.commentsPopupLink(p, url))
 	}
 	rq.env.Post = p

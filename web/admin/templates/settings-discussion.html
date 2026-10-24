@@ -1,0 +1,55 @@
+{{define "page"}}{{template "admin-top" .}}
+{{- $v := .V}}
+<div class="wrap gp-settings">
+	<h1>Discussion Settings</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	<form method="post" action="/admin/settings/discussion">
+		{{template "csrf" .CSRF}}
+		<table class="form-table indent-children" role="presentation"><tbody>
+			<tr><th scope="row">Default post settings</th><td><fieldset>
+				<label><input name="default_comment_status" type="checkbox" value="open"{{if eq (index $v "default_comment_status") "open"}} checked{{end}}> Allow people to submit comments on new posts</label>
+				<p class="description">Individual posts may override these settings. Changes here will only be applied to new posts.</p>
+			</fieldset></td></tr>
+			<tr><th scope="row">Other comment settings</th><td><fieldset>
+				<label><input name="require_name_email" type="checkbox" value="1"{{if eq (index $v "require_name_email") "1"}} checked{{end}}> Comment author must fill out name and email</label><br>
+				<label><input name="comment_registration" type="checkbox" value="1"{{if eq (index $v "comment_registration") "1"}} checked{{end}}> Users must be registered and logged in to comment</label><br>
+				<label><input name="close_comments_for_old_posts" type="checkbox" value="1"{{if eq (index $v "close_comments_for_old_posts") "1"}} checked{{end}}> Automatically close comments on posts older than</label>
+				<label><input name="close_comments_days_old" type="number" min="1" step="1" value="{{index $v "close_comments_days_old"}}" class="small-text"> days</label><br>
+				<label><input name="show_comments_cookies_opt_in" type="checkbox" value="1"{{if eq (index $v "show_comments_cookies_opt_in") "1"}} checked{{end}}> Show comments cookies opt-in checkbox, allowing comment author cookies to be set</label><br>
+				<label><input name="thread_comments" type="checkbox" value="1"{{if eq (index $v "thread_comments") "1"}} checked{{end}}> Enable threaded (nested) comments</label>
+				<label><input name="thread_comments_depth" type="number" min="2" max="10" value="{{index $v "thread_comments_depth"}}" class="small-text"> levels deep</label><br>
+				<label><input name="page_comments" type="checkbox" value="1"{{if eq (index $v "page_comments") "1"}} checked{{end}}> Break comments into pages with</label>
+				<label><input name="comments_per_page" type="number" min="1" value="{{index $v "comments_per_page"}}" class="small-text"> top level comments per page and the</label>
+				<label><select name="default_comments_page"><option value="newest"{{if eq (index $v "default_comments_page") "newest"}} selected{{end}}>last</option><option value="oldest"{{if eq (index $v "default_comments_page") "oldest"}} selected{{end}}>first</option></select> page displayed by default</label><br>
+				<label>Comments should be displayed with the <select name="comment_order"><option value="asc"{{if eq (index $v "comment_order") "asc"}} selected{{end}}>older</option><option value="desc"{{if eq (index $v "comment_order") "desc"}} selected{{end}}>newer</option></select> comments at the top of each page</label>
+			</fieldset></td></tr>
+			<tr><th scope="row">Email me whenever</th><td><fieldset>
+				<label><input name="comments_notify" type="checkbox" value="1"{{if eq (index $v "comments_notify") "1"}} checked{{end}}> Anyone posts a comment</label><br>
+				<label><input name="moderation_notify" type="checkbox" value="1"{{if eq (index $v "moderation_notify") "1"}} checked{{end}}> A comment is held for moderation</label>
+				{{- if not .MailOK}}<p class="description">Email is not configured yet (<a href="/admin/settings/email">Settings › Email</a>).</p>{{end}}
+			</fieldset></td></tr>
+			<tr><th scope="row">Before a comment appears</th><td><fieldset>
+				<label><input name="comment_moderation" type="checkbox" value="1"{{if eq (index $v "comment_moderation") "1"}} checked{{end}}> Comment must be manually approved</label><br>
+				<label><input name="comment_previously_approved" type="checkbox" value="1"{{if eq (index $v "comment_previously_approved") "1"}} checked{{end}}> Comment author must have a previously approved comment</label>
+			</fieldset></td></tr>
+			<tr><th scope="row">Comment Moderation</th><td><fieldset>
+				<p><label>Hold a comment in the queue if it contains <input name="comment_max_links" type="number" min="0" value="{{index $v "comment_max_links"}}" class="small-text"> or more links. (A common characteristic of comment spam is a large number of hyperlinks.)</label></p>
+				<p><label for="moderation_keys">When a comment contains any of these words in its content, author name, URL, email, IP address, or browser’s user agent string, it will be held in the moderation queue. One word or IP address per line. It will match inside words, so “press” will match “WordPress”.</label></p>
+				<p><textarea name="moderation_keys" rows="10" cols="50" id="moderation_keys" class="large-text code">{{index $v "moderation_keys"}}</textarea></p>
+			</fieldset></td></tr>
+			<tr><th scope="row">Disallowed Comment Keys</th><td><fieldset>
+				<p><label for="disallowed_keys">When a comment contains any of these words in its content, author name, URL, email, IP address, or browser’s user agent string, it will be put in the spam. One word or IP address per line. It will match inside words, so “press” will match “WordPress”.</label></p>
+				<p><textarea name="disallowed_keys" rows="10" cols="50" id="disallowed_keys" class="large-text code">{{index $v "disallowed_keys"}}</textarea></p>
+			</fieldset></td></tr>
+		</tbody></table>
+		<h2 class="title">Avatars</h2>
+		<p>An avatar is an image that can be associated with a user across multiple websites (Gravatar).</p>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th scope="row">Avatar Display</th><td><label><input name="show_avatars" type="checkbox" value="1"{{if eq (index $v "show_avatars") "1"}} checked{{end}}> Show Avatars</label></td></tr>
+			<tr><th scope="row">Maximum Rating</th><td><fieldset>{{$r := index $v "avatar_rating"}}{{range .Ratings}}<label><input type="radio" name="avatar_rating" value="{{.Value}}"{{if eq .Value $r}} checked{{end}}> {{.Label}}</label><br>{{end}}</fieldset></td></tr>
+			<tr><th scope="row">Default Avatar</th><td><fieldset>{{$a := index $v "avatar_default"}}{{range .Avatars}}<label><input type="radio" name="avatar_default" value="{{.Value}}"{{if eq .Value $a}} checked{{end}}> {{.Label}}</label><br>{{end}}</fieldset></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Save Changes"></p>
+	</form>
+</div>
+{{template "admin-bottom" .}}{{end}}

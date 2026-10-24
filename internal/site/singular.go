@@ -67,13 +67,13 @@ func (rq *request) singularPost(p *db.Post, rt *route) *response {
 		canonical:   url,
 		shortlink:   s.Home + "/?p=" + strconv.FormatInt(p.ID, 10),
 		singular:    p,
-		replyJS:     p.CommentStatus == "open" && s.ThreadComments,
-		commentForm: p.CommentStatus == "open" && p.Password == "",
+		replyJS:     s.CommentsOpen(p) && s.ThreadComments,
+		commentForm: s.CommentsOpen(p) && p.Password == "",
 	}
 	if cpage > 0 {
 		opts.canonical = CommentPageURL(url, cpage) + "#comments"
 	}
-	if p.CommentStatus == "open" || p.CommentCount > 0 {
+	if s.CommentsOpen(p) || p.CommentCount > 0 {
 		opts.feeds = []feedLink{{s.Name + " &raquo; " + esc(render.StripTags(rq.title(p.Title))) + " Comments Feed", FeedURL(url)}}
 	}
 

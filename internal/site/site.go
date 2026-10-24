@@ -61,6 +61,8 @@ type state struct {
 	links *Links
 	pipe  *render.Pipeline
 	perma *permalinkMatcher
+	// oldPerma match earlier permalink structures (redirects).
+	oldPerma []*permalinkMatcher
 	// uploads is the set of servable files below the uploads directory.
 	uploads    map[string]bool
 	sizeLimits map[string][2]int
@@ -117,6 +119,7 @@ func (s *Site) current(ctx context.Context) (*state, error) {
 		links:      &Links{home: settings.Home, s: settings, ix: ix},
 		pipe:       pipe,
 		perma:      newPermalinkMatcher(settings.Permalink),
+		oldPerma:   oldPermalinkMatchers(settings.PermalinkHistory),
 		uploads:    uploads,
 		sizeLimits: settings.ImageSizeLimits(),
 	}

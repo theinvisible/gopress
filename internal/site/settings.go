@@ -32,9 +32,12 @@ type Settings struct {
 	StartOfWeek            int
 	UseSmilies             bool
 
-	Permalink    string
-	CategoryBase string
-	TagBase      string
+	Permalink string
+	// PermalinkHistory are earlier permalink structures (newest first):
+	// their URLs redirect to the current ones.
+	PermalinkHistory []string
+	CategoryBase     string
+	TagBase          string
 
 	DefaultCommentStatus      string
 	RequireNameEmail          bool
@@ -142,6 +145,13 @@ func LoadSettings(ctx context.Context, q db.Querier) (*Settings, error) {
 		CommentsNotify:            o.bool("comments_notify", true),
 		ModerationNotify:          o.bool("moderation_notify", true),
 		AttachmentPages:           o.bool("wp_attachment_pages_enabled", true),
+	}
+	if hist, ok := o["permalink_history"].([]any); ok {
+		for _, h := range hist {
+			if v, ok := h.(string); ok && v != "" && v != s.Permalink {
+				s.PermalinkHistory = append(s.PermalinkHistory, v)
+			}
+		}
 	}
 	if s.Permalink == "" {
 		s.Permalink = "/%year%/%monthnum%/%postname%/"
@@ -277,4 +287,17 @@ func (s *Settings) ThemeMod(name string) string {
 		return strconv.FormatFloat(v, 'f', -1, 64)
 	}
 	return ""
+}
+
+// CommentsOpen is comments_open(): the post allows comments and is not
+// older than the "close comments after" setting.
+func (s *Settings) CommentsOpen(p *db.Post) bool {
+	if p.CommentStatus != "open" {
+		return false
+	}
+	if s.CloseCommentsForOld && s.CloseCommentsDays > 0 && p.Type == db.TypePost &&
+		time.Since(p.DateGMT.Time) > time.Duration(s.CloseCommentsDays)*24*time.Hour {
+		return false
+	}
+	return true
 }

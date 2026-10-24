@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // time zones without the system database (container)
 
 	"github.com/theinvisible/gopress/internal/admin"
 	"github.com/theinvisible/gopress/internal/auth"
@@ -157,7 +159,7 @@ func cmdServe(args []string, stderr io.Writer) int {
 	mailSvc := mail.New(d, mail.Options{
 		Secret:   secret,
 		Home:     func() string { return settings().Home },
-		SiteName: func() string { return settings().Name },
+		SiteName: func() string { return html.UnescapeString(settings().Name) },
 		Sink:     *mailSink,
 		Log:      log,
 	})

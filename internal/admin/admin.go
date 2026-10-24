@@ -43,6 +43,7 @@ type Admin struct {
 	mail     *mail.Service
 	mailSink bool
 	sync     bool // run background work synchronously (tests)
+	regen    regenJob
 }
 
 // New creates the admin.
@@ -111,6 +112,7 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	a.registerComments(mux)
 	a.registerProfile(mux)
 	a.registerSettings(mux)
+	a.registerOptions(mux)
 	a.registerUsers(mux)
 	a.registerTerms(mux)
 	a.registerMedia(mux)

@@ -1,0 +1,46 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-settings">
+	<h1>General Settings</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	<form method="post" action="/admin/settings/general" novalidate>
+		{{template "csrf" .CSRF}}
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th scope="row"><label for="blogname">Site Title</label></th><td><input name="blogname" type="text" id="blogname" value="{{index .V "blogname"}}" class="regular-text" maxlength="200" required></td></tr>
+			<tr><th scope="row"><label for="blogdescription">Tagline</label></th><td><input name="blogdescription" type="text" id="blogdescription" value="{{index .V "blogdescription"}}" class="regular-text" maxlength="500">
+				<p class="description">In a few words, explain what this site is about.</p></td></tr>
+			<tr><th scope="row">Site Address (URL)</th><td><code>{{index .V "home"}}</code>
+				<p class="description">Set with the <code>--base-url</code> option of <code>gopress serve</code>.</p></td></tr>
+			<tr><th scope="row"><label for="new_admin_email">Administration Email Address</label></th><td>
+				<input name="new_admin_email" type="email" id="new_admin_email" value="{{index .V "admin_email"}}" class="regular-text ltr">
+				<p class="description">This address is used for admin purposes (comment moderation, notices).{{if .MailOK}} If you change it, an email is sent to the new address to confirm it.{{end}}</p>
+				{{- if .Pending}}<div class="notice notice-warning inline"><p>There is a pending change of the admin email to <code>{{.Pending}}</code>.</p></div>{{end}}</td></tr>
+			<tr><th scope="row"><label for="timezone_string">Timezone</label></th><td>
+				<select id="timezone_string" name="timezone_string">
+					{{- $tz := index .V "timezone_string"}}
+					{{- range .Zones}}<optgroup label="{{.Region}}">{{range .Zones}}<option value="{{.}}"{{if eq . $tz}} selected{{end}}>{{.}}</option>{{end}}</optgroup>{{end}}
+					<optgroup label="Manual Offsets">{{range .Offsets}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</optgroup>
+				</select>
+				<p class="description">Choose a city in the same timezone as you.</p></td></tr>
+			<tr><th scope="row">Date Format</th><td><fieldset data-format-group="date_format">
+				{{- $custom := true}}{{range .DateFmts}}{{if .Selected}}{{$custom = false}}{{end}}{{end}}
+				{{- range .DateFmts}}<label><input type="radio" name="date_format" value="{{.Value}}"{{if .Selected}} checked{{end}}> <span class="date-time-text">{{.Label}}</span> <code>{{.Value}}</code></label><br>{{end}}
+				<label><input type="radio" name="date_format" value="custom"{{if $custom}} checked{{end}}> Custom:</label>
+				<input type="text" name="date_format_custom" value="{{index .V "date_format"}}" class="small-text" maxlength="64" data-format-preview>
+				<p><strong>Preview:</strong> <span class="example" data-preview></span></p>
+			</fieldset></td></tr>
+			<tr><th scope="row">Time Format</th><td><fieldset data-format-group="time_format">
+				{{- $custom := true}}{{range .TimeFmts}}{{if .Selected}}{{$custom = false}}{{end}}{{end}}
+				{{- range .TimeFmts}}<label><input type="radio" name="time_format" value="{{.Value}}"{{if .Selected}} checked{{end}}> <span class="date-time-text">{{.Label}}</span> <code>{{.Value}}</code></label><br>{{end}}
+				<label><input type="radio" name="time_format" value="custom"{{if $custom}} checked{{end}}> Custom:</label>
+				<input type="text" name="time_format_custom" value="{{index .V "time_format"}}" class="small-text" maxlength="64" data-format-preview>
+				<p><strong>Preview:</strong> <span class="example" data-preview></span></p>
+				<p class="description"><a href="https://wordpress.org/documentation/article/customize-date-and-time-format/" rel="noopener" target="_blank">Documentation on date and time formatting</a>.</p>
+			</fieldset></td></tr>
+			<tr><th scope="row"><label for="start_of_week">Week Starts On</label></th><td><select name="start_of_week" id="start_of_week">
+				{{- $w := index .V "start_of_week"}}{{range .Weekdays}}<option value="{{.Value}}"{{if eq .Value $w}} selected{{end}}>{{.Label}}</option>{{end}}
+			</select></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Save Changes"></p>
+	</form>
+</div>
+{{template "admin-bottom" .}}{{end}}

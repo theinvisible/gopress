@@ -1,0 +1,15 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-settings">
+	<h1>Writing Settings</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	<form method="post" action="/admin/settings/writing">
+		{{template "csrf" .CSRF}}
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th scope="row"><label for="default_category">Default Post Category</label></th><td><select name="default_category" id="default_category" class="postform">
+				{{- $c := index .V "default_category"}}{{range .Cats}}<option value="{{.Value}}"{{if eq .Value $c}} selected{{end}}>{{range $i := iterate .Level}}&nbsp;&nbsp;&nbsp;{{end}}{{.Label}}</option>{{end}}
+			</select><p class="description">Posts without a category get this one. It cannot be deleted.</p></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Save Changes"></p>
+	</form>
+</div>
+{{template "admin-bottom" .}}{{end}}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"html"
 	"net/http"
 	"strconv"
 	"strings"
@@ -33,7 +34,7 @@ type loginPageData struct {
 func (a *Admin) loginData(ctx context.Context, title string) *loginPageData {
 	d := &loginPageData{Title: title, SiteName: "GoPress", Home: "/", Assets: a.assets}
 	if s, err := a.site.Settings(ctx); err == nil {
-		d.SiteName, d.Home = s.Name, s.Home+"/"
+		d.SiteName, d.Home = html.UnescapeString(s.Name), s.Home+"/"
 	}
 	return d
 }

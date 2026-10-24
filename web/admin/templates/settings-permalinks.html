@@ -1,0 +1,31 @@
+{{define "page"}}{{template "admin-top" .}}
+{{- $v := .V}}{{$cur := index $v "permalink_structure"}}
+<div class="wrap gp-settings">
+	<h1>Permalink Settings</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	<form method="post" action="/admin/settings/permalinks">
+		{{template "csrf" .CSRF}}
+		<p>Choose the structure of the addresses of your posts. When you change it, the old addresses keep working and redirect to the new ones.</p>
+		<h2 class="title">Common Settings</h2>
+		<table class="form-table permalink-structure" role="presentation"><tbody>
+			{{- $custom := true}}{{range .Presets}}{{if eq .Value $cur}}{{$custom = false}}{{end}}{{end}}
+			{{- range .Presets}}{{$parts := splitLabel .Label}}
+			<tr><th scope="row"><label><input name="permalink_structure" type="radio" value="{{.Value}}"{{if eq .Value $cur}} checked{{end}}> {{index $parts 0}}</label></th>
+				<td><code>{{index $parts 1}}</code></td></tr>
+			{{- end}}
+			<tr><th scope="row"><label><input name="permalink_structure" type="radio" value="custom" id="custom_selection"{{if $custom}} checked{{end}}> Custom Structure</label></th>
+				<td><code>{{index $v "home"}}</code> <input name="permalink_custom" id="permalink_structure" type="text" value="{{$cur}}" class="regular-text code" data-permalink-custom>
+				<div class="available-structure-tags"><p>Available tags:</p><ul role="list">
+					{{- range splitWords "%year% %monthnum% %day% %hour% %minute% %second% %post_id% %postname% %category% %author%"}}<li><button type="button" class="button button-secondary" data-tag="{{.}}">{{.}}</button></li>{{end}}
+				</ul></div></td></tr>
+		</tbody></table>
+		<h2 class="title">Optional</h2>
+		<p>If you like, you may enter custom structures for your category and tag URLs here. For example, using <code>topics</code> as your category base would make your category links like <code>{{index $v "home"}}/topics/uncategorized/</code>. If you leave these blank the defaults will be used.</p>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th><label for="category_base">Category base</label></th><td><input name="category_base" id="category_base" type="text" value="{{index $v "category_base"}}" class="regular-text code" placeholder="category"></td></tr>
+			<tr><th><label for="tag_base">Tag base</label></th><td><input name="tag_base" id="tag_base" type="text" value="{{index $v "tag_base"}}" class="regular-text code" placeholder="tag"></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Save Changes"></p>
+	</form>
+</div>
+{{template "admin-bottom" .}}{{end}}

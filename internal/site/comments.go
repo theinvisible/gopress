@@ -74,7 +74,7 @@ func (rq *request) comments(p *db.Post, postURL string, cpage int) (*string, err
 		}
 	}
 
-	w := &commentWriter{rq: rq, post: p, postURL: postURL, children: children, page: page, pages: pages}
+	w := &commentWriter{rq: rq, post: p, postURL: postURL, children: children, page: page, pages: pages, open: rq.st.s.CommentsOpen(p)}
 	var b strings.Builder
 	b.WriteString("\n<div id=\"comments\" class=\"comments-area\">\n\n\t\n")
 	if len(top) > 0 {
@@ -107,11 +107,11 @@ func (rq *request) comments(p *db.Post, postURL string, cpage int) (*string, err
 			}
 			b.WriteString("\t\t</nav>\n")
 		}
-		if p.CommentStatus != "open" && p.CommentCount > 0 {
+		if !rq.st.s.CommentsOpen(p) && p.CommentCount > 0 {
 			b.WriteString("\t\t<p class=\"nocomments\">Comments are closed.</p>\n")
 		}
 	}
-	if p.CommentStatus == "open" {
+	if rq.st.s.CommentsOpen(p) {
 		b.WriteString(rq.commentForm(p))
 	}
 	b.WriteString("\n</div><!-- #comments .comments-area -->\n")
@@ -129,6 +129,7 @@ type commentWriter struct {
 	alt       int
 	threadAlt int
 	avatars   int
+	open      bool // comments are open (reply links)
 }
 
 func (w *commentWriter) classes(c *db.Comment, depth int) string {
@@ -189,7 +190,7 @@ func (w *commentWriter) write(b *strings.Builder, c *db.Comment, depth int) {
 		}
 		fmt.Fprintf(b, "\t\t\t\t\n\t\t\t\t<section class=\"comment-content comment\">\n\t\t\t\t%s\t\t\t\t\t\t\t\t</section><!-- .comment-content -->\n\n", rq.commentText(c.Content))
 		b.WriteString("\t\t\t\t<div class=\"reply\">\n\t\t\t\t")
-		if s.ThreadComments && depth < s.ThreadDepth && w.post.CommentStatus == "open" && c.Status == db.CommentApproved {
+		if s.ThreadComments && depth < s.ThreadDepth && w.open && c.Status == db.CommentApproved {
 			author := esc(c.Author)
 			replyBase := w.postURL
 			if w.pages > 1 {

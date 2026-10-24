@@ -1,0 +1,5 @@
+Subject: [{{.SiteName}}] Administration email address changed
+The administration email address of {{.SiteName}} was changed to
+{{.Email}}. Notifications for the site now go there.
+
+If you did not expect this, contact another administrator of the site.

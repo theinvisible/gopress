@@ -143,7 +143,7 @@ func (rq *request) feed(kind feedKind, obj any, search string) *response {
 			author = u.DisplayName
 		}
 		fmt.Fprintf(&b, "\t<item>\n\t\t<title>%s</title>\n\t\t<link>%s</link>\n", xmlText(render.StripTags(rq.title(p.Title))), xmlText(url))
-		if p.CommentStatus == "open" || p.CommentCount > 0 {
+		if rq.st.s.CommentsOpen(p) || p.CommentCount > 0 {
 			fmt.Fprintf(&b, "\t\t\t\t\t<comments>%s#respond</comments>\n", xmlText(url))
 		}
 		fmt.Fprintf(&b, "\t\t\n\t\t<dc:creator>%s</dc:creator>\n\t\t<pubDate>%s</pubDate>\n", cdata(author), p.DateGMT.UTC().Format(rssDate))
@@ -154,7 +154,7 @@ func (rq *request) feed(kind feedKind, obj any, search string) *response {
 		if !s.RSSUseExcerpt {
 			fmt.Fprintf(&b, "\t\t\t\t\t\t\t\t\t\t<content:encoded>%s</content:encoded>\n", cdata(content))
 		}
-		if p.CommentStatus == "open" || p.CommentCount > 0 {
+		if rq.st.s.CommentsOpen(p) || p.CommentCount > 0 {
 			fmt.Fprintf(&b, "\t\t\t\t\t\n\t\t\t<wfw:commentRss>%s</wfw:commentRss>\n\t\t\t<slash:comments>%d</slash:comments>\n", xmlText(FeedURL(url)), p.CommentCount)
 		}
 		b.WriteString("\t\t\n\t\t\t\n\t\t\t</item>\n")

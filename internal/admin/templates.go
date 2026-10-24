@@ -52,6 +52,8 @@ func loadTemplates(as *assets) (*templates, error) {
 			}
 			return false
 		},
+		"splitLabel": func(s string) []string { a, b, _ := strings.Cut(s, "|"); return []string{a, b} },
+		"splitWords": strings.Fields,
 		"dict": func(kv ...any) map[string]any {
 			m := map[string]any{}
 			for i := 0; i+1 < len(kv); i += 2 {
@@ -131,7 +133,13 @@ var reEscapedEntity = regexp.MustCompile(`&amp;(#[0-9]+|#[xX][0-9a-fA-F]+|[a-zA-
 // escTitle escapes a title like esc_html(): HTML is shown as text, but
 // existing entities (titles are stored as HTML) are not encoded twice.
 func escTitle(s string) template.HTML {
-	return template.HTML(reEscapedEntity.ReplaceAllString(html.EscapeString(s), "&$1;"))
+	return template.HTML(escHTML(s))
+}
+
+// escHTML is esc_html(): special characters become entities, existing
+// entities are not encoded twice.
+func escHTML(s string) string {
+	return strings.ReplaceAll(reEscapedEntity.ReplaceAllString(html.EscapeString(s), "&$1;"), "&#39;", "&#039;")
 }
 
 // urlLabel shortens a URL for display (host and path, without scheme).

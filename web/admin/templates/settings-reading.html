@@ -1,0 +1,32 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-settings">
+	<h1>Reading Settings</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	<form method="post" action="/admin/settings/reading">
+		{{template "csrf" .CSRF}}
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th scope="row">Your homepage displays</th><td id="front-static-pages"><fieldset>
+				{{- $front := index .V "show_on_front"}}{{$pof := index .V "page_on_front"}}{{$pfp := index .V "page_for_posts"}}
+				<p><label><input name="show_on_front" type="radio" value="posts"{{if eq $front "posts"}} checked{{end}}> Your latest posts</label></p>
+				<p><label><input name="show_on_front" type="radio" value="page"{{if eq $front "page"}} checked{{end}}> A static page (select below)</label></p>
+				<ul>
+					<li><label for="page_on_front">Homepage: <select name="page_on_front" id="page_on_front"><option value="0">&mdash; Select &mdash;</option>{{range .Pages}}<option value="{{.Value}}"{{if eq .Value $pof}} selected{{end}}>{{.Label}}</option>{{end}}</select></label></li>
+					<li><label for="page_for_posts">Posts page: <select name="page_for_posts" id="page_for_posts"><option value="0">&mdash; Select &mdash;</option>{{range .Pages}}<option value="{{.Value}}"{{if eq .Value $pfp}} selected{{end}}>{{.Label}}</option>{{end}}</select></label></li>
+				</ul>
+			</fieldset></td></tr>
+			<tr><th scope="row"><label for="posts_per_page">Blog pages show at most</label></th><td><input name="posts_per_page" type="number" step="1" min="1" max="100" id="posts_per_page" value="{{index .V "posts_per_page"}}" class="small-text"> posts</td></tr>
+			<tr><th scope="row"><label for="posts_per_rss">Syndication feeds show the most recent</label></th><td><input name="posts_per_rss" type="number" step="1" min="1" max="100" id="posts_per_rss" value="{{index .V "posts_per_rss"}}" class="small-text"> items</td></tr>
+			<tr><th scope="row">For each post in a feed, include</th><td><fieldset>
+				{{- $ex := index .V "rss_use_excerpt"}}
+				<p><label><input name="rss_use_excerpt" type="radio" value="0"{{if ne $ex "1"}} checked{{end}}> Full text</label><br>
+				<label><input name="rss_use_excerpt" type="radio" value="1"{{if eq $ex "1"}} checked{{end}}> Excerpt</label></p>
+			</fieldset></td></tr>
+			<tr class="option-site-visibility"><th scope="row">Search engine visibility</th><td><fieldset>
+				<label for="blog_public"><input name="blog_public" type="checkbox" id="blog_public" value="0"{{if eq (index .V "blog_public") "0"}} checked{{end}}> Discourage search engines from indexing this site</label>
+				<p class="description">It is up to search engines to honor this request.</p>
+			</fieldset></td></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Save Changes"></p>
+	</form>
+</div>
+{{template "admin-bottom" .}}{{end}}

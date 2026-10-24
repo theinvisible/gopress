@@ -1,0 +1,41 @@
+{{define "page"}}{{template "admin-top" .}}
+{{- $v := .V}}
+<div class="wrap gp-settings">
+	<h1>Media Settings</h1>
+	{{- if .Error}}<div class="notice notice-error"><p>{{.Error}}</p></div>{{end}}
+	<form method="post" action="/admin/settings/media">
+		{{template "csrf" .CSRF}}
+		<h2 class="title">Image sizes</h2>
+		<p>The sizes listed below determine the maximum dimensions in pixels to use when adding an image to the Media Library.</p>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th scope="row">Thumbnail size</th><td>
+				<label for="thumbnail_size_w">Width</label> <input name="thumbnail_size_w" type="number" step="1" min="0" id="thumbnail_size_w" value="{{index $v "thumbnail_size_w"}}" class="small-text"><br>
+				<label for="thumbnail_size_h">Height</label> <input name="thumbnail_size_h" type="number" step="1" min="0" id="thumbnail_size_h" value="{{index $v "thumbnail_size_h"}}" class="small-text"><br>
+				<label><input name="thumbnail_crop" type="checkbox" value="1"{{if eq (index $v "thumbnail_crop") "1"}} checked{{end}}> Crop thumbnail to exact dimensions (normally thumbnails are proportional)</label></td></tr>
+			<tr><th scope="row">Medium size</th><td><fieldset>
+				<label for="medium_size_w">Max Width</label> <input name="medium_size_w" type="number" step="1" min="0" id="medium_size_w" value="{{index $v "medium_size_w"}}" class="small-text"><br>
+				<label for="medium_size_h">Max Height</label> <input name="medium_size_h" type="number" step="1" min="0" id="medium_size_h" value="{{index $v "medium_size_h"}}" class="small-text"></fieldset></td></tr>
+			<tr><th scope="row">Large size</th><td><fieldset>
+				<label for="large_size_w">Max Width</label> <input name="large_size_w" type="number" step="1" min="0" id="large_size_w" value="{{index $v "large_size_w"}}" class="small-text"><br>
+				<label for="large_size_h">Max Height</label> <input name="large_size_h" type="number" step="1" min="0" id="large_size_h" value="{{index $v "large_size_h"}}" class="small-text"></fieldset></td></tr>
+		</tbody></table>
+		<h2 class="title">Uploading Files</h2>
+		<table class="form-table" role="presentation"><tbody>
+			<tr><th scope="row" colspan="2" class="th-full"><label><input name="uploads_use_yearmonth_folders" type="checkbox" value="1"{{if eq (index $v "uploads_use_yearmonth_folders") "1"}} checked{{end}}> Organize my uploads into month- and year-based folders</label></th></tr>
+			<tr><th scope="row"><label for="upload_max_mb">Maximum upload size</label></th><td><input name="upload_max_mb" type="number" step="1" min="1" max="1024" id="upload_max_mb" value="{{index $v "upload_max_mb"}}" class="small-text"> MB
+				<p class="description">A reverse proxy in front of GoPress may have its own limit.</p></td></tr>
+			<tr><th scope="row" colspan="2" class="th-full"><label><input name="wp_attachment_pages_enabled" type="checkbox" value="1"{{if eq (index $v "wp_attachment_pages_enabled") "1"}} checked{{end}}> Enable media pages (a separate page for each attachment)</label></th></tr>
+		</tbody></table>
+		<p class="submit"><input type="submit" class="button button-primary" value="Save Changes"></p>
+	</form>
+	<h2 class="title">Regenerate image sizes</h2>
+	<p>After changing the sizes, create them again for existing images. New uploads use the new sizes automatically.</p>
+	{{- if .Regen.Running}}<div class="notice notice-info inline"><p>Running: {{.Regen.Done}} images done{{if .Regen.Failed}}, {{.Regen.Failed}} failed{{end}}. Reload the page to see the progress.</p></div>
+	{{- else if .Regen.Finished}}<div class="notice notice-success inline"><p>Finished at {{.Regen.Finished}}: {{.Regen.Done}} images{{if .Regen.Failed}}, {{.Regen.Failed}} failed (see the server log){{end}}.</p></div>{{end}}
+	<form method="post" action="/admin/settings/media/regenerate" class="gp-inline-form">
+		{{template "csrf" .CSRF}}
+		<button type="submit" class="button" name="missing" value="1"{{if .Regen.Running}} disabled{{end}}>Create missing sizes</button>
+		<button type="submit" class="button"{{if .Regen.Running}} disabled{{end}}>Regenerate all sizes</button>
+	</form>
+</div>
+{{template "admin-bottom" .}}{{end}}

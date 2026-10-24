@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"path/filepath"
 	"time"
@@ -76,7 +77,7 @@ func cmdMail(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "mail: %v\n", err)
 			return 1
 		}
-		svc := mail.New(d, mail.Options{Secret: secret, SiteName: func() string { return st.Name }, Home: func() string { return st.Home }})
+		svc := mail.New(d, mail.Options{Secret: secret, SiteName: func() string { return html.UnescapeString(st.Name) }, Home: func() string { return st.Home }})
 		if err := svc.SendTest(ctx, *to); err != nil {
 			fmt.Fprintf(stderr, "mail test: %v\n", err)
 			return 1

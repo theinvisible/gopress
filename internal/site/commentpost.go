@@ -57,7 +57,7 @@ func (s *Site) commentToken(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := strconv.ParseInt(r.URL.Query().Get("post"), 10, 64)
 	p := st.ix.posts[id]
-	if p == nil || !st.ix.isPublic(p) || p.CommentStatus != "open" {
+	if p == nil || !st.ix.isPublic(p) || !st.s.CommentsOpen(p) {
 		http.Error(w, `{}`, http.StatusNotFound)
 		return
 	}
@@ -92,7 +92,7 @@ func (s *Site) postComment(w http.ResponseWriter, r *http.Request) {
 		commentError(w, http.StatusNotFound, "Sorry, comments are not allowed on this item.")
 		return
 	}
-	if post.CommentStatus != "open" {
+	if !st.s.CommentsOpen(post) {
 		commentError(w, http.StatusForbidden, "Sorry, comments are closed for this item.")
 		return
 	}

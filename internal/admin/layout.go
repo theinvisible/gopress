@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -55,7 +56,7 @@ func (a *Admin) base(ctx context.Context, c *reqCtx, title, screen string) baseP
 	p := basePage{
 		Title:    title,
 		Screen:   screen,
-		SiteName: c.settings.Name,
+		SiteName: html.UnescapeString(c.settings.Name), // stored escaped
 		Home:     c.links.Home(),
 		User:     c.user,
 		CSRF:     c.cur.CSRF,
@@ -126,9 +127,11 @@ func (a *Admin) menu(u *db.User, screen string, pending int) []menuItem {
 		m = append(m, menuItem{ID: "users", Label: "Users", Icon: "admin-users", URL: "/admin/users/", Sub: sub})
 	}
 	if auth.Can(u, auth.CapManageOptions) {
-		m = append(m, menuItem{ID: "settings", Label: "Settings", Icon: "admin-settings", URL: "/admin/settings/email", Sub: []subItem{
-			{ID: "settings-email", Label: "Email", URL: "/admin/settings/email"},
-		}})
+		var sub []subItem
+		for _, s := range settingsScreens {
+			sub = append(sub, subItem{ID: "settings-" + s.ID, Label: s.Label, URL: "/admin/settings/" + s.ID})
+		}
+		m = append(m, menuItem{ID: "settings", Label: "Settings", Icon: "admin-settings", URL: "/admin/settings/general", Sub: sub})
 	}
 	m = append(m, menuItem{ID: "profile", Label: "Profile", Icon: "id", URL: "/admin/profile", Sub: []subItem{
 		{ID: "profile", Label: "Profile", URL: "/admin/profile"},
