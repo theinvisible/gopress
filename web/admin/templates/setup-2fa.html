@@ -29,7 +29,7 @@
 			{{- else}}
 			<p>Scan the QR code with an authenticator app (e.g. Aegis, 2FAS, Google Authenticator, 1Password) and enter the 6-digit code it shows.</p>
 			<div class="gp-totp">
-				<img src="{{.TOTP.QR}}" width="200" height="200" alt="QR code for the authenticator app">
+				<img src="{{.QR}}" width="200" height="200" alt="QR code for the authenticator app">
 				<details><summary>Can't scan the code?</summary><p>Enter this key manually:</p><code class="gp-secret">{{.TOTP.Secret}}</code></details>
 			</div>
 			<form method="post" action="/admin/setup-2fa/totp">

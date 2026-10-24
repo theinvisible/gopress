@@ -78,6 +78,7 @@ await step('setup code required before enrolling', async () => {
 });
 
 await step('enroll TOTP, get recovery codes', async () => {
+	assert.ok(await page.$eval('img[alt^="QR code"]', (i) => i.complete && i.naturalWidth > 0), 'QR code image shown');
 	secret = await text('.gp-secret');
 	await page.type('#totp-code', await freshTOTP(secret));
 	await submit('form[action="/admin/setup-2fa/totp"] button[type=submit]');

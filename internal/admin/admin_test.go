@@ -408,3 +408,13 @@ func TestAdminScriptCSP(t *testing.T) {
 		t.Errorf("admin CSP = %s", csp)
 	}
 }
+
+// Regression: the TOTP QR code is shown (html/template turned the data:
+// URL into "#ZgotmplZ").
+func TestTOTPQRCodeShown(t *testing.T) {
+	e := newEnv(t)
+	body := e.do("GET", "/admin/setup-2fa", e.session(auth.RoleAuthor, db.SessionSetup), nil, nil).Body.String()
+	if !strings.Contains(body, `src="data:image/png;base64,`) || strings.Contains(body, "ZgotmplZ") {
+		t.Error("QR code missing on the setup page")
+	}
+}
