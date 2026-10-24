@@ -8,7 +8,7 @@ import "html/template"
 type View struct {
 	Lang            string
 	Charset         string
-	Title           string // document <title>
+	Title           template.HTML // document <title>, escaped by the site package
 	SiteName        string
 	SiteDescription string
 	HomeURL         string

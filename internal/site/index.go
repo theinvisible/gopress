@@ -37,7 +37,7 @@ func buildIndex(ctx context.Context, q db.Querier) (*contentIndex, error) {
 		tagBySlug: map[string]*db.Term{}, users: map[int64]*db.User{}, userByNice: map[string]*db.User{},
 	}
 	rows, err := q.QueryContext(ctx, `SELECT id, type, status, slug, parent_id, author_id, title, date_local, date_gmt,
-		modified_gmt, comment_status, password, menu_order, template, mime_type, comment_count
+		modified_gmt, comment_status, password, menu_order, template, mime_type, comment_count, guid
 		FROM posts WHERE status IN ('publish', 'inherit', 'private', 'future')`)
 	if err != nil {
 		return nil, err
@@ -45,7 +45,7 @@ func buildIndex(ctx context.Context, q db.Querier) (*contentIndex, error) {
 	for rows.Next() {
 		p := &db.Post{}
 		if err := rows.Scan(&p.ID, &p.Type, &p.Status, &p.Slug, &p.ParentID, &p.AuthorID, &p.Title, &p.Date, &p.DateGMT,
-			&p.ModifiedGMT, &p.CommentStatus, &p.Password, &p.MenuOrder, &p.Template, &p.MimeType, &p.CommentCount); err != nil {
+			&p.ModifiedGMT, &p.CommentStatus, &p.Password, &p.MenuOrder, &p.Template, &p.MimeType, &p.CommentCount, &p.GUID); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -78,8 +78,8 @@ func buildIndex(ctx context.Context, q db.Querier) (*contentIndex, error) {
 		if a.MenuOrder != b.MenuOrder {
 			return a.MenuOrder < b.MenuOrder
 		}
-		if la, lb := strings.ToLower(a.Title), strings.ToLower(b.Title); la != lb {
-			return la < lb
+		if lessText(a.Title, b.Title) != lessText(b.Title, a.Title) {
+			return lessText(a.Title, b.Title)
 		}
 		return a.ID < b.ID
 	})
@@ -100,6 +100,11 @@ func buildIndex(ctx context.Context, q db.Querier) (*contentIndex, error) {
 			}
 		}
 	}
+	byName := func(list []*db.Term) {
+		sort.SliceStable(list, func(i, j int) bool { return lessText(list[i].Name, list[j].Name) })
+	}
+	byName(ix.cats)
+	byName(ix.tags)
 	for _, t := range ix.cats {
 		ix.catByPath[ix.termPath(t)] = t
 	}

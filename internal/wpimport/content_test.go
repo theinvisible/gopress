@@ -14,7 +14,10 @@ func TestConvertBlocks(t *testing.T) {
 		"<!-- wp:more -->\n<!--more-->\n<!-- /wp:more -->\n\n" +
 		"<!-- wp:image {\"id\":5} -->\n<figure><img class=\"wp-image-5\"/></figure>\n<!-- /wp:image -->\n" +
 		"<!-- regular comment -->"
-	got, warnings := convertContent(in, "https://example.org")
+	got, format, warnings := convertContent(in, "https://example.org")
+	if format != "html" {
+		t.Errorf("format = %q", format)
+	}
 	want := "<p class=\"wp-block-paragraph\">Hi</p>\n\n\n[fotogalerie id=\"791\"]\n\n\n<!--more-->\n\n\n\n<figure><img class=\"wp-image-5\"/></figure>\n\n<!-- regular comment -->"
 	if got != want {
 		t.Errorf("convertContent =\n%q\nwant\n%q", got, want)
@@ -26,8 +29,11 @@ func TestConvertBlocks(t *testing.T) {
 
 func TestConvertClassicAndURLs(t *testing.T) {
 	in := "See <a href=\"https://example.org/2020/01/x/\">https://example.org/2020/01/x/</a>\n\n[gallery ids=\"1,2\"]"
-	got, _ := convertContent(in, "https://example.org")
-	want := "<p>See <a href=\"/2020/01/x/\">https://example.org/2020/01/x/</a></p>\n[gallery ids=\"1,2\"]\n"
+	got, format, _ := convertContent(in, "https://example.org")
+	want := "See <a href=\"/2020/01/x/\">https://example.org/2020/01/x/</a>\n\n[gallery ids=\"1,2\"]"
+	if format != "wpautop" {
+		t.Errorf("format = %q", format)
+	}
 	if got != want {
 		t.Errorf("convertContent =\n%q\nwant\n%q", got, want)
 	}

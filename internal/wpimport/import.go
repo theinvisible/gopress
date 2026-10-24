@@ -22,7 +22,6 @@ import (
 
 	"github.com/theinvisible/gopress/internal/db"
 	"github.com/theinvisible/gopress/internal/phpser"
-	"github.com/theinvisible/gopress/internal/render"
 )
 
 // Options configures an import.
@@ -142,7 +141,6 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 		{"comments", im.importComments},
 		{"widgets", im.importWidgets},
 		{"plugin data", im.stashPluginData},
-		{"search index", im.indexPosts},
 	}
 	err = dst.Tx(ctx, func(tx *sql.Tx) error {
 		im.tx = tx
@@ -321,7 +319,7 @@ func (im *importer) importPosts(ctx context.Context) error {
 		if p.Type != db.TypeAttachment {
 			original := p.Content
 			var warnings []string
-			p.Content, warnings = convertContent(p.Content, im.home)
+			p.Content, p.ContentFormat, warnings = convertContent(p.Content, im.home)
 			for _, w := range warnings {
 				im.rep.warn("post %d: %s", p.ID, w)
 			}
@@ -572,7 +570,7 @@ func (im *importer) importWidgets(ctx context.Context) error {
 			}
 			settings, _ := instances[typ][num].(map[string]any)
 			if content, ok := settings["content"].(string); ok && typ == "block" {
-				converted, warnings := convertContent(content, im.home)
+				converted, _, warnings := convertContent(content, im.home)
 				for _, w := range warnings {
 					im.rep.warn("widget %s: %s", id, w)
 				}
@@ -634,33 +632,6 @@ func (im *importer) stashPluginData(ctx context.Context) error {
 				return err
 			}
 			im.rep.add("stashed "+typ, 1)
-		}
-	}
-	return nil
-}
-
-func (im *importer) indexPosts(ctx context.Context) error {
-	rows, err := im.tx.QueryContext(ctx, `SELECT id, title, content FROM posts WHERE type IN ('post', 'page')`)
-	if err != nil {
-		return err
-	}
-	type doc struct {
-		id             int64
-		title, content string
-	}
-	var docs []doc
-	for rows.Next() {
-		var d doc
-		if err := rows.Scan(&d.id, &d.title, &d.content); err != nil {
-			rows.Close()
-			return err
-		}
-		docs = append(docs, d)
-	}
-	rows.Close()
-	for _, d := range docs {
-		if err := db.IndexPost(ctx, im.tx, d.id, render.PlainText(d.title), render.PlainText(d.content)); err != nil {
-			return err
 		}
 	}
 	return nil

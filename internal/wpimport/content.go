@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/theinvisible/gopress/internal/render"
+	"github.com/theinvisible/gopress/internal/db"
 )
 
 // shortcodeTags are the shortcodes registered on the source site; standalone
@@ -28,18 +28,17 @@ var dynamicBlocks = map[string]func(attrs map[string]any) (string, bool){
 	},
 }
 
-// convertContent turns stored WordPress post content into GoPress content:
-// block delimiters are removed (static blocks keep their saved HTML), dynamic
-// blocks become shortcodes and classic content gets wpautop baked in.
-// It returns the new content and warnings.
-func convertContent(content, homeURL string) (string, []string) {
-	var warnings []string
+// convertContent turns stored WordPress post content into GoPress content
+// and returns it with its format: block content is rendered to final HTML
+// (db.FormatHTML); classic content stays as is and gets wpautop at render
+// time (db.FormatWPAutop), exactly like WordPress. Same-site URLs become
+// root-relative.
+func convertContent(content, homeURL string) (string, string, []string) {
 	if strings.Contains(content, "<!-- wp:") {
-		content, warnings = convertBlocks(content)
-	} else {
-		content = render.ShortcodeUnautop(render.Autop(content), shortcodeTags)
+		html, warnings := convertBlocks(content)
+		return relativizeURLs(html, homeURL), db.FormatHTML, warnings
 	}
-	return relativizeURLs(content, homeURL), warnings
+	return relativizeURLs(content, homeURL), db.FormatWPAutop, nil
 }
 
 // convertBlocks renders block content the way do_blocks() does for the

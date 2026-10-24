@@ -26,6 +26,14 @@ type request struct {
 	ctx       context.Context
 	env       *render.Env
 	commenter commenter
+
+	// Current object, for "current" markers in menus and widgets.
+	curPost  int64
+	curTerm  *db.Term
+	curYear  int
+	curMonth int
+
+	threads map[int64]*commentThreads // comment pagination cache
 }
 
 // commenter is the visitor's identity from the comment cookies.
@@ -72,8 +80,9 @@ func (rq *request) title(t string) string {
 // --- common view ---
 
 type viewOpts struct {
-	title      string
+	title      string // HTML: callers escape user input
 	bodyClass  []string
+	bodyClass2 []string // classes after "paged" (archive specifics)
 	paged      int
 	pagedClass string // e.g. "category" for category-paged-2
 	feeds      []feedLink
@@ -92,7 +101,7 @@ func (rq *request) baseView(o viewOpts) *theme.View {
 	s := rq.st.s
 	th := rq.site.theme
 	v := &theme.View{
-		Lang: s.Lang, Charset: "UTF-8", Title: o.title,
+		Lang: s.Lang, Charset: "UTF-8", Title: template.HTML(o.title),
 		SiteName: s.Name, SiteDescription: s.Description,
 		HomeURL: rq.st.links.Home(), IsFront: o.isFront,
 	}
@@ -139,6 +148,7 @@ func (rq *request) baseView(o viewOpts) *theme.View {
 	if o.paged > 1 {
 		classes = append(classes, "paged")
 	}
+	classes = append(classes, o.bodyClass2...)
 	if bgClass {
 		classes = append(classes, "custom-background")
 	}
@@ -259,9 +269,11 @@ func (rq *request) pageMenu(isFront bool, current *db.Post) string {
 	}
 	ancestors := map[int64]bool{}
 	var currentID int64
-	if current != nil && current.Type == db.TypePage {
-		currentID = current.ID
-		for p := ix.posts[current.ParentID]; p != nil && !ancestors[p.ID]; p = ix.posts[p.ParentID] {
+	if current != nil {
+		if current.Type == db.TypePage {
+			currentID = current.ID
+		}
+		for p := ix.posts[current.ParentID]; p != nil && p.Type == db.TypePage && !ancestors[p.ID]; p = ix.posts[p.ParentID] {
 			ancestors[p.ID] = true
 		}
 	}
@@ -319,7 +331,7 @@ func (rq *request) render(status int, kind string, v *theme.View) *response {
 }
 
 func (rq *request) notFound() *response {
-	v := rq.baseView(viewOpts{title: "Page not found | " + rq.st.s.Name, bodyClass: []string{"error404"}, noSidebar: true})
+	v := rq.baseView(viewOpts{title: "Page not found | " + esc(rq.st.s.Name), bodyClass: []string{"error404"}, noSidebar: true})
 	return rq.render(http.StatusNotFound, "404", v)
 }
 
@@ -345,6 +357,9 @@ func (rq *request) postClass(p *db.Post, terms []db.Term, extra ...string) strin
 		cls = append(cls, "has-post-thumbnail")
 	}
 	cls = append(cls, "hentry")
+	if len(extra) > 0 { // post_class($class): extra classes come first
+		cls = append(append([]string{}, extra...), cls...)
+	}
 	for _, t := range terms {
 		if t.Taxonomy == db.TaxCategory {
 			cls = append(cls, "category-"+t.Slug)
@@ -355,7 +370,7 @@ func (rq *request) postClass(p *db.Post, terms []db.Term, extra ...string) strin
 			cls = append(cls, "tag-"+t.Slug)
 		}
 	}
-	return strings.Join(append(cls, extra...), " ")
+	return strings.Join(cls, " ")
 }
 
 func (rq *request) isSticky(id int64) bool {
@@ -391,7 +406,7 @@ func (rq *request) entry(p *db.Post, terms []db.Term, mode entryMode) *theme.Pos
 	if mode != modeSingle {
 		e.URL = url
 	}
-	if p.CommentStatus == "open" && p.Type != db.TypePage {
+	if p.CommentStatus == "open" {
 		e.CommentsLink = template.HTML(rq.commentsPopupLink(p, url))
 	}
 	rq.env.Post = p
@@ -401,11 +416,11 @@ func (rq *request) entry(p *db.Post, terms []db.Term, mode entryMode) *theme.Pos
 	case mode == modeSearch:
 		e.Summary = template.HTML(rq.excerpt(p))
 	default:
-		e.Content = template.HTML(rq.st.pipe.Content(rq.env, p.Content, p.ID, render.ContentOptions{
+		e.Content = template.HTML(rq.st.pipe.Content(rq.env, p.Content, p.ContentFormat, p.ID, render.ContentOptions{
 			Teaser: mode == modeLoop, MoreText: `Continue reading <span class="meta-nav">&rarr;</span>`, URL: url,
 		}))
 	}
-	if p.Type == db.TypePost {
+	if p.Type == db.TypePost || mode == modeSearch {
 		e.Meta = template.HTML(rq.entryMeta(p, terms, url))
 	}
 	return e
@@ -416,7 +431,7 @@ func (rq *request) entry(p *db.Post, terms []db.Term, mode entryMode) *theme.Pos
 func (rq *request) excerpt(p *db.Post) string {
 	text := p.Excerpt
 	if strings.TrimSpace(text) == "" {
-		text = rq.st.pipe.Excerpt(rq.env, p.Content)
+		text = rq.st.pipe.Excerpt(rq.env, p.Content, p.ContentFormat)
 	}
 	text = render.Texturize(text, nil)
 	text = render.ConvertSmilies(text)
@@ -452,7 +467,7 @@ func (rq *request) entryMeta(p *db.Post, terms []db.Term, url string) string {
 			tags = append(tags, link)
 		}
 	}
-	local := p.DateGMT.In(rq.st.s.Loc)
+	local := localTime(p.Date, rq.st.s.Loc)
 	date := fmt.Sprintf(`<a href="%s" title="%s" rel="bookmark"><time class="entry-date" datetime="%s">%s</time></a>`,
 		esc(url), esc(theme.FormatPHPDate(rq.st.s.TimeFormat, local)), theme.FormatPHPDate("c", local), esc(theme.FormatPHPDate(rq.st.s.DateFormat, local)))
 	author := ""
@@ -506,9 +521,9 @@ func (rq *request) home(paged int) *response {
 	if paged > 1 && paged > pages {
 		return rq.notFound()
 	}
-	title := s.Name
+	title := esc(s.Name)
 	if s.Description != "" {
-		title += " | " + s.Description
+		title += " | " + esc(s.Description)
 	}
 	if paged > 1 {
 		title += " | Page " + strconv.Itoa(paged)
@@ -542,12 +557,13 @@ func (rq *request) termArchive(t *db.Term, paged int) *response {
 	if total == 0 && paged > 1 || paged > pages && paged > 1 {
 		return rq.notFound()
 	}
+	rq.curTerm = t
 	url := rq.st.links.TermURL(t)
 	name := render.Texturize(t.Name, nil)
 	v := rq.baseView(viewOpts{
-		title: archiveTitle(t.Name, s.Name, paged), paged: paged, pagedClass: kind,
-		bodyClass: []string{"archive", kind, kind + "-" + t.Slug, kind + "-" + strconv.FormatInt(t.ID, 10)},
-		feeds:     []feedLink{{s.Name + " &raquo; " + esc(t.Name) + " " + feedLabel, FeedURL(url)}},
+		title: archiveTitle(escKeepEntities(t.Name), s.Name, paged), paged: paged, pagedClass: kind,
+		bodyClass: []string{"archive"}, bodyClass2: []string{kind, kind + "-" + t.Slug, kind + "-" + strconv.FormatInt(t.ID, 10)},
+		feeds: []feedLink{{s.Name + " &raquo; " + esc(t.Name) + " " + feedLabel, FeedURL(url)}},
 	})
 	if v.Posts, err = rq.entries(posts, modeLoop); err != nil {
 		return errorResponse(err)
@@ -561,7 +577,7 @@ func (rq *request) termArchive(t *db.Term, paged int) *response {
 }
 
 func archiveTitle(name, site string, paged int) string {
-	t := name + " | " + site
+	t := name + " | " + esc(site)
 	if paged > 1 {
 		t += " | Page " + strconv.Itoa(paged)
 	}
@@ -580,9 +596,9 @@ func (rq *request) authorArchive(u *db.User, paged int) *response {
 	}
 	url := rq.st.links.AuthorURL(u)
 	v := rq.baseView(viewOpts{
-		title: archiveTitle(u.DisplayName, s.Name, paged), paged: paged, pagedClass: "author",
-		bodyClass: []string{"archive", "author", "author-" + u.Nicename, "author-" + strconv.FormatInt(u.ID, 10)},
-		feeds:     []feedLink{{s.Name + " &raquo; Posts by " + esc(u.DisplayName) + " Feed", FeedURL(url)}},
+		title: archiveTitle(esc(u.DisplayName), s.Name, paged), paged: paged, pagedClass: "author",
+		bodyClass: []string{"archive"}, bodyClass2: []string{"author", "author-" + u.Nicename, "author-" + strconv.FormatInt(u.ID, 10)},
+		feeds: []feedLink{{s.Name + " &raquo; Posts by " + esc(u.DisplayName) + " Feed", FeedURL(url)}},
 	})
 	if v.Posts, err = rq.entries(posts, modeLoop); err != nil {
 		return errorResponse(err)
@@ -617,19 +633,22 @@ func (rq *request) dateArchive(y, m, d, paged int) *response {
 	if paged > pages {
 		return rq.notFound()
 	}
+	if d == 0 {
+		rq.curYear, rq.curMonth = y, m
+	}
 	url := rq.st.links.DateURL(y, m, d)
-	first := posts[0].DateGMT.In(s.Loc)
+	first := localTime(posts[0].Date, s.Loc)
 	var title, header string
 	switch {
 	case d > 0:
-		title = fmt.Sprintf("%02d | %s | %d | %s", d, monthName(m), y, s.Name)
+		title = fmt.Sprintf("%02d | %s | %d | %s", d, monthName(m), y, esc(s.Name))
 		header = "Daily Archives: <span>" + esc(theme.FormatPHPDate(s.DateFormat, first)) + "</span>"
 	case m > 0:
-		title = fmt.Sprintf("%s | %d | %s", monthName(m), y, s.Name)
+		title = fmt.Sprintf("%s | %d | %s", monthName(m), y, esc(s.Name))
 		header = "Monthly Archives: <span>" + esc(theme.FormatPHPDate("F Y", first)) + "</span>"
 	default:
 		// WordPress omits the year from the document title here.
-		title = s.Name
+		title = esc(s.Name)
 		header = "Yearly Archives: <span>" + esc(theme.FormatPHPDate("Y", first)) + "</span>"
 	}
 	if paged > 1 {
@@ -666,7 +685,7 @@ func (rq *request) search(q string, paged int) *response {
 		}
 		total = n
 		if len(ids) > 0 {
-			list, _, err := db.ListPosts(rq.ctx, rq.site.db.R, db.PostQuery{IDs: ids})
+			list, _, err := db.ListPosts(rq.ctx, rq.site.db.R, db.PostQuery{IDs: ids, Statuses: []string{db.StatusPublish, db.StatusInherit}})
 			if err != nil {
 				return errorResponse(err)
 			}
@@ -682,11 +701,14 @@ func (rq *request) search(q string, paged int) *response {
 		}
 	}
 	pages := maxPages(total, s.PostsPerPage)
+	if paged > 1 && paged > pages {
+		return rq.notFound()
+	}
 	cls := "search-no-results"
 	if total > 0 {
 		cls = "search-results"
 	}
-	title := " " + q + " | Search Results  | " + s.Name
+	title := " " + esc(q) + " | Search Results  | " + esc(s.Name)
 	if paged > 1 {
 		title += " | Page " + strconv.Itoa(paged)
 	}

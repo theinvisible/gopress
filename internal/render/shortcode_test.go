@@ -43,11 +43,11 @@ func TestDoShortcodes(t *testing.T) {
 func TestContentMore(t *testing.T) {
 	p := &Pipeline{Shortcodes: map[string]ShortcodeFunc{}}
 	in := "<p>Teaser</p>\n<!--more-->\n<p>Rest</p>"
-	got := p.Content(&Env{}, in, 7, ContentOptions{Teaser: true, MoreText: "More", URL: "/p/"})
+	got := p.Content(&Env{}, in, "html", 7, ContentOptions{Teaser: true, MoreText: "More", URL: "/p/"})
 	if !strings.Contains(got, `<a href="/p/#more-7" class="more-link">More</a>`) || strings.Contains(got, "Rest") {
 		t.Errorf("teaser = %q", got)
 	}
-	got = p.Content(&Env{}, in, 7, ContentOptions{})
+	got = p.Content(&Env{}, in, "html", 7, ContentOptions{})
 	if !strings.Contains(got, `<span id="more-7"></span>`) || !strings.Contains(got, "Rest") {
 		t.Errorf("full = %q", got)
 	}

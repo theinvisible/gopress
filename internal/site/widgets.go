@@ -114,7 +114,11 @@ func (rq *request) widget(w *db.Widget) (string, string) {
 		fmt.Fprintf(&b, "\n\t\t%s\n\t\t<ul>\n", widgetTitle(set, "Recent Posts"))
 		for i := range posts {
 			p := &posts[i]
-			fmt.Fprintf(&b, "\t\t\t\t\t\t\t\t\t\t\t<li>\n\t\t\t\t\t<a href=\"%s\">%s</a>\n", esc(l.PostURL(p)), rq.title(p.Title))
+			aria := ""
+			if p.ID == rq.curPost {
+				aria = ` aria-current="page"`
+			}
+			fmt.Fprintf(&b, "\t\t\t\t\t\t\t\t\t\t\t<li>\n\t\t\t\t\t<a href=\"%s\"%s>%s</a>\n", esc(l.PostURL(p)), aria, rq.title(p.Title))
 			if settingBool(set, "show_date") {
 				fmt.Fprintf(&b, "\t\t\t\t\t\t\t\t\t\t\t<span class=\"post-date\">%s</span>\n", esc(rq.formatDate(p)))
 			}
@@ -163,7 +167,11 @@ func (rq *request) widget(w *db.Widget) (string, string) {
 			if settingBool(set, "count") {
 				after = fmt.Sprintf("&nbsp;(%d)", m.Count)
 			}
-			fmt.Fprintf(&b, "%s<li><a href='%s'>%s %d</a>%s</li>\n", indent, esc(l.DateURL(m.Year, m.Month, 0)), monthName(m.Month), m.Year, after)
+			aria := ""
+			if m.Year == rq.curYear && m.Month == rq.curMonth {
+				aria = ` aria-current="page"`
+			}
+			fmt.Fprintf(&b, "%s<li><a href='%s'%s>%s %d</a>%s</li>\n", indent, esc(l.DateURL(m.Year, m.Month, 0)), aria, monthName(m.Month), m.Year, after)
 		}
 		b.WriteString("\t\t\t</ul>\n\n\t\t\t")
 		return b.String(), "widget_archive"
@@ -189,7 +197,7 @@ func (s *Site) RegisterWidget(typ string, r WidgetRenderer) {
 }
 
 func (rq *request) formatDate(p *db.Post) string {
-	return formatPHPDateIn(rq.st.s.DateFormat, p.DateGMT.Time, rq.st.s.Loc)
+	return theme.FormatPHPDate(rq.st.s.DateFormat, localTime(p.Date, rq.st.s.Loc))
 }
 
 func (rq *request) categoryItem(b *strings.Builder, t *db.Term, depth int, count bool) {
@@ -198,7 +206,30 @@ func (rq *request) categoryItem(b *strings.Builder, t *db.Term, depth int, count
 	if count {
 		after = fmt.Sprintf(" (%d)", t.Count)
 	}
-	fmt.Fprintf(b, "%s<li class=\"cat-item cat-item-%d\"><a href=\"%s\">%s</a>%s\n", indent, t.ID, esc(rq.st.links.TermURL(t)), escKeepEntities(render.Texturize(t.Name, nil)), after)
+	cls, aria := "cat-item cat-item-"+strconv.FormatInt(t.ID, 10), ""
+	if cur := rq.curTerm; cur != nil && cur.Taxonomy == db.TaxCategory {
+		if cur.ID == t.ID {
+			cls += " current-cat"
+			aria = ` aria-current="page"`
+		} else if rq.isCategoryAncestor(t, cur) {
+			if cur.ParentID == t.ID {
+				cls += " current-cat-parent"
+			}
+			cls += " current-cat-ancestor"
+		}
+	}
+	fmt.Fprintf(b, "%s<li class=\"%s\"><a%s href=\"%s\">%s</a>%s\n", indent, cls, aria, esc(rq.st.links.TermURL(t)), escKeepEntities(render.Texturize(t.Name, nil)), after)
+}
+
+func (rq *request) isCategoryAncestor(anc, t *db.Term) bool {
+	seen := map[int64]bool{}
+	for p := rq.st.ix.terms[t.ParentID]; p != nil && !seen[p.ID]; p = rq.st.ix.terms[p.ParentID] {
+		if p.ID == anc.ID {
+			return true
+		}
+		seen[p.ID] = true
+	}
+	return false
 }
 
 func (rq *request) categoryTree(b *strings.Builder, parent int64, depth int, count bool) {
@@ -241,7 +272,7 @@ func (rq *request) tagCloud() string {
 	if len(tags) > 45 {
 		tags = tags[:45]
 	}
-	sort.SliceStable(tags, func(i, j int) bool { return strings.ToLower(tags[i].Name) < strings.ToLower(tags[j].Name) })
+	sort.SliceStable(tags, func(i, j int) bool { return lessText(tags[i].Name, tags[j].Name) })
 	scale := func(n int) float64 { return math.Round(math.Log10(float64(n)+1) * 100) }
 	minC, maxC := math.Inf(1), math.Inf(-1)
 	for _, t := range tags {
@@ -269,6 +300,8 @@ func (rq *request) tagCloud() string {
 	return b.String()
 }
 
-func formatPHPDateIn(format string, t time.Time, loc *time.Location) string {
-	return theme.FormatPHPDate(format, t.In(loc))
+// localTime interprets a stored local wall clock in the site time zone, as
+// WordPress' mysql2date() does for post_date and comment_date.
+func localTime(t db.Time, loc *time.Location) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, loc)
 }

@@ -97,7 +97,11 @@ func (rq *request) comments(p *db.Post, postURL string, cpage int) (*string, err
 				b.WriteString("\t\t\t<div class=\"nav-previous\"></div>\n")
 			}
 			if page < pages {
-				fmt.Fprintf(&b, "\t\t\t<div class=\"nav-next\"><a href=\"%s#comments\" >Newer Comments &rarr;</a></div>\n", esc(CommentPageURL(postURL, page+1)))
+				next := CommentPageURL(postURL, page+1)
+				if page+1 == pages && s.DefaultCommentsPage == "newest" {
+					next = postURL // the newest page is the post itself
+				}
+				fmt.Fprintf(&b, "\t\t\t<div class=\"nav-next\"><a href=\"%s#comments\" >Newer Comments &rarr;</a></div>\n", esc(next))
 			} else {
 				b.WriteString("\t\t\t<div class=\"nav-next\"></div>\n")
 			}
@@ -163,7 +167,7 @@ func (w *commentWriter) write(b *strings.Builder, c *db.Comment, depth int) {
 	if c.Type == "pingback" || c.Type == "trackback" {
 		fmt.Fprintf(b, "\t\t<li class=\"%s\" id=\"comment-%d\">\n\t\t<p>Pingback: %s </p>\n", cls, c.ID, authorLink)
 	} else {
-		local := c.DateGMT.In(s.Loc)
+		local := localTime(c.Date, s.Loc)
 		link := w.postURL
 		if w.pages > 1 {
 			link = CommentPageURL(w.postURL, w.page)
@@ -187,8 +191,12 @@ func (w *commentWriter) write(b *strings.Builder, c *db.Comment, depth int) {
 		b.WriteString("\t\t\t\t<div class=\"reply\">\n\t\t\t\t")
 		if s.ThreadComments && depth < s.ThreadDepth && w.post.CommentStatus == "open" && c.Status == db.CommentApproved {
 			author := esc(c.Author)
+			replyBase := w.postURL
+			if w.pages > 1 {
+				replyBase = CommentPageURL(w.postURL, w.page)
+			}
 			fmt.Fprintf(b, `<a rel="nofollow" class="comment-reply-link" href="%s?replytocom=%d#respond" data-commentid="%d" data-postid="%d" data-belowelement="comment-%d" data-respondelement="respond" data-replyto="Reply to %s" aria-label="Reply to %s">Reply</a> <span>&darr;</span>`,
-				esc(w.postURL), c.ID, c.ID, w.post.ID, c.ID, author, author)
+				esc(replyBase), c.ID, c.ID, w.post.ID, c.ID, author, author)
 		}
 		b.WriteString("\t\t\t\t</div><!-- .reply -->\n\t\t\t</article><!-- #comment-## -->\n")
 	}
@@ -208,7 +216,8 @@ func commentAuthorLink(c *db.Comment) string {
 	if name == "" {
 		name = "Anonymous"
 	}
-	name = escKeepEntities(render.Texturize(render.SanitizeText(name), nil))
+	// get_comment_author() is not texturized (unlike comment_author()).
+	name = escKeepEntities(render.SanitizeText(name))
 	u := strings.TrimSpace(c.AuthorURL)
 	if u == "" || u == "http://" {
 		return name
@@ -262,18 +271,20 @@ func isEntityBody(s string) bool {
 	return true
 }
 
-// commentText applies the comment_text filters to stored comment HTML.
-// The HTML is sanitized again on output (defense in depth: imported
-// comments were filtered by WordPress, new ones are filtered on save).
+// commentText applies the comment_text filters to stored comment HTML in
+// WordPress' order, then sanitizes the result with the comment allowlist.
+// Sanitizing last keeps the typography identical to WordPress and makes the
+// output safe regardless of what is stored (imported comments were
+// filtered by WordPress, new ones are also filtered on save).
 func (rq *request) commentText(content string) string {
 	host := strings.TrimPrefix(strings.TrimPrefix(rq.st.s.Home, "https://"), "http://")
-	text := render.SanitizeComment(content)
-	text = render.MakeClickable(text, host)
+	text := render.MakeClickable(content, host)
 	text = render.Texturize(text, nil)
 	text = render.ConvertSmilies(text)
 	text = render.BalanceTags(text)
 	text = render.Autop(text)
-	return render.CapitalPDangit(text)
+	text = render.CapitalPDangit(text)
+	return render.SanitizeComment(text)
 }
 
 // avatar is get_avatar() with Gravatar (SHA-256 of the email address).
@@ -322,7 +333,7 @@ func (rq *request) commentForm(p *db.Post) string {
 	if parent != 0 {
 		cancelStyle = ""
 	}
-	path := strings.TrimPrefix(rq.st.links.PostURL(p), rq.st.s.Home)
+	path := rq.r.URL.Path // the current URL, including a comment page
 	var b strings.Builder
 	fmt.Fprintf(&b, "\t<div id=\"respond\" class=\"comment-respond\">\n\t\t<h3 id=\"reply-title\" class=\"comment-reply-title\">%s <small><a rel=\"nofollow\" id=\"cancel-comment-reply-link\" href=\"%s#respond\"%s>Cancel reply</a></small></h3>", title, esc(path), cancelStyle)
 	fmt.Fprintf(&b, `<form action="%s" method="post" id="commentform" class="comment-form">`, esc(rq.st.links.URL("/wp-comments-post.php")))
@@ -339,4 +350,55 @@ func (rq *request) commentForm(p *db.Post) string {
 		antispam.HoneypotField, antispam.TokenField, rq.site.guard.Token(p.ID, time.Now()))
 	b.WriteString("</form>\t</div><!-- #respond -->\n\t")
 	return b.String()
+}
+
+// commentPageOf returns the comment page that shows c (get_page_of_comment())
+// and the number of comment pages of its post.
+func (rq *request) commentPageOf(c *db.Comment) (page, pages int) {
+	s := rq.st.s
+	if !s.PageComments || s.CommentsPerPage <= 0 {
+		return 1, 1
+	}
+	if rq.threads == nil {
+		rq.threads = map[int64]*commentThreads{}
+	}
+	t := rq.threads[c.PostID]
+	if t == nil {
+		all, err := db.PostComments(rq.ctx, rq.site.db.R, c.PostID, "")
+		if err != nil {
+			return 1, 1
+		}
+		t = &commentThreads{parent: map[int64]int64{}, rootIndex: map[int64]int{}}
+		for _, x := range all {
+			t.parent[x.ID] = x.ParentID
+		}
+		for _, x := range all {
+			if !s.ThreadComments || x.ParentID == 0 || t.parent[x.ParentID] == 0 && !hasKey(t.parent, x.ParentID) {
+				t.rootIndex[x.ID] = t.roots
+				t.roots++
+			}
+		}
+		rq.threads[c.PostID] = t
+	}
+	root := c.ID
+	for i := 0; i < 100 && s.ThreadComments; i++ {
+		p, ok := t.parent[root]
+		if !ok || p == 0 || !hasKey(t.parent, p) {
+			break
+		}
+		root = p
+	}
+	pages = rq.commentPages(t.roots)
+	return t.rootIndex[root]/s.CommentsPerPage + 1, pages
+}
+
+type commentThreads struct {
+	parent    map[int64]int64
+	rootIndex map[int64]int
+	roots     int
+}
+
+func hasKey(m map[int64]int64, k int64) bool {
+	_, ok := m[k]
+	return ok
 }

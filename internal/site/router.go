@@ -397,11 +397,6 @@ func (rq *request) withSuffix(base string, rt *route) string {
 func (rq *request) guess404(segs []string) *response {
 	ix := rq.st.ix
 	slug := segs[len(segs)-1]
-	if ids, err := db.SlugRedirects(rq.ctx, rq.site.db.R, slug); err == nil && len(ids) > 0 {
-		if p := ix.posts[ids[0]]; p != nil && ix.isPublic(p) {
-			return redirect(rq.st.links.PostURL(p))
-		}
-	}
 	var found []*db.Post
 	found = append(found, ix.postsBySlug[slug]...)
 	for _, p := range ix.pages {
@@ -411,6 +406,11 @@ func (rq *request) guess404(segs []string) *response {
 	}
 	if len(found) == 1 {
 		return redirect(rq.st.links.PostURL(found[0]))
+	}
+	if ids, err := db.SlugRedirects(rq.ctx, rq.site.db.R, slug); err == nil && len(ids) > 0 {
+		if p := ix.posts[ids[0]]; p != nil && ix.isPublic(p) {
+			return redirect(rq.st.links.PostURL(p))
+		}
 	}
 	return rq.notFound()
 }

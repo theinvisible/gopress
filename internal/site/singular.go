@@ -40,6 +40,7 @@ func (rq *request) singular(indexed *db.Post, rt *route) *response {
 		}
 	}
 
+	rq.curPost = p.ID
 	terms, err := db.PostTerms(rq.ctx, rq.site.db.R, []int64{p.ID})
 	if err != nil {
 		return errorResponse(err)
@@ -57,7 +58,7 @@ func (rq *request) singular(indexed *db.Post, rt *route) *response {
 	}
 
 	opts := viewOpts{
-		title:     rq.title(p.Title) + " | " + s.Name,
+		title:     render.StripTags(rq.title(p.Title)) + " | " + esc(s.Name),
 		canonical: url,
 		shortlink: s.Home + "/?p=" + strconv.FormatInt(p.ID, 10),
 		singular:  p,
@@ -81,7 +82,7 @@ func (rq *request) singular(indexed *db.Post, rt *route) *response {
 			tpl := strings.TrimSuffix(p.Template, ".php")
 			dir, name, _ := strings.Cut(tpl, "/")
 			opts.bodyClass = append(opts.bodyClass, "page-template", "page-template-"+sanitizeClass(dir), "page-template-"+sanitizeClass(name),
-				"page-template-"+sanitizeClass(strings.ReplaceAll(p.Template, "/", "")))
+				"page-template-"+sanitizeClass(strings.ReplaceAll(strings.ReplaceAll(p.Template, "/", ""), ".", "-")))
 		} else {
 			opts.bodyClass = append(opts.bodyClass, "page-template-default")
 		}
@@ -160,7 +161,7 @@ func (rq *request) attachmentEntry(p *db.Post) (*theme.Post, error) {
 		return e, nil
 	}
 	parent := rq.st.ix.posts[p.ParentID]
-	local := p.DateGMT.In(rq.st.s.Loc)
+	local := localTime(p.Date, rq.st.s.Loc)
 	parentLink := ""
 	if parent != nil {
 		parentLink = fmt.Sprintf(` in <a href="%s" title="Go to %s" rel="gallery">%s</a>`,
@@ -211,15 +212,15 @@ func (rq *request) attachmentEntry(p *db.Post) (*theme.Post, error) {
 		w, h = fw, fh
 		file = m.File
 	}
-	img := fmt.Sprintf(`<img width="%d" height="%d" src="%s" class="attachment-960x960 size-960x960" alt="%s" decoding="async" />`,
-		w, h, esc(l.UploadURL(file)), esc(m.Alt))
+	img := fmt.Sprintf(`<img width="%d" height="%d" src="%s" class="attachment-960x960 size-960x960" alt="%s" decoding="async"%s />`,
+		w, h, esc(l.UploadURL(file)), esc(m.Alt), render.ImageSrcset(rq.env, w, h, l.UploadURL(file), m))
 	e.Attachment = template.HTML(fmt.Sprintf("<a href=\"%s\" title=\"%s\" rel=\"attachment\">\n\t\t\t\t\t\t\t\t\t%s\t\t\t\t\t\t\t\t</a>",
 		esc(next), esc(render.StripTags(p.Title)), img))
 	if strings.TrimSpace(p.Excerpt) != "" {
 		e.Caption = template.HTML(render.Autop(render.Texturize(p.Excerpt, nil)))
 	}
 	rq.env.Post = p
-	e.Content = template.HTML(rq.st.pipe.Filter(rq.env, p.Content))
+	e.Content = template.HTML(rq.st.pipe.Filter(rq.env, p.Content, p.ContentFormat))
 	return e, nil
 }
 

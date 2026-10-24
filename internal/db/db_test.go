@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -66,12 +67,12 @@ func TestPostRoundTripAndQueries(t *testing.T) {
 		t.Fatalf("AdjacentPost = %v, %v", prev, err)
 	}
 
-	if err := IndexPost(ctx, d.W, 10, "Alpha", "Hello world"); err != nil {
-		t.Fatal(err)
-	}
-	ids, n, err := Search(ctx, d.R, `hel "`, 10, 0)
+	ids, n, err := Search(ctx, d.R, `hello the`, 10, 0)
 	if err != nil || n != 1 || ids[0] != 10 {
 		t.Fatalf("Search = %v %d, %v", ids, n, err)
+	}
+	if ids, n, _ := Search(ctx, d.R, `100%`, 10, 0); n != 0 || len(ids) != 0 {
+		t.Fatalf("Search(100%%) = %v %d, want no match (LIKE escaping)", ids, n)
 	}
 }
 
@@ -89,5 +90,16 @@ func TestOptions(t *testing.T) {
 	ok, err = GetOption(ctx, d.R, "missing", &n)
 	if ok || err != nil {
 		t.Fatalf("missing option = %v %v", ok, err)
+	}
+}
+
+func TestSearchTerms(t *testing.T) {
+	got := SearchTerms(`"exact phrase" the fortigate, a ubuntu+deb`)
+	want := []string{"exact phrase", "fortigate", "ubuntu", "deb"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("SearchTerms = %q, want %q", got, want)
+	}
+	if got := SearchTerms("the a"); len(got) != 1 || got[0] != "the a" {
+		t.Errorf("SearchTerms(stopwords) = %q", got)
 	}
 }

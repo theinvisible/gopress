@@ -30,7 +30,7 @@ func TestSanitizeComment(t *testing.T) {
 			t.Errorf("SanitizeComment kept %q: %s", bad, got)
 		}
 	}
-	if !strings.Contains(got, `href="https://ok.example"`) || !strings.Contains(got, "nofollow") {
+	if !strings.Contains(got, `href="https://ok.example"`) || !strings.Contains(got, `rel="nofollow ugc"`) {
 		t.Errorf("SanitizeComment = %s", got)
 	}
 }

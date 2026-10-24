@@ -10,13 +10,13 @@ import (
 
 const postColumns = `id, type, status, slug, parent_id, author_id, title, content, excerpt,
 	date_local, date_gmt, modified_local, modified_gmt, comment_status, ping_status,
-	password, menu_order, template, mime_type, featured_media_id, comment_count, guid`
+	password, menu_order, template, mime_type, featured_media_id, comment_count, guid, content_format`
 
 func scanPost(sc interface{ Scan(...any) error }, p *Post) error {
 	return sc.Scan(&p.ID, &p.Type, &p.Status, &p.Slug, &p.ParentID, &p.AuthorID, &p.Title,
 		&p.Content, &p.Excerpt, &p.Date, &p.DateGMT, &p.Modified, &p.ModifiedGMT,
 		&p.CommentStatus, &p.PingStatus, &p.Password, &p.MenuOrder, &p.Template,
-		&p.MimeType, &p.FeaturedMediaID, &p.CommentCount, &p.GUID)
+		&p.MimeType, &p.FeaturedMediaID, &p.CommentCount, &p.GUID, &p.ContentFormat)
 }
 
 func queryPosts(ctx context.Context, q Querier, query string, args ...any) ([]Post, error) {
@@ -43,10 +43,10 @@ func InsertPost(ctx context.Context, q Querier, p *Post) error {
 		id = p.ID
 	}
 	res, err := q.ExecContext(ctx, `INSERT INTO posts (`+postColumns+`)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		id, p.Type, p.Status, p.Slug, p.ParentID, p.AuthorID, p.Title, p.Content, p.Excerpt,
 		p.Date, p.DateGMT, p.Modified, p.ModifiedGMT, p.CommentStatus, p.PingStatus,
-		p.Password, p.MenuOrder, p.Template, p.MimeType, p.FeaturedMediaID, p.CommentCount, p.GUID)
+		p.Password, p.MenuOrder, p.Template, p.MimeType, p.FeaturedMediaID, p.CommentCount, p.GUID, contentFormat(p.ContentFormat))
 	if err != nil {
 		return fmt.Errorf("insert post %d: %w", p.ID, err)
 	}
@@ -261,6 +261,13 @@ func queryIDs(ctx context.Context, q Querier, query string, args ...any) ([]int6
 		out = append(out, id)
 	}
 	return out, rows.Err()
+}
+
+func contentFormat(f string) string {
+	if f == "" {
+		return FormatHTML
+	}
+	return f
 }
 
 func placeholders(n int) string {

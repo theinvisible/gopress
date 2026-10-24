@@ -15,7 +15,7 @@ func TestLoadAndRender(t *testing.T) {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
-	v := &View{Lang: "en-US", Charset: "UTF-8", Title: "T", SiteName: "S", HomeURL: "/",
+	v := &View{Lang: "en-US", Charset: "UTF-8", Title: template.HTML("T"), SiteName: "S", HomeURL: "/",
 		Posts: []*Post{{ID: 1, Class: "post", Title: template.HTML("Hello"), URL: "/hello/", Content: "<p>x</p>"}}}
 	if err := th.Render(&buf, "index", v); err != nil {
 		t.Fatal(err)

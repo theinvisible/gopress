@@ -2,9 +2,12 @@ package render
 
 import (
 	"html"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+var reBlockEnd = regexp.MustCompile(`</(?:p|li|h[1-6]|div|blockquote|pre|figure|figcaption|td|th|dt|dd)>`)
 
 // Pipeline applies the_content filters in WordPress' order.
 type Pipeline struct {
@@ -19,6 +22,10 @@ func NewPipeline() *Pipeline {
 			"gallery":    GalleryShortcode,
 			"caption":    CaptionShortcode,
 			"wp_caption": CaptionShortcode,
+			// Plugin shortcodes of the source site; rendered by the
+			// plugins once the plugin host exists (M4), hidden until then.
+			"fotogalerie":     func(*Env, *Shortcode) string { return "" },
+			"paypal-donation": func(*Env, *Shortcode) string { return "" },
 		},
 		UseSmilies: true,
 	}
@@ -35,11 +42,17 @@ func (p *Pipeline) names() map[string]bool {
 	return m
 }
 
-// Filter runs the_content filters on stored (already autop'ed) content:
-// wptexturize, capital_P_dangit, do_shortcode, wp_filter_content_tags,
-// convert_smilies.
-func (p *Pipeline) Filter(env *Env, content string) string {
-	content = Texturize(content, p.names())
+// Filter runs the_content filters in WordPress' priority order:
+// wptexturize, wpautop + shortcode_unautop (classic content only),
+// capital_P_dangit, do_shortcode, wp_filter_content_tags, convert_smilies.
+// format is db.FormatWPAutop for classic content, else the content is
+// final HTML (block content, where WordPress skips wpautop).
+func (p *Pipeline) Filter(env *Env, content, format string) string {
+	names := p.names()
+	content = Texturize(content, names)
+	if format == "wpautop" {
+		content = ShortcodeUnautop(Autop(content), names)
+	}
 	content = CapitalPDangit(content)
 	content = DoShortcodes(env, content, p.Shortcodes)
 	content = FilterContentTags(env, content)
@@ -58,7 +71,7 @@ type ContentOptions struct {
 
 // Content is the_content(): the more tag handling of get_the_content()
 // followed by Filter.
-func (p *Pipeline) Content(env *Env, content string, postID int64, opt ContentOptions) string {
+func (p *Pipeline) Content(env *Env, content, format string, postID int64, opt ContentOptions) string {
 	teaser, rest, moreText, found := SplitMore(content)
 	if found {
 		if opt.Teaser {
@@ -71,14 +84,17 @@ func (p *Pipeline) Content(env *Env, content string, postID int64, opt ContentOp
 			content = teaser + `<span id="more-` + strconv.FormatInt(postID, 10) + `"></span>` + rest
 		}
 	}
-	return p.Filter(env, content)
+	return p.Filter(env, content, format)
 }
 
 // Excerpt is wp_trim_excerpt() for a post without a manual excerpt.
-func (p *Pipeline) Excerpt(env *Env, content string) string {
+func (p *Pipeline) Excerpt(env *Env, content, format string) string {
 	teaser, _, _, _ := SplitMore(content)
 	text := StripShortcodes(teaser, p.Shortcodes)
-	text = p.Filter(env, text)
+	text = p.Filter(env, text, format)
+	// Block content has no line breaks between elements; WordPress joins
+	// blocks with blank lines, so separate words across block boundaries.
+	text = reBlockEnd.ReplaceAllString(text, "$0 ")
 	text = strings.ReplaceAll(text, "]]>", "]]&gt;")
 	return TrimWords(text, 55, ExcerptMore)
 }

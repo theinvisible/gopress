@@ -40,7 +40,10 @@ CREATE TABLE posts (
 	mime_type         TEXT NOT NULL DEFAULT '',
 	featured_media_id INTEGER NOT NULL DEFAULT 0,
 	comment_count     INTEGER NOT NULL DEFAULT 0,
-	guid              TEXT NOT NULL DEFAULT '' -- feed item id, kept from WordPress
+	guid              TEXT NOT NULL DEFAULT '', -- feed item id, kept from WordPress
+	-- 'html': content is final HTML; 'wpautop': classic WordPress content
+	-- that gets wpautop at render time (like the_content does).
+	content_format    TEXT NOT NULL DEFAULT 'html'
 );
 CREATE INDEX posts_type_status_date ON posts (type, status, date_gmt DESC);
 CREATE INDEX posts_slug ON posts (slug, type);
@@ -136,7 +139,3 @@ CREATE TABLE import_stash (
 	data   TEXT NOT NULL, -- JSON
 	PRIMARY KEY (source, kind, key)
 );
-
--- Full-text search over published content. Maintained by the application
--- (it indexes text with HTML stripped), rowid = posts.id.
-CREATE VIRTUAL TABLE posts_fts USING fts5 (title, body, tokenize = 'unicode61 remove_diacritics 2');

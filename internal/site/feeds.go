@@ -2,6 +2,7 @@ package site
 
 import (
 	"fmt"
+	"html"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -33,7 +34,7 @@ func cdata(s string) string {
 // xmlText escapes text for XML element content (esc_xml-ish; entities
 // produced by wptexturize are converted to characters first).
 func xmlText(s string) string {
-	s = render.DecodeNumericEntities(s)
+	s = html.UnescapeString(s)
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
 }
 
@@ -128,11 +129,11 @@ func (rq *request) feed(kind feedKind, obj any, search string) *response {
 		rq.env.Post = p
 		content := ""
 		if p.Password == "" {
-			content = absolutize(st.pipe.Content(rq.env, p.Content, p.ID, render.ContentOptions{}), s.Home)
+			content = absolutize(st.pipe.Content(rq.env, p.Content, p.ContentFormat, p.ID, render.ContentOptions{}), s.Home)
 		}
 		excerpt := ""
 		if p.Password == "" {
-			excerpt = render.StripTags(rq.st.pipe.Excerpt(rq.env, p.Content))
+			excerpt = render.StripTags(rq.st.pipe.Excerpt(rq.env, p.Content, p.ContentFormat))
 			if strings.TrimSpace(p.Excerpt) != "" {
 				excerpt = p.Excerpt
 			}
@@ -217,13 +218,17 @@ func (rq *request) commentFeed(b *strings.Builder, kind feedKind, obj any, self 
 			continue
 		}
 		purl := l.PostURL(p)
+		clink := purl
+		if page, _ := rq.commentPageOf(c); s.PageComments {
+			clink = CommentPageURL(purl, page) // feeds always name the page
+		}
 		itemTitle := "By: " + c.Author
 		if kind == feedComments {
 			itemTitle = "Comment on " + render.StripTags(rq.title(p.Title)) + " by " + c.Author
 		}
 		text := rq.commentText(c.Content)
 		fmt.Fprintf(b, "\t<item>\n\t\t<title>%s</title>\n\t\t<link>%s</link>\n\t\t<dc:creator>%s</dc:creator>\n\t\t<pubDate>%s</pubDate>\n\t\t<guid isPermaLink=\"false\">%s</guid>\n\t\t\t\t\t<description>%s</description>\n\t\t<content:encoded>%s</content:encoded>\n\t\t\t\t\t\t</item>\n",
-			xmlText(itemTitle), xmlText(purl+"#comment-"+strconv.FormatInt(c.ID, 10)), cdata(render.SanitizeText(c.Author)), c.DateGMT.UTC().Format(rssDate),
+			xmlText(itemTitle), xmlText(clink+"#comment-"+strconv.FormatInt(c.ID, 10)), cdata(render.SanitizeText(c.Author)), c.DateGMT.UTC().Format(rssDate),
 			xmlText(rq.guid(p)+"#comment-"+strconv.FormatInt(c.ID, 10)), cdata(render.StripTags(text)), cdata(text))
 	}
 	b.WriteString("\t</channel>\n</rss>\n")

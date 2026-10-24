@@ -13,6 +13,9 @@ const (
 	StatusFuture  = "future"
 	StatusTrash   = "trash"
 	StatusInherit = "inherit" // attachments
+
+	FormatHTML    = "html"
+	FormatWPAutop = "wpautop"
 )
 
 // Comment statuses.
@@ -65,6 +68,7 @@ type Post struct {
 	FeaturedMediaID int64
 	CommentCount    int
 	GUID            string
+	ContentFormat   string // "html" or "wpautop"
 }
 
 type Term struct {

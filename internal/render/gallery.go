@@ -53,6 +53,16 @@ func AttachmentImage(env *Env, att *db.Post, m *db.Media, size string, extra map
 	return b.String()
 }
 
+// ImageSrcset returns srcset and sizes attributes (with leading space) for
+// an image of the attachment shown at w×h from src, or "".
+func ImageSrcset(env *Env, w, h int, src string, m *db.Media) string {
+	srcset := calculateSrcset(env, w, h, src, m)
+	if srcset == "" {
+		return ""
+	}
+	return fmt.Sprintf(` srcset="%s" sizes="(max-width: %dpx) 100vw, %dpx"`, srcset, w, w)
+}
+
 // AttachmentLink is wp_get_attachment_link(): the image linked to its
 // attachment page (permalink=true) or to the file.
 func AttachmentLink(env *Env, att *db.Post, m *db.Media, size string, permalink bool, extra map[string]string) string {
