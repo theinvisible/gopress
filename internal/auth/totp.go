@@ -143,8 +143,18 @@ func (s *Service) EnableTOTP(ctx context.Context, u *db.User, token, code string
 	if err != nil {
 		return err
 	}
-	return db.SetTOTP(ctx, s.db.W, u.ID, enc, step, s.now().Unix())
+	stored, err := db.InsertTOTP(ctx, s.db.W, u.ID, enc, step, s.now().Unix())
+	if err != nil {
+		return err
+	}
+	if !stored {
+		return ErrTOTPExists
+	}
+	return nil
 }
+
+// ErrTOTPExists is returned when TOTP is already set up.
+var ErrTOTPExists = errors.New("an authenticator app is already set up")
 
 // VerifyTOTP checks a code of user. Each time step is accepted only once.
 func (s *Service) VerifyTOTP(ctx context.Context, userID int64, code string) (bool, error) {

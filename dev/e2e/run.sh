@@ -15,7 +15,8 @@ sqlite_copy
 ln -s "$(realpath "$SRC/uploads")" "$WORK/data/uploads"
 
 export E2E_PASSWORD='e2e correct horse battery'
-printf '%s\n' "$E2E_PASSWORD" | "$WORK/gopress" user add --data "$WORK/data" --login e2e --email e2e@example.org --display-name "E2E Tester" >/dev/null
+out=$(printf '%s\n' "$E2E_PASSWORD" | "$WORK/gopress" user add --data "$WORK/data" --login e2e --email e2e@example.org --display-name "E2E Tester")
+export E2E_SETUP_CODE=${out##*: }
 printf '%s\n' "$E2E_PASSWORD" | "$WORK/gopress" user add --data "$WORK/data" --login victim --email victim@example.org >/dev/null
 
 "$WORK/gopress" serve --addr 127.0.0.1:8090 --base-url http://localhost:8090 --data "$WORK/data" >"$WORK/serve.log" 2>&1 &

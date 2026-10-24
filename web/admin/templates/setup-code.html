@@ -1,0 +1,20 @@
+{{define "page"}}{{template "admin-top" .}}
+<div class="wrap gp-setup-2fa">
+	<h1>Two-Factor Authentication</h1>
+	<div class="notice notice-warning inline"><p><strong>Set up a second factor to continue.</strong> Every account on this site is protected with two-factor authentication. To start, enter the one-time setup code you received from an administrator (or created with <code>gopress user setup-code</code> on the server).</p></div>
+	{{- if .Error}}<div class="notice notice-error inline" role="alert"><p>{{.Error}}</p></div>{{end}}
+	<div class="gp-cards">
+		<section class="gp-card">
+			<h2><span class="dashicons dashicons-lock" aria-hidden="true"></span> Setup code</h2>
+			<form method="post" action="/admin/setup-2fa/code">
+				{{template "csrf" .CSRF}}
+				<p><label for="setup_code">Setup code</label><br>
+				<input type="text" id="setup_code" name="setup_code" class="gp-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX" maxlength="20" required autofocus></p>
+				<p><button type="submit" class="button button-primary">Continue</button></p>
+			</form>
+			<p class="description">The code is valid for 72 hours and can be used once. This makes sure a leaked password alone cannot be used to take over the account.</p>
+		</section>
+	</div>
+	<form method="post" action="/logout" class="gp-cancel"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button type="submit" class="button-link">Log out</button></form>
+</div>
+{{template "admin-bottom" .}}{{end}}

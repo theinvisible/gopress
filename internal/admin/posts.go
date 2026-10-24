@@ -46,7 +46,7 @@ func (a *Admin) registerPosts(mux *http.ServeMux) {
 		mux.Handle("GET "+pt.Base+"{id}/revisions", a.page(editCap, a.withType(pt, a.revisionsPage)))
 	}
 	mux.Handle("POST /admin/api/autosave", a.page(auth.CapEditPosts+"|"+auth.CapEditPages, a.apiAutosave))
-	mux.Handle("GET /admin/api/media", a.page(auth.CapEditPosts+"|"+auth.CapEditPages, a.apiMedia))
+	mux.Handle("GET /admin/api/media", a.page(auth.CapUploadFiles, a.apiMedia))
 	mux.Handle("GET /admin/api/tags", a.page(auth.CapEditPosts, a.apiTags))
 	mux.Handle("POST /admin/api/categories", a.page(auth.CapManageCategories, a.apiAddCategory))
 }
@@ -139,6 +139,7 @@ type postListData struct {
 	Parents     []option // quick edit (pages)
 	Templates   []option
 	ShowEmpty   bool
+	CanSticky   bool
 }
 
 const perPage = 20
@@ -163,6 +164,7 @@ func (a *Admin) postList(w http.ResponseWriter, r *http.Request, c *reqCtx, pt p
 	d := &postListData{basePage: a.base(ctx, c, pt.Plural, pt.Screen+"-all"), PT: pt}
 	d.Scripts = []string{"list.js"}
 	d.CanCreate = auth.CanEditType(c.user, pt.Type)
+	d.CanSticky = auth.Can(c.user, auth.CapEditOthersPosts)
 	d.Status = q.Get("post_status")
 	if !slices.ContainsFunc(statusLabels, func(s struct{ Status, Label string }) bool { return s.Status == d.Status }) {
 		d.Status = ""
@@ -193,7 +195,9 @@ func (a *Admin) postList(w http.ResponseWriter, r *http.Request, c *reqCtx, pt p
 	d.Paged, _ = strconv.Atoi(q.Get("paged"))
 	d.Paged = max(d.Paged, 1)
 	if msg, ok := listMessages[q.Get("msg")]; ok {
-		d.Notice = &msg
+		if d.Notice == nil {
+			d.Notice = &msg
+		}
 	}
 
 	counts, err := db.PostStatusCounts(ctx, a.db.R, pt.Type, authorID)
@@ -716,6 +720,7 @@ type editorData struct {
 	CanPublish    bool
 	CanDelete     bool
 	CanAddCat     bool
+	CanSticky     bool
 	ViewURL       string
 	PreviewURL    string
 	Error         string
@@ -777,7 +782,9 @@ func (a *Admin) renderEditor(w http.ResponseWriter, r *http.Request, c *reqCtx, 
 	d.Styles = []string{"editor/editor.css"}
 	d.Scripts = []string{"editor/editor.js", "post.js"}
 	if msg, ok := editorMessages[r.URL.Query().Get("msg")]; ok && errMsg == "" {
-		d.Notice = &msg
+		if d.Notice == nil {
+			d.Notice = &msg
+		}
 	}
 	if in == nil {
 		if isNew {
@@ -805,6 +812,7 @@ func (a *Admin) renderEditor(w http.ResponseWriter, r *http.Request, c *reqCtx, 
 	d.CanPublish = auth.CanPublishType(c.user, pt.Type)
 	d.CanDelete = !isNew && auth.CanDeletePost(c.user, p)
 	d.CanAddCat = auth.Can(c.user, auth.CapManageCategories)
+	d.CanSticky = auth.Can(c.user, auth.CapEditOthersPosts)
 	d.StatusLabel = map[string]string{db.StatusPublish: "Published", db.StatusFuture: "Scheduled", db.StatusDraft: "Draft",
 		db.StatusPending: "Pending Review", db.StatusPrivate: "Privately Published"}[p.Status]
 	if in.Date != "" {
@@ -881,7 +889,7 @@ func (a *Admin) renderEditor(w http.ResponseWriter, r *http.Request, c *reqCtx, 
 		"postId":     p.ID,
 		"postType":   pt.Type,
 		"autosave":   "/admin/api/autosave",
-		"media":      "/admin/api/media",
+		"media":      mediaAPI(c),
 		"tags":       "/admin/api/tags",
 		"categories": "/admin/api/categories",
 		"home":       c.links.Home(),
@@ -920,6 +928,14 @@ func (a *Admin) slugParts(c *reqCtx, p *db.Post) (base, suffix string) {
 	full := c.links.PostURL(&probe)
 	before, after, _ := strings.Cut(full, "\x00")
 	return before, after
+}
+
+// mediaAPI is the media picker endpoint for users who may use media.
+func mediaAPI(c *reqCtx) string {
+	if auth.Can(c.user, auth.CapUploadFiles) {
+		return "/admin/api/media"
+	}
+	return ""
 }
 
 func mediaURL(c *reqCtx, m *db.Media, size string) string {

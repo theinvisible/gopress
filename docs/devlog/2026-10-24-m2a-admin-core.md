@@ -6,23 +6,24 @@
   - Password policy per NIST 800-63B: 12–256 characters, no composition rules, blocklist of ~47k common passwords of 12+ characters (SecLists), not the login or email.
   - Sessions with SHA-256-hashed 256-bit tokens in SQLite, `__Host-` cookie (`Secure`, `HttpOnly`, `SameSite=Strict`), idle/absolute timeouts, new id after every login step; session states `mfa` (second factor pending), `enroll` (no factor yet) and `full`.
   - CSRF: per-session HMAC token plus strict `Origin`/`Sec-Fetch-Site` checks; the login form is bound to a pre-session cookie.
-  - Rate limit per IP (/64) and progressive lockout per account name (also for unknown names), one generic error message, dummy hash for unknown users.
+  - Rate limits per IP (/64 and /48), progressive locks per account name and network (also for unknown names) plus an account-wide limit with device-cookie exemption, attempts reserved atomically; one generic error message and one argon2id run per failure.
   - Mandatory two-factor authentication: TOTP (RFC 6238, AES-GCM-encrypted secret, each step usable once), passkeys via go-webauthn (user verification required; usernameless login and second factor), 10 HMAC-hashed recovery codes.
   - Re-authentication window (10 min) for password, email, factor and recovery-code changes; audit log; WordPress roles and capabilities with ownership checks.
-  - `gopress user list|add|set-password|reset-2fa|revoke-sessions` as break-glass CLI (passwords only via terminal/stdin).
+  - `gopress user list|add|set-password|reset-2fa|setup-code|unlock|revoke-sessions` as break-glass CLI (passwords only via terminal/stdin).
 - **Write layer** (`internal/content`): WordPress-compatible slugs (`sanitize_title`, unique per type/parent, reserved words), old-slug redirects, statuses and scheduling (scheduler goroutine), local/GMT dates, terms with counts, sticky posts, revisions (25 per post, the pre-edit state of imported posts is kept), per-user autosaves, trash/restore/delete, duplicate, comment moderation/reply/edit; content of roles without `unfiltered_html` is sanitized (`render.SanitizePost`).
 - **Admin** (`internal/admin`, `web/admin`): wp-admin stylesheets and markup (copied by `dev/admin-assets.sh`, no WordPress logo), dashboard, post/page list tables with filters, bulk and row actions and quick edit, editor screen with publish box, categories, tags, featured image, page attributes, excerpt, discussion, revisions compare/restore, previews (`/?p=N&preview=true`, never cached), comment moderation without reloads, profile and security page (factors, recovery codes, sessions, recent activity), nine admin color schemes.
 - **Editor** (`web/editor`, TipTap 3 + esbuild, 502 KB minified / 163 KB gzip, loaded only on the editor screen): toolbar, floating format menu, slash commands, Markdown shortcuts, HTML view, distraction-free mode, media picker (images with size/alignment/link/caption, galleries), shortcode and raw HTML blocks, `gopress.editor.registerInsert` / `gopress.media.pick` for plugins.
 - **Tests:**
   - Unit tests for auth (hash vectors, RFC 6238 vectors, sessions, CSRF, lockout, capabilities) and content; HTTP tests for the admin (login gate, 2FA gate on every route, capability matrix incl. writes, CSRF, preview authorization, login endpoints, open redirects).
-  - `make e2e` (`dev/e2e`): 15 scenarios with the local Chrome against a throwaway copy of the data, incl. passkeys through Chrome's virtual authenticator: forced enrollment, passkey/TOTP/recovery-code logins, lockout without enumeration, writing a post with slash commands, media and gallery, preview, unchanged re-save, quick edit and trash, comment moderation, scheduling. 15/15 pass.
+  - `make e2e` (`dev/e2e`): 16 scenarios with the local Chrome against a throwaway copy of the data, incl. passkeys through Chrome's virtual authenticator: forced enrollment with setup code, passkey/TOTP/recovery-code logins, lockout without enumeration, writing a post with slash commands, media and gallery, preview, unchanged re-save, quick edit and trash, comment moderation, scheduling. 16/16 pass.
   - `make roundtrip`: all 85 imported documents through the editor — no content lost, 11 of 459 blocks (2.4 %) kept as HTML blocks, rendered output identical after the round trip; all 67 classic documents render identically after the conversion to HTML.
   - Parity with the reference WordPress still 162/162; `govulncheck` clean.
 
 ## Decisions
 - **Admin look:** wp-admin stylesheets as the base, deviating where it is nicer or more practical (user decision): login and 2FA screens, inline moderation, quick edit via fetch.
 - **No htmx:** a few small vanilla scripts (fetch with CSRF header); everything works under `script-src 'self'` without inline handlers.
-- **2FA mandatory for every user** (user decision). A passkey alone is a full login (phishing-resistant, user verification). Passkey logins skip the password lockout, so failed password attempts by an attacker cannot lock the owner out. The planned global login ceiling was replaced by the hashing semaphore for the same reason.
+- **2FA mandatory for every user** (user decision). A passkey alone is a full login (phishing-resistant, user verification). The first factor can only be registered with a one-time setup code issued by an administrator or the CLI, so a leaked (e.g. imported WordPress) password is not enough to take over an account.
+- **Lockout without self-DoS:** failures lock per account and client network; the account-wide limit (against distributed guessing) does not apply to browsers with a device cookie of the account; passkey logins have no password lockout. The planned global login ceiling was replaced by the hashing semaphore for the same reason.
 - **Lossless editor:** each stored block is parsed into the editor schema and serialized again; only if the result is equivalent (text runs with their formats, sorted attributes, whitespace-insensitive) the block becomes editable, otherwise it stays a raw HTML block with a sandboxed preview. Original `style` attributes are written back verbatim (the browser would normalize colors).
 - **Classic content** is converted when opened: wptexturize → wpautop → shortcode unautop (the order of `the_content`), so quotes next to line breaks keep their direction. Stored as `content_format = html` on save.
 - **New list items** are written as `<li>text</li>` (WordPress style); links nest inside bold/italic.
@@ -30,7 +31,25 @@
 - **Repo stays generic:** site-specific parity URLs moved to `local/parity-urls.txt`; the e2e test picks posts dynamically.
 
 ## Security review
-See below (independent review agent, OWASP ASVS 5 scope: authentication, sessions, authorization, CSRF, XSS, injection).
+Independent review agent (OWASP ASVS 5: authentication, sessions, authorization, CSRF, XSS, injection), findings verified with probe tests; all fixed with regression tests (unit, HTTP and e2e).
+
+| Finding | Severity | Fix |
+|---|---|---|
+| Second-factor attempt limit raced (300 parallel TOTP guesses in one pending login), no per-account limit → TOTP brute-forceable with a known password | High | Attempts reserved atomically before the check (session: 5; per user across sessions and re-auth: 10, then 5 min doubling to 1 h); failed attempts since the last login are shown as a warning |
+| Login lockout counter lost updates under concurrency (40 parallel guesses counted once) | Medium | Atomic `INSERT … ON CONFLICT … RETURNING` reservation before verifying; locks with escalation levels |
+| Lockout as denial of service (anyone could keep an account locked) | Medium | Locks per account **and client network**; a much higher account-wide limit against distributed guessing that browsers with a device cookie of the account are exempt from; `gopress user unlock`, `set-password` lifts locks |
+| Contributors/authors could read password-protected posts by duplicating them | Medium | Duplicate requires the right to edit the source |
+| Old enrollment sessions could add a factor after the account got one | Low/Medium | Enrollment sessions end once a factor exists; the first factor ends all other sessions; TOTP insert is conditional |
+| Passkey login endpoints: body read before limits, unbounded ceremonies | Low | Body limits first, ceremony store capped, passkey begin rate-limited per IP, IP limiter refuses instead of growing |
+| IPv6 /64 rate limit bypassable with larger prefixes; proxy header trust undocumented | Low | Additional /48 bucket; requirement that the proxy overwrites `X-Real-Ip` documented |
+| Editor kept event-handler attributes / parsed in the live page | Low (defence in depth) | `on*` and `javascript:`/`data:` (except images) dropped; parsing in a separate inert document |
+| Account enumeration via timing (fast legacy hashes, fast locked path) | Low | Every failure costs one argon2id run (dummy for unknown, locked and imported-hash accounts) |
+| First enrollment possible for anyone with the password (imported accounts) | Info → fixed | One-time setup code (72 h, 5 tries) from an administrator or `gopress user setup-code` is required before a factor can be registered |
+| `script-src 'self'` would cover uploads | Info → fixed | Admin CSP allows scripts only from `/admin/static/` |
+| Audit log stored what was typed as login name | Info → fixed | Only the account name of existing accounts is logged |
+| Quick edit could change trashed posts; contributors could set sticky; media API open to contributors; subscribers saw scheduled titles | Info → fixed | Trashed posts are read-only; sticky needs `edit_others_posts`; media needs `upload_files`; activity only for writers |
+
+Checked and found sound by the review: password hashing and WordPress hash verification, session tokens and cookie flags, fixation, timeouts, CSRF tokens and origin checks, TOTP replay protection, recovery codes, WebAuthn configuration, `safeRedirect`, html/template escaping, `SanitizePost`, SQL parameterization, asset path handling, preview authorization, raw-HTML preview sandbox, ownership checks on ids.
 
 ## Open issues
 - Media upload, categories/tags screens, users, settings, widgets/menus, frontend admin bar and mail are M2b.

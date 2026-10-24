@@ -26,21 +26,28 @@ make test           # go vet + go test
 ## Admin
 
 The admin is at `/admin/`, the login at `/login`. Every account uses two-factor authentication:
-at the first login GoPress asks for a passkey or an authenticator app (TOTP) and shows ten
+at the first login GoPress asks for a one-time setup code (from an administrator or
+`gopress user setup-code`), then for a passkey or an authenticator app (TOTP), and shows ten
 recovery codes. Afterwards you sign in with password + second factor, or with a passkey alone.
 Passkeys need the site to be reached by a host name (e.g. `http://localhost:8080`, or HTTPS in
 production), not an IP address.
 
-Imported WordPress users keep their password (it is rehashed with argon2id at the first login).
-Break-glass commands for whoever has access to the server:
+Imported WordPress users keep their password (it is rehashed with argon2id at the first login);
+create their setup code on the server. Break-glass commands for whoever has access to the server:
 
 ```sh
 ./bin/gopress user list --data ./data
-./bin/gopress user add --data ./data --login alice --email alice@example.org --role editor   # asks for the password
-./bin/gopress user set-password --data ./data alice      # also ends all sessions
-./bin/gopress user reset-2fa --data ./data alice         # set up two-factor authentication again
+./bin/gopress user add --data ./data --login alice --email alice@example.org --role editor   # asks for the password, prints the setup code
+./bin/gopress user setup-code --data ./data alice       # new setup code (72 h, single use)
+./bin/gopress user set-password --data ./data alice      # also ends all sessions and lifts login locks
+./bin/gopress user reset-2fa --data ./data alice         # set up two-factor authentication again (prints a setup code)
+./bin/gopress user unlock --data ./data alice
 ./bin/gopress user revoke-sessions --data ./data alice
 ```
+
+Behind a reverse proxy, pass `--trusted-proxies` and make sure the proxy sets (overwrites)
+`X-Real-Ip` or appends to `X-Forwarded-For` (Traefik and nginx with `proxy_set_header` do);
+client addresses are used for rate limits and the audit log.
 
 ## Local test data
 

@@ -410,3 +410,62 @@ func UserIDByMeta(ctx context.Context, q Querier, key, value string) (int64, err
 	}
 	return id, err
 }
+
+// SessionSetup is a session that passed the password and the one-time
+// setup code: it may enroll a second factor.
+const SessionSetup = "setup"
+
+// ReserveAttempt atomically counts an attempt for key before it is
+// checked, so parallel requests cannot share one count. After a lock has
+// expired the count starts again at 1 (the escalation level stays); after
+// a quiet period (last attempt before forgiveBefore) everything resets.
+// It returns the new count and the current lock.
+func ReserveAttempt(ctx context.Context, q Querier, key string, now, forgiveBefore int64) (count int, lockedUntil int64, err error) {
+	err = q.QueryRowContext(ctx, `INSERT INTO login_failures (key, count, locked_until, last, level) VALUES (?, 1, 0, ?, 0)
+		ON CONFLICT (key) DO UPDATE SET
+			level = CASE WHEN last < ?3 AND locked_until < ?4 THEN 0 ELSE level END,
+			count = CASE WHEN last < ?3 AND locked_until < ?4 THEN 1
+				WHEN locked_until != 0 AND locked_until <= ?4 THEN 1 ELSE count + 1 END,
+			locked_until = CASE WHEN locked_until != 0 AND locked_until <= ?4 THEN 0 ELSE locked_until END,
+			last = excluded.last
+		RETURNING count, locked_until`, key, now, forgiveBefore, now).Scan(&count, &lockedUntil)
+	return count, lockedUntil, err
+}
+
+// LockAttempts locks key for base << level (at most max seconds) and
+// raises the level, unless it is locked already.
+func LockAttempts(ctx context.Context, q Querier, key string, now, base, max int64) error {
+	_, err := q.ExecContext(ctx, `UPDATE login_failures SET locked_until = ? + MIN(? << MIN(level, 16), ?), level = MIN(level + 1, 16)
+		WHERE key = ? AND locked_until <= ?`, now, base, max, key, now)
+	return err
+}
+
+// ClearAttemptsPrefix removes all counters whose key starts with prefix.
+func ClearAttemptsPrefix(ctx context.Context, q Querier, prefix string) error {
+	_, err := q.ExecContext(ctx, `DELETE FROM login_failures WHERE substr(key, 1, ?) = ?`, len(prefix), prefix)
+	return err
+}
+
+// ReserveSessionAttempt counts a second-factor attempt of a pending login
+// if fewer than max were made; ok is false when the budget is used up.
+func ReserveSessionAttempt(ctx context.Context, q Querier, idHash []byte, max int) (int, bool, error) {
+	var n int
+	err := q.QueryRowContext(ctx, `UPDATE sessions SET attempts = attempts + 1 WHERE id_hash = ? AND attempts < ? RETURNING attempts`,
+		idHash, max).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	return n, err == nil, err
+}
+
+// InsertTOTP stores a TOTP secret unless the user already has one; it
+// reports whether it was stored.
+func InsertTOTP(ctx context.Context, q Querier, userID int64, secretEnc []byte, lastStep, now int64) (bool, error) {
+	res, err := q.ExecContext(ctx, `INSERT INTO totp (user_id, secret_enc, last_step, created) VALUES (?,?,?,?)
+		ON CONFLICT (user_id) DO NOTHING`, userID, secretEnc, lastStep, now)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n == 1, err
+}

@@ -79,7 +79,9 @@ func (a *Admin) commentList(w http.ResponseWriter, r *http.Request, c *reqCtx) e
 	}
 	d.Paged = max(1, int(atoi64(q.Get("paged"))))
 	if msg, ok := commentMessages[q.Get("msg")]; ok {
-		d.Notice = &msg
+		if d.Notice == nil {
+			d.Notice = &msg
+		}
 	}
 	counts, err := db.CommentStatusCounts(ctx, a.db.R, d.PostID)
 	if err != nil {

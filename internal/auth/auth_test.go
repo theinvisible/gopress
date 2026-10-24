@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -84,45 +86,102 @@ func TestAuthenticateAndRehash(t *testing.T) {
 func TestLockoutWithoutEnumeration(t *testing.T) {
 	s, d, c := newTestService(t)
 	ctx := context.Background()
-	addUser(t, d, "admin", RoleAdministrator, "correct horse battery staple")
+	u := addUser(t, d, "admin", RoleAdministrator, "correct horse battery staple")
 	// Same behavior for an existing and a non-existing account.
-	for _, login := range []string{"admin", "ghost"} {
+	for j, login := range []string{"admin", "ghost"} {
 		for i := range lockThreshold {
-			_, err := s.Authenticate(ctx, loginRequest(fmt.Sprintf("192.0.2.%d", 10+i)), login, "wrong")
-			if !errors.Is(err, ErrLoginFailed) {
+			if _, err := s.Authenticate(ctx, loginRequest(fmt.Sprintf("192.0.2.%d", 10+j)), login, "wrong"); !errors.Is(err, ErrLoginFailed) {
 				t.Fatalf("%s attempt %d: %v", login, i, err)
 			}
 		}
 	}
-	// Locked: even the right password fails (from a fresh IP).
-	if _, err := s.Authenticate(ctx, loginRequest("198.51.100.1"), "admin", "correct horse battery staple"); !errors.Is(err, ErrLoginFailed) {
+	// Locked for this network: even the right password fails ...
+	if _, err := s.Authenticate(ctx, loginRequest("192.0.2.10"), "admin", "correct horse battery staple"); !errors.Is(err, ErrLoginFailed) {
 		t.Fatalf("locked account accepted: %v", err)
 	}
-	c.add(lockBase + time.Second)
+	// ... but the owner elsewhere is not locked out by the attacker.
 	if _, err := s.Authenticate(ctx, loginRequest("198.51.100.1"), "admin", "correct horse battery staple"); err != nil {
+		t.Fatalf("other network locked out: %v", err)
+	}
+	// Attempts during the lock extend it (progressive); it ends eventually.
+	c.add(lockMax + time.Minute)
+	if _, err := s.Authenticate(ctx, loginRequest("192.0.2.10"), "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("after lock expiry: %v", err)
 	}
-	// Success resets the counter.
+	// Success resets the counters.
+	for _, k := range []string{"u:1|192.0.2.10", "u:1"} {
+		if f, _ := db.GetLoginFailure(ctx, d.R, k); f.Count != 0 {
+			t.Errorf("%s after success = %+v", k, f)
+		}
+	}
+	// The audit log never contains what was typed for unknown accounts.
+	entries, _ := db.AuditLog(ctx, d.R, 0, 100, 0)
+	for _, e := range entries {
+		if strings.Contains(e.Detail, "ghost") {
+			t.Errorf("audit log contains typed login: %s", e.Detail)
+		}
+	}
+	_ = u
+}
+
+func TestLockoutIsAtomic(t *testing.T) {
+	s, d, _ := newTestService(t)
+	ctx := context.Background()
+	addUser(t, d, "admin", RoleAdministrator, "correct horse battery staple")
+	// Parallel guesses from many networks: every one counts.
+	const n = acctThreshold + 10
+	var wg sync.WaitGroup
+	var verified atomic.Int32
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ip := fmt.Sprintf("10.%d.%d.1", i/200, i%200)
+			if _, err := s.Authenticate(ctx, loginRequest(ip), "admin", "wrong"); errors.Is(err, ErrLoginFailed) {
+				verified.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
 	f, _ := db.GetLoginFailure(ctx, d.R, "u:1")
-	if f.Count != 0 {
-		t.Errorf("failures after success = %+v", f)
+	if f.Count != n || f.LockedUntil == 0 {
+		t.Errorf("account counter after %d parallel failures = %+v", n, f)
+	}
+	// Locked now for untrusted browsers ...
+	if _, err := s.Authenticate(ctx, loginRequest("203.0.113.9"), "admin", "correct horse battery staple"); !errors.Is(err, ErrLoginFailed) {
+		t.Error("distributed guessing did not lock the account")
+	}
+	// ... but not for a browser with the owner's device cookie.
+	w := httptest.NewRecorder()
+	s.IssueDeviceCookie(w, 1)
+	r := loginRequest("203.0.113.10")
+	r.AddCookie(w.Result().Cookies()[0])
+	if _, err := s.Authenticate(ctx, r, "admin", "correct horse battery staple"); err != nil {
+		t.Errorf("device cookie did not exempt the owner: %v", err)
+	}
+	// A forged device cookie does not.
+	r = loginRequest("203.0.113.11")
+	r.AddCookie(&http.Cookie{Name: DeviceCookie, Value: "1.AAAA.AAAA"})
+	if _, err := s.Authenticate(ctx, r, "admin", "correct horse battery staple"); err != nil && !errors.Is(err, ErrLoginFailed) {
+		t.Fatal(err)
 	}
 }
 
 func TestLockoutDoubles(t *testing.T) {
-	s, _, c := newTestService(t)
+	s, d, c := newTestService(t)
 	ctx := context.Background()
-	key := "n:x"
-	var f db.LoginFailure
-	for i := range lockThreshold + 2 {
-		s.recordFailure(ctx, key, f, c.now())
-		f, _ = db.GetLoginFailure(ctx, s.db.R, key)
-		if i < lockThreshold-1 && f.LockedUntil != 0 {
-			t.Fatalf("locked after %d failures", i+1)
+	addUser(t, d, "admin", RoleAdministrator, "correct horse battery staple")
+	// Each lock doubles the next one; after a lock ends there are new tries.
+	for cycle, want := range []time.Duration{lockBase, 2 * lockBase, 4 * lockBase} {
+		for range lockThreshold {
+			s.ipLimit = newIPLimiter(loginIPMax, loginIPWindow)
+			s.Authenticate(ctx, loginRequest("192.0.2.1"), "admin", "wrong")
 		}
-	}
-	if got := time.Duration(f.LockedUntil-c.now().Unix()) * time.Second; got != 4*lockBase {
-		t.Errorf("lock after %d failures = %v, want %v", f.Count, got, 4*lockBase)
+		f, _ := db.GetLoginFailure(ctx, d.R, "u:1|192.0.2.1")
+		if got := time.Duration(f.LockedUntil-c.now().Unix()) * time.Second; got != want {
+			t.Errorf("cycle %d: lock = %v, want %v", cycle, got, want)
+		}
+		c.add(want + time.Second)
 	}
 }
 
@@ -135,6 +194,16 @@ func TestIPRateLimit(t *testing.T) {
 	// Another address in the same /64 is limited too.
 	if !s.ipLimit.allow("unrelated", s.now()) || s.ipLimit.allow("2001:db8::/64", s.now()) {
 		t.Error("IPv6 /64 not limited")
+	}
+	// A /48 has a budget too (an attacker with many /64s).
+	for i := range loginNetMax {
+		s.Authenticate(ctx, loginRequest(fmt.Sprintf("2001:db8:1:%x::1", i)), "x", "x")
+	}
+	if _, err := s.Authenticate(ctx, loginRequest("2001:db8:1:ffff::1"), "x", "x"); !errors.Is(err, ErrLoginFailed) {
+		t.Fatal(err)
+	}
+	if s.netLimit.allow("2001:db8:1::/48", s.now()) {
+		t.Error("IPv6 /48 not limited")
 	}
 }
 

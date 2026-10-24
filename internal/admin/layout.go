@@ -77,6 +77,12 @@ func (a *Admin) base(ctx context.Context, c *reqCtx, title, screen string) baseP
 			}
 		}
 		p.Menu = a.menu(c.user, screen, p.Pending)
+		// Failed second-factor attempts since the last login: someone
+		// else may know the password.
+		if n, _ := db.UserMeta(ctx, a.db.R, c.user.ID, metaMFAWarning); n != "" && n != "0" {
+			p.Notice = &notice{"error", n + " failed two-factor attempts happened since your last login. If that was not you, someone knows your password: change it now."}
+			db.SetUserMeta(ctx, a.db.W, c.user.ID, metaMFAWarning, "")
+		}
 	}
 	p.BodyClass = "screen-" + screen
 	return p

@@ -193,7 +193,9 @@ func TestCapabilities(t *testing.T) {
 func TestCSRF(t *testing.T) {
 	e := newEnv(t)
 	cur := e.session(auth.RoleAdministrator, db.SessionFull)
-	form := func(tok string) url.Values { return url.Values{"post_title": {"Draft"}, "content": {"x"}, "_csrf": {tok}} }
+	form := func(tok string) url.Values {
+		return url.Values{"post_title": {"Draft"}, "content": {"x"}, "_csrf": {tok}}
+	}
 	for name, tc := range map[string]struct {
 		tok string
 		hdr map[string]string
@@ -266,5 +268,93 @@ func TestPreview(t *testing.T) {
 	// Previews never leak into the page cache.
 	if rec := e.do("GET", "/?p=30&preview=true", nil, nil, nil); rec.Code != http.StatusNotFound {
 		t.Errorf("anonymous preview after an authorized one: %d", rec.Code)
+	}
+}
+
+func TestSetupCodeGate(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	enroll := e.session(auth.RoleAdministrator, db.SessionEnroll)
+	same := map[string]string{"Origin": home}
+	// Before the setup code: no factor can be registered.
+	if rec := e.do("GET", "/admin/setup-2fa", enroll, nil, nil); !strings.Contains(rec.Body.String(), `name="setup_code"`) {
+		t.Fatal("setup page does not ask for the setup code")
+	}
+	for _, p := range []string{"/admin/setup-2fa/totp", "/admin/setup-2fa/passkey/begin"} {
+		rec := e.do("POST", p, enroll, url.Values{"_csrf": {enroll.CSRF}}, same)
+		if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/admin/setup-2fa" {
+			t.Errorf("POST %s before the setup code: %d %s", p, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+	rec := e.do("POST", "/admin/setup-2fa/code", enroll, url.Values{"_csrf": {enroll.CSRF}, "setup_code": {"AAAA-BBBB-CCCC"}}, same)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("wrong setup code: %d", rec.Code)
+	}
+	code, _ := e.auth.NewSetupCode(ctx, e.users["administrator"].ID)
+	rec = e.do("POST", "/admin/setup-2fa/code", enroll, url.Values{"_csrf": {enroll.CSRF}, "setup_code": {code}}, same)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("valid setup code: %d %s", rec.Code, rec.Body.String())
+	}
+	var setupCookie string
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == auth.SessionCookie {
+			setupCookie = c.Value
+		}
+	}
+	setup := &auth.Current{Session: &db.Session{UserAgent: setupCookie}}
+	if rec := e.do("GET", "/admin/setup-2fa", setup, nil, nil); !strings.Contains(rec.Body.String(), `action="/admin/setup-2fa/totp"`) {
+		t.Error("enrollment not offered after the setup code")
+	}
+	// Another factor appears (the owner enrolled elsewhere): older
+	// enrollment sessions cannot register one more.
+	db.SetTOTP(ctx, e.d.W, e.users["administrator"].ID, []byte("x"), 0, 1)
+	rec = e.do("GET", "/admin/setup-2fa", setup, nil, nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login?msg=expired" {
+		t.Errorf("stale enrollment session: %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+func TestContentPermissionFixes(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	same := map[string]string{"Origin": home}
+	// Contributors cannot duplicate (and so read) other users' posts.
+	contrib := e.session(auth.RoleContributor, db.SessionFull)
+	if rec := e.do("POST", "/admin/posts/10/duplicate", contrib, url.Values{"_csrf": {contrib.CSRF}}, same); rec.Code != http.StatusForbidden {
+		t.Errorf("contributor duplicate: %d", rec.Code)
+	}
+	// Contributors have no media access (upload_files).
+	if rec := e.do("GET", "/admin/api/media", contrib, nil, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("contributor media API: %d", rec.Code)
+	}
+	// Authors cannot make posts sticky.
+	author := e.session(auth.RoleAuthor, db.SessionFull)
+	rec := e.do("POST", "/admin/posts/30/edit", author, url.Values{"_csrf": {author.CSRF}, "post_title": {"x"}, "content": {"<p>y</p>"},
+		"sticky": {"1"}, "publish": {"1"}, "visibility": {"public"}}, same)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("author publish: %d %s", rec.Code, rec.Body.String())
+	}
+	var sticky []int64
+	db.GetOption(ctx, e.d.R, "sticky_posts", &sticky)
+	if len(sticky) != 0 {
+		t.Errorf("author made a post sticky: %v", sticky)
+	}
+	// Trashed posts cannot be changed by quick edit.
+	admin := e.session(auth.RoleAdministrator, db.SessionFull)
+	e.do("POST", "/admin/posts/30/trash", admin, url.Values{"_csrf": {admin.CSRF}}, same)
+	rec = e.do("POST", "/admin/posts/30/quick-edit", admin, url.Values{"_csrf": {admin.CSRF}, "title": {"x"}, "status": {"publish"}}, same)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("quick edit of a trashed post: %d", rec.Code)
+	}
+	if p, _ := db.GetPost(ctx, e.d.R, 30); p.Status != db.StatusTrash {
+		t.Errorf("trashed post status changed to %s", p.Status)
+	}
+}
+
+func TestAdminScriptCSP(t *testing.T) {
+	e := newEnv(t)
+	csp := e.do("GET", "/login", nil, nil, nil).Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "script-src "+home+"/admin/static/;") || strings.Contains(csp, "script-src 'self'") {
+		t.Errorf("admin CSP = %s", csp)
 	}
 }

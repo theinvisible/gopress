@@ -125,6 +125,9 @@ func (e *Editor) Save(ctx context.Context, p *db.Post, in *PostInput) (*db.Post,
 		if !auth.CanEditPost(e.user, p) {
 			return nil, ErrForbidden
 		}
+		if p.Status == db.StatusTrash {
+			return nil, &ValidationError{"This item is in the Trash. Restore it before editing."}
+		}
 		old = *p
 		cp := *p
 		p = &cp
@@ -271,7 +274,9 @@ func (e *Editor) Save(ctx context.Context, p *db.Post, in *PostInput) (*db.Post,
 				return err
 			}
 		}
-		if p.Type == db.TypePost {
+		// Making posts sticky changes the front page for everyone: editors
+		// and administrators only (WordPress: edit_others_posts).
+		if p.Type == db.TypePost && auth.Can(e.user, auth.CapEditOthersPosts) {
 			if err := setSticky(ctx, tx, settings, p.ID, in.Sticky && p.Status != db.StatusPrivate); err != nil {
 				return err
 			}
@@ -662,8 +667,9 @@ func (e *Editor) Delete(ctx context.Context, p *db.Post) error {
 // Duplicate Post plugin: same title, content, excerpt, terms, template and
 // meta; no date, slug or comments.
 func (e *Editor) Duplicate(ctx context.Context, p *db.Post) (*db.Post, error) {
-	// Users may copy what they can edit, and anything published.
-	if !auth.CanEditType(e.user, p.Type) || (!auth.CanEditPost(e.user, p) && p.Status != db.StatusPublish) {
+	// Only what the user may edit: a copy would otherwise reveal protected
+	// content, passwords and meta of other users' posts.
+	if !auth.CanEditType(e.user, p.Type) || !auth.CanEditPost(e.user, p) {
 		return nil, ErrForbidden
 	}
 	in := e.inputFrom(ctx, p)

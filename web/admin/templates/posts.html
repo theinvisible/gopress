@@ -155,7 +155,7 @@
 				<div>
 					<label class="gp-check"><input type="checkbox" name="comments"> Allow Comments</label>
 					<label class="gp-check"><input type="checkbox" name="pings"> Allow Pings</label>
-					<label class="gp-check"><input type="checkbox" name="sticky"> Make this post sticky</label>
+					{{- if .CanSticky}}<label class="gp-check"><input type="checkbox" name="sticky"> Make this post sticky</label>{{end}}
 				</div>
 				{{- else}}
 				<label>Parent

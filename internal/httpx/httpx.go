@@ -13,7 +13,10 @@ import (
 
 // ClientIP returns the visitor address. X-Real-Ip/X-Forwarded-For are only
 // trusted when the direct peer is one of the trusted proxies (e.g. Traefik),
-// so clients reaching the server directly cannot fake their address.
+// so clients reaching the server directly cannot fake their address. The
+// proxy must set (overwrite) X-Real-Ip or append to X-Forwarded-For;
+// a proxy that passes a client's X-Real-Ip through lets clients choose
+// their address.
 func ClientIP(r *http.Request, trusted []netip.Prefix) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -56,6 +59,21 @@ func NetKey(ip string) string {
 	addr = addr.Unmap()
 	if addr.Is6() {
 		p, _ := addr.Prefix(64)
+		return p.String()
+	}
+	return addr.String()
+}
+
+// NetKey48 groups IPv6 clients by /48 (a typical site allocation), IPv4 by
+// address: a second, coarser rate limit bucket.
+func NetKey48(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	addr = addr.Unmap()
+	if addr.Is6() {
+		p, _ := addr.Prefix(48)
 		return p.String()
 	}
 	return addr.String()

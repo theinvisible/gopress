@@ -64,6 +64,17 @@ await step('password login forces two-factor setup', async () => {
 	assert.match(page.url(), /\/admin\/setup-2fa$/);
 });
 
+await step('setup code required before enrolling', async () => {
+	assert.ok(await page.$('input[name=setup_code]'), 'setup code form');
+	assert.equal(await page.$('#totp-code'), null);
+	await page.type('#setup_code', 'AAAA-BBBB-CCCC');
+	await submit('form[action="/admin/setup-2fa/code"] button');
+	assert.match(await text('.notice-error'), /setup code is incorrect/);
+	await page.type('#setup_code', process.env.E2E_SETUP_CODE);
+	await submit('form[action="/admin/setup-2fa/code"] button');
+	assert.ok(await page.$('#totp-code'), 'enrollment offered after the code');
+});
+
 await step('enroll TOTP, get recovery codes', async () => {
 	secret = await text('.gp-secret');
 	await page.type('#totp-code', await freshTOTP(secret));

@@ -17,6 +17,7 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/httpx"
 )
 
 // Passkeys (WebAuthn). The relying party is the host of the site's base
@@ -134,7 +135,9 @@ func (s *Service) BeginPasskeyRegistration(ctx context.Context, cur *Current) (a
 	if err != nil {
 		return nil, err
 	}
-	s.ceremonies.put(sessionKey("reg:", cur), sd, s.now())
+	if !s.ceremonies.put(sessionKey("reg:", cur), sd, s.now()) {
+		return nil, ErrPasskey
+	}
 	return opts, nil
 }
 
@@ -179,7 +182,7 @@ func (s *Service) storeCredential(ctx context.Context, userID int64, cred *webau
 // bound to the login page's pre-session cookie.
 func (s *Service) BeginPasskeyLogin(ctx context.Context, r *http.Request) (any, error) {
 	pre := preKey(r)
-	if pre == "" {
+	if pre == "" || !s.passkeyLimit.allow(httpx.NetKey(s.ClientIP(r)), s.now()) {
 		return nil, ErrPasskey
 	}
 	wa, err := s.webauthn()
@@ -190,7 +193,9 @@ func (s *Service) BeginPasskeyLogin(ctx context.Context, r *http.Request) (any, 
 	if err != nil {
 		return nil, err
 	}
-	s.ceremonies.put("login:"+pre, sd, s.now())
+	if !s.ceremonies.put("login:"+pre, sd, s.now()) {
+		return nil, ErrPasskey
+	}
 	return opts, nil
 }
 
@@ -253,7 +258,9 @@ func (s *Service) BeginPasskeyAssertion(ctx context.Context, cur *Current) (any,
 	if err != nil {
 		return nil, err
 	}
-	s.ceremonies.put(sessionKey("assert:", cur), sd, s.now())
+	if !s.ceremonies.put(sessionKey("assert:", cur), sd, s.now()) {
+		return nil, ErrPasskey
+	}
 	return opts, nil
 }
 

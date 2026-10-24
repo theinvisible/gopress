@@ -21,12 +21,25 @@ export function styled(attrs) {
 	return { ...attrs, 'data-gp-style': attrs.style };
 }
 
+const URL_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'xlink:href', 'poster', 'background', 'cite', 'srcset']);
+
+// unsafeAttr reports attributes that can run script: event handlers and
+// javascript:/vbscript:/data: URLs (data: stays allowed for image sources).
+export function unsafeAttr(el, name, value) {
+	if (/^on/i.test(name)) return true;
+	if (!URL_ATTRS.has(name.toLowerCase())) return false;
+	const v = value.replace(/[\u0000-\u0020\u007f-\u00a0]/g, '').toLowerCase();
+	if (/^(javascript|vbscript):/.test(v)) return true;
+	return v.startsWith('data:') && !(el.nodeName === 'IMG' && /^data:image\/(png|gif|jpe?g|webp|avif);/.test(v));
+}
+
 export function collectAttrs(el) {
 	const own = OWN_ATTRS[el.nodeName] || [];
 	const out = {};
 	let any = false;
 	for (const a of el.attributes) {
 		if (own.includes(a.name) || a.name === 'data-gp-plain' || a.name === 'data-gp-style') continue;
+		if (unsafeAttr(el, a.name, a.value)) continue;
 		out[a.name] = a.value;
 		any = true;
 	}

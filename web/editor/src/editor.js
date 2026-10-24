@@ -280,7 +280,8 @@ function slashItems(api) {
 		{ id: 'html', label: 'Custom HTML', icon: 'html', keys: 'html code embed iframe', run: () => insertHTMLBlock(e) },
 		{ id: 'shortcode', label: 'Shortcode', icon: 'shortcode', keys: 'shortcode plugin', run: () => insertShortcode(e) },
 	];
-	return base.concat(inserts.map((i) => ({ id: i.id, label: i.label, icon: i.icon || 'admin-plugins', keys: (i.keywords || '') + ' ' + i.label.toLowerCase(),
+	const noMedia = !api.config.media;
+	return base.filter((it) => !(noMedia && (it.id === 'image' || it.id === 'gallery'))).concat(inserts.map((i) => ({ id: i.id, label: i.label, icon: i.icon || 'admin-plugins', keys: (i.keywords || '') + ' ' + i.label.toLowerCase(),
 		run: () => i.onClick(api) })));
 }
 
@@ -546,7 +547,7 @@ function mount(root) {
 	const helpBtn = h('button', { type: 'button', class: 'gp-tab', title: 'Keyboard shortcuts', onclick: () => showHelp() }, icon('editor-help'));
 	const mediaBtn = h('button', { type: 'button', class: 'button gp-add-media', onclick: () => insertMedia(api) }, icon('admin-media'), ' Add Media');
 
-	const header = h('div', { class: 'gp-editor-header' }, mediaBtn, ...inserts.filter((i) => i.button).map((i) =>
+	const header = h('div', { class: 'gp-editor-header' }, config.media ? mediaBtn : null, ...inserts.filter((i) => i.button).map((i) =>
 		h('button', { type: 'button', class: 'button', onclick: () => i.onClick(api) }, i.icon ? icon(i.icon) : null, ' ' + i.label)),
 	h('div', { class: 'gp-tabs' }, tabVisual, tabHTML, focusBtn, helpBtn));
 	const status = h('div', { class: 'gp-statusbar' }, words, savedState);

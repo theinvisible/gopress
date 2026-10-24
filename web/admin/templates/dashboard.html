@@ -39,6 +39,7 @@
 		</div>
 		{{- end}}
 
+		{{- if or .CanPost .CanModerate}}
 		<div class="postbox gp-activity">
 			<div class="postbox-header"><h2 class="hndle">Activity</h2></div>
 			<div class="inside">
@@ -71,6 +72,7 @@
 				{{- end}}
 			</div>
 		</div>
+		{{- end}}
 	</div>
 </div>
 {{template "admin-bottom" .}}{{end}}

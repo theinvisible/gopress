@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/theinvisible/gopress/internal/auth"
@@ -43,7 +44,7 @@ var loginMessages = map[string]string{
 
 // GET /login
 func (a *Admin) loginPage(w http.ResponseWriter, r *http.Request) {
-	securityHeaders(w)
+	a.securityHeaders(w, r)
 	ctx := r.Context()
 	if cur, _ := a.auth.Load(ctx, r); cur != nil && cur.Session.State == db.SessionFull {
 		http.Redirect(w, r, safeRedirect(r.URL.Query().Get("redirect_to")), http.StatusFound)
@@ -58,7 +59,7 @@ func (a *Admin) loginPage(w http.ResponseWriter, r *http.Request) {
 
 // POST /login: first factor (password).
 func (a *Admin) loginSubmit(w http.ResponseWriter, r *http.Request) {
-	securityHeaders(w)
+	a.securityHeaders(w, r)
 	ctx := r.Context()
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
@@ -106,7 +107,8 @@ func (a *Admin) loginSubmit(w http.ResponseWriter, r *http.Request) {
 
 // POST /login/passkey/begin: usernameless passkey login (both factors).
 func (a *Admin) passkeyLoginBegin(w http.ResponseWriter, r *http.Request) {
-	securityHeaders(w)
+	a.securityHeaders(w, r)
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 	if !a.auth.CheckLoginForm(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "The login form has expired. Please reload the page."})
 		return
@@ -121,15 +123,20 @@ func (a *Admin) passkeyLoginBegin(w http.ResponseWriter, r *http.Request) {
 
 // POST /login/passkey/finish
 func (a *Admin) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
-	securityHeaders(w)
+	a.securityHeaders(w, r)
 	ctx := r.Context()
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if !a.auth.CheckLoginForm(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "The login form has expired. Please reload the page."})
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	user, err := a.auth.FinishPasskeyLogin(ctx, r)
 	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "The passkey could not be verified."})
+		return
+	}
+	if has, err := a.auth.HasSecondFactor(ctx, user.ID); err != nil || !has {
+		// A passkey without any factor left cannot happen; be strict.
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "The passkey could not be verified."})
 		return
 	}
@@ -137,6 +144,7 @@ func (a *Admin) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, nil, err)
 		return
 	}
+	a.auth.IssueDeviceCookie(w, user.ID)
 	a.auth.Audit(ctx, r, user.ID, auth.ActLogin, "user", user.ID, map[string]any{"method": "passkey"})
 	writeJSON(w, http.StatusOK, map[string]string{"redirect": safeRedirect(r.URL.Query().Get("redirect_to"))})
 }
@@ -167,10 +175,15 @@ func (a *Admin) secondFactorData(ctx context.Context, c *reqCtx) (*loginPageData
 func (a *Admin) secondFactorSubmit(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 	ctx := r.Context()
 	method := "totp"
+	if r.PostFormValue("recovery_code") != "" {
+		method = "recovery_code"
+	}
+	if stop, err := a.reserveSecondFactor(w, r, c, method); stop || err != nil {
+		return err
+	}
 	ok := false
 	var err error
 	if code := r.PostFormValue("recovery_code"); code != "" {
-		method = "recovery_code"
 		ok, err = a.auth.UseRecoveryCode(ctx, c.user.ID, code)
 	} else {
 		ok, err = a.auth.VerifyTOTP(ctx, c.user.ID, r.PostFormValue("code"))
@@ -180,7 +193,7 @@ func (a *Admin) secondFactorSubmit(w http.ResponseWriter, r *http.Request, c *re
 	}
 	redirectTo := safeRedirect(r.PostFormValue("redirect_to"))
 	if !ok {
-		if tooMany, err := a.secondFactorFailed(ctx, w, r, c, method); err != nil || tooMany {
+		if err := a.secondFactorFailed(ctx, r, c, method); err != nil {
 			return err
 		}
 		d, err := a.secondFactorData(ctx, c)
@@ -198,17 +211,22 @@ func (a *Admin) secondFactorSubmit(w http.ResponseWriter, r *http.Request, c *re
 	return a.completeLogin(w, r, c, method, redirectTo)
 }
 
-// secondFactorFailed counts a failed attempt; after too many the pending
-// login is discarded and the user starts over (with the password, which
-// is rate limited).
-func (a *Admin) secondFactorFailed(ctx context.Context, w http.ResponseWriter, r *http.Request, c *reqCtx, method string) (bool, error) {
-	n, err := db.IncSessionAttempts(ctx, a.db.W, c.cur.Session.IDHash)
-	if err != nil {
-		return false, err
-	}
-	a.auth.Audit(ctx, r, c.user.ID, auth.ActMFAFailed, "user", c.user.ID, map[string]any{"method": method, "attempt": n})
-	if n < auth.MaxSecondFactorTry {
+// reserveSecondFactor counts an attempt before the factor is checked
+// (parallel requests cannot exceed the limits). When the limits are reached
+// a pending login is discarded and the user starts over with the password;
+// it reports stop=true when it has answered the request.
+func (a *Admin) reserveSecondFactor(w http.ResponseWriter, r *http.Request, c *reqCtx, method string) (bool, error) {
+	ctx := r.Context()
+	err := a.auth.ReserveSecondFactor(ctx, c.cur)
+	if err == nil {
 		return false, nil
+	}
+	if !errors.Is(err, auth.ErrTooManyAttempts) {
+		return true, err
+	}
+	a.auth.Audit(ctx, r, c.user.ID, auth.ActLoginLocked, "user", c.user.ID, map[string]any{"second_factor": method})
+	if c.cur.Session.State != db.SessionMFA {
+		return true, &httpError{http.StatusTooManyRequests, "Too many failed attempts. Please try again later."}
 	}
 	a.auth.EndSession(ctx, w, c.cur)
 	if isAPI(r) {
@@ -219,12 +237,35 @@ func (a *Admin) secondFactorFailed(ctx context.Context, w http.ResponseWriter, r
 	return true, nil
 }
 
+// secondFactorFailed records a failed second factor.
+func (a *Admin) secondFactorFailed(ctx context.Context, r *http.Request, c *reqCtx, method string) error {
+	a.auth.Audit(ctx, r, c.user.ID, auth.ActMFAFailed, "user", c.user.ID, map[string]any{"method": method})
+	return a.auth.SecondFactorFailed(ctx, c.user.ID)
+}
+
+// secondFactorOK clears the failure counter; failed attempts since the
+// last success are shown to the user once (someone else may know the
+// password).
+func (a *Admin) secondFactorOK(ctx context.Context, userID int64) error {
+	failed, err := a.auth.SecondFactorSucceeded(ctx, userID)
+	if err != nil || failed == 0 {
+		return err
+	}
+	return db.SetUserMeta(ctx, a.db.W, userID, metaMFAWarning, strconv.Itoa(failed))
+}
+
+const metaMFAWarning = "mfa_failures_unseen"
+
 // completeLogin replaces the pending session by a full one.
 func (a *Admin) completeLogin(w http.ResponseWriter, r *http.Request, c *reqCtx, method, redirectTo string) error {
 	ctx := r.Context()
+	if err := a.secondFactorOK(ctx, c.user.ID); err != nil {
+		return err
+	}
 	if _, err := a.auth.StartSession(ctx, w, r, c.user, db.SessionFull, c.cur.Session.Remember); err != nil {
 		return err
 	}
+	a.auth.IssueDeviceCookie(w, c.user.ID)
 	a.auth.Audit(ctx, r, c.user.ID, auth.ActLogin, "user", c.user.ID, map[string]any{"method": "password+" + method})
 	if isAPI(r) {
 		writeJSON(w, http.StatusOK, map[string]string{"redirect": redirectTo})
@@ -245,8 +286,11 @@ func (a *Admin) secondFactorPasskeyBegin(w http.ResponseWriter, r *http.Request,
 
 // POST /login/2fa/passkey/finish
 func (a *Admin) secondFactorPasskeyFinish(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
+	if stop, err := a.reserveSecondFactor(w, r, c, "passkey"); stop || err != nil {
+		return err
+	}
 	if err := a.auth.FinishPasskeyAssertion(r.Context(), c.cur, r); err != nil {
-		if tooMany, err := a.secondFactorFailed(r.Context(), w, r, c, "passkey"); err != nil || tooMany {
+		if err := a.secondFactorFailed(r.Context(), r, c, "passkey"); err != nil {
 			return err
 		}
 		return &httpError{http.StatusUnauthorized, "The passkey could not be verified."}
@@ -279,7 +323,14 @@ func (a *Admin) enrollPage(w http.ResponseWriter, r *http.Request, c *reqCtx) er
 func (a *Admin) renderEnroll(w http.ResponseWriter, r *http.Request, c *reqCtx, errMsg string) error {
 	ctx := r.Context()
 	d := &enrollPageData{basePage: a.base(ctx, c, "Two-Factor Authentication", "security"), Error: errMsg}
-	d.Required = c.cur.Session.State == db.SessionEnroll
+	d.Required = c.cur.Session.State != db.SessionFull
+	if c.cur.Session.State == db.SessionEnroll {
+		// First the one-time setup code.
+		if errMsg != "" {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		return a.render(w, "setup-code", d)
+	}
 	d.Scripts = []string{"passkey.js"}
 	var err error
 	if d.HasTOTP, err = a.auth.HasTOTP(ctx, c.user.ID); err != nil {
@@ -299,6 +350,27 @@ func (a *Admin) renderEnroll(w http.ResponseWriter, r *http.Request, c *reqCtx, 
 	return a.render(w, "setup-2fa", d)
 }
 
+// POST /admin/setup-2fa/code: the one-time setup code issued by an
+// administrator or the CLI unlocks the enrollment.
+func (a *Admin) enrollCode(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
+	ctx := r.Context()
+	if c.cur.Session.State != db.SessionEnroll {
+		return seeOther(w, r, "/admin/setup-2fa")
+	}
+	ok, err := a.auth.CheckSetupCode(ctx, c.user.ID, r.PostFormValue("setup_code"))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		a.auth.Audit(ctx, r, c.user.ID, auth.ActMFAFailed, "user", c.user.ID, map[string]any{"method": "setup_code"})
+		return a.renderEnroll(w, r, c, "The setup code is incorrect or has expired. Ask an administrator for a new one.")
+	}
+	if _, err := a.auth.StartSession(ctx, w, r, c.user, db.SessionSetup, c.cur.Session.Remember); err != nil {
+		return err
+	}
+	return seeOther(w, r, "/admin/setup-2fa")
+}
+
 // POST /admin/setup-2fa/totp
 func (a *Admin) enrollTOTP(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 	ctx := r.Context()
@@ -309,6 +381,9 @@ func (a *Admin) enrollTOTP(w http.ResponseWriter, r *http.Request, c *reqCtx) er
 		return err
 	}
 	if err := a.auth.EnableTOTP(ctx, c.user, r.PostFormValue("token"), r.PostFormValue("code")); err != nil {
+		if errors.Is(err, auth.ErrTOTPExists) {
+			return seeOther(w, r, "/admin/profile/security")
+		}
 		if errors.Is(err, auth.ErrInvalidCode) {
 			return a.renderEnroll(w, r, c, "The code is incorrect or the setup has expired. Please scan the new QR code and try again.")
 		}
@@ -356,13 +431,18 @@ func (a *Admin) enrollPasskeyFinish(w http.ResponseWriter, r *http.Request, c *r
 // and the first recovery codes are generated. It returns the next page.
 func (a *Admin) afterEnroll(w http.ResponseWriter, r *http.Request, c *reqCtx) (string, error) {
 	ctx := r.Context()
-	if c.cur.Session.State != db.SessionEnroll {
+	if c.cur.Session.State != db.SessionSetup {
 		return "/admin/profile/security?msg=factor-added", nil
 	}
 	cur, err := a.auth.StartSession(ctx, w, r, c.user, db.SessionFull, c.cur.Session.Remember)
 	if err != nil {
 		return "", err
 	}
+	// Any other session from before the first factor ends here.
+	if err := db.DeleteUserSessions(ctx, a.db.W, c.user.ID, cur.Session.IDHash); err != nil {
+		return "", err
+	}
+	a.auth.IssueDeviceCookie(w, c.user.ID)
 	a.auth.Audit(ctx, r, c.user.ID, auth.ActLogin, "user", c.user.ID, map[string]any{"method": "password+enrollment"})
 	if left, err := db.RecoveryCodesLeft(ctx, a.db.R, c.user.ID); err != nil || left > 0 {
 		return "/admin/", err
@@ -436,6 +516,9 @@ func (a *Admin) reauthSubmit(w http.ResponseWriter, r *http.Request, c *reqCtx) 
 		}
 		return err
 	}
+	if stop, err := a.reserveSecondFactor(w, r, c, "reauth"); stop || err != nil {
+		return err
+	}
 	var ok bool
 	var err error
 	if code := r.PostFormValue("recovery_code"); code != "" {
@@ -447,8 +530,13 @@ func (a *Admin) reauthSubmit(w http.ResponseWriter, r *http.Request, c *reqCtx) 
 		return err
 	}
 	if !ok {
-		a.auth.Audit(ctx, r, c.user.ID, auth.ActMFAFailed, "user", c.user.ID, map[string]any{"reauth": true})
+		if err := a.secondFactorFailed(ctx, r, c, "reauth"); err != nil {
+			return err
+		}
 		return a.renderReauth(w, r, c, next, "The password or code is incorrect.")
+	}
+	if err := a.secondFactorOK(ctx, c.user.ID); err != nil {
+		return err
 	}
 	if err := a.auth.MarkReauth(ctx, c.cur); err != nil {
 		return err
@@ -464,9 +552,17 @@ func (a *Admin) reauthPasskeyBegin(w http.ResponseWriter, r *http.Request, c *re
 // POST /admin/reauth/passkey/finish
 func (a *Admin) reauthPasskeyFinish(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
 	ctx := r.Context()
+	if stop, err := a.reserveSecondFactor(w, r, c, "reauth-passkey"); stop || err != nil {
+		return err
+	}
 	if err := a.auth.FinishPasskeyAssertion(ctx, c.cur, r); err != nil {
-		a.auth.Audit(ctx, r, c.user.ID, auth.ActMFAFailed, "user", c.user.ID, map[string]any{"reauth": true, "method": "passkey"})
+		if err := a.secondFactorFailed(ctx, r, c, "reauth-passkey"); err != nil {
+			return err
+		}
 		return &httpError{http.StatusUnauthorized, "The passkey could not be verified."}
+	}
+	if err := a.secondFactorOK(ctx, c.user.ID); err != nil {
+		return err
 	}
 	if err := a.auth.MarkReauth(ctx, c.cur); err != nil {
 		return err

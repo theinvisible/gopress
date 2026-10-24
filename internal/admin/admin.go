@@ -83,10 +83,11 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	})
 
 	// Two-factor enrollment (also reachable before it is complete).
-	mux.Handle("GET /admin/setup-2fa", a.enrolling(a.enrollPage))
-	mux.Handle("POST /admin/setup-2fa/totp", a.enrolling(a.enrollTOTP))
-	mux.Handle("POST /admin/setup-2fa/passkey/begin", a.enrolling(a.enrollPasskeyBegin))
-	mux.Handle("POST /admin/setup-2fa/passkey/finish", a.enrolling(a.enrollPasskeyFinish))
+	mux.Handle("GET /admin/setup-2fa", a.enrolling(true, a.enrollPage))
+	mux.Handle("POST /admin/setup-2fa/code", a.enrolling(true, a.enrollCode))
+	mux.Handle("POST /admin/setup-2fa/totp", a.enrolling(false, a.enrollTOTP))
+	mux.Handle("POST /admin/setup-2fa/passkey/begin", a.enrolling(false, a.enrollPasskeyBegin))
+	mux.Handle("POST /admin/setup-2fa/passkey/finish", a.enrolling(false, a.enrollPasskeyFinish))
 	mux.Handle("GET /admin/recovery-codes", a.page(auth.CapRead, a.recoveryCodesPage))
 
 	// Re-authentication for sensitive actions.
@@ -134,12 +135,21 @@ var (
 func badRequest(msg string) error { return &httpError{http.StatusBadRequest, msg} }
 
 // securityHeaders hardens every admin and login response: no caching, a
-// strict CSP (no inline scripts, no framing) and no referrer leaking admin
+// strict CSP (scripts only from the admin's own static files: no inline
+// scripts, nothing from uploads; no framing) and no referrer leaking admin
 // URLs to other sites.
-func securityHeaders(w http.ResponseWriter) {
+func (a *Admin) securityHeaders(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	httpx.NoStore(w)
-	h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	scripts := scheme + "://" + r.Host + "/admin/static/"
+	if home := strings.TrimRight(a.auth.Home(), "/"); home != "" && !strings.HasPrefix(scripts, home+"/") {
+		scripts += " " + home + "/admin/static/"
+	}
+	h.Set("Content-Security-Policy", "default-src 'self'; script-src "+scripts+"; style-src 'self' 'unsafe-inline'; "+
 		"img-src 'self' data: blob: https://secure.gravatar.com; font-src 'self' data:; connect-src 'self'; "+
 		"frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 	h.Set("X-Frame-Options", "DENY")
@@ -154,7 +164,7 @@ const maxFormBytes = 4 << 20 // post content can be large
 // serve runs h with the common checks. allow decides whether the session
 // state may access the handler; cap is checked for full sessions.
 func (a *Admin) serve(w http.ResponseWriter, r *http.Request, allow func(*auth.Current) bool, capability string, h handler) {
-	securityHeaders(w)
+	a.securityHeaders(w, r)
 	ctx := r.Context()
 	cur, err := a.auth.Load(ctx, r)
 	if err != nil {
@@ -173,7 +183,7 @@ func (a *Admin) serve(w http.ResponseWriter, r *http.Request, allow func(*auth.C
 		switch cur.Session.State {
 		case db.SessionMFA:
 			http.Redirect(w, r, "/login/2fa", http.StatusFound)
-		case db.SessionEnroll:
+		case db.SessionEnroll, db.SessionSetup:
 			http.Redirect(w, r, "/admin/setup-2fa", http.StatusFound)
 		default:
 			http.Redirect(w, r, "/admin/", http.StatusFound)
@@ -225,19 +235,43 @@ func (a *Admin) page(capability string, h handler) http.Handler {
 }
 
 // enrolling wraps the two-factor setup pages: reachable while the setup is
-// pending and later from the profile.
-func (a *Admin) enrolling(h handler) http.Handler {
+// pending (state "setup", after the setup code) and later from the
+// profile. withCode also admits the state before the setup code.
+func (a *Admin) enrolling(withCode bool, h handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		a.serve(w, r, func(cur *auth.Current) bool {
-			return cur.Session.State == db.SessionEnroll || cur.Session.State == db.SessionFull
-		}, auth.CapRead, h)
+			switch cur.Session.State {
+			case db.SessionFull, db.SessionSetup:
+				return true
+			case db.SessionEnroll:
+				return withCode
+			}
+			return false
+		}, auth.CapRead, func(w http.ResponseWriter, r *http.Request, c *reqCtx) error {
+			// Once the account has a factor, sessions from before cannot
+			// enroll another one: they log in again.
+			if st := c.cur.Session.State; st == db.SessionEnroll || st == db.SessionSetup {
+				if has, err := a.auth.HasSecondFactor(r.Context(), c.user.ID); err != nil || has {
+					if err == nil {
+						a.auth.EndSession(r.Context(), w, c.cur)
+						if isAPI(r) {
+							writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Please log in again.", "redirect": "/login?msg=expired"})
+						} else {
+							http.Redirect(w, r, "/login?msg=expired", http.StatusSeeOther)
+						}
+					}
+					return err
+				}
+			}
+			return h(w, r, c)
+		})
 	})
 }
 
 // pending wraps the second-factor step of the login.
 func (a *Admin) pending(h handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		securityHeaders(w)
+		a.securityHeaders(w, r)
 		cur, err := a.auth.Load(r.Context(), r)
 		if err != nil {
 			a.fail(w, r, nil, err)

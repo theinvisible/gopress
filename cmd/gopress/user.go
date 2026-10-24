@@ -27,10 +27,15 @@ Break-glass user management for whoever has access to the server.
 commands:
   list                           list users
   add --login L --email E [--role R] [--display-name N]
-                                 create a user (asks for the password)
-  set-password LOGIN             set a new password (asks for it) and log out all sessions
-  reset-2fa LOGIN                remove all second factors and sessions; the user sets
-                                 up two-factor authentication again at the next login
+                                 create a user (asks for the password) and print the
+                                 one-time setup code for two-factor authentication
+  set-password LOGIN             set a new password (asks for it), log out all sessions
+                                 and lift login locks
+  reset-2fa LOGIN                remove all second factors and sessions and print a new
+                                 setup code; the user sets up 2FA again at the next login
+  setup-code LOGIN               print a new setup code (72 h, single use) for a user
+                                 without a second factor (e.g. imported from WordPress)
+  unlock LOGIN                   lift login and two-factor locks
   revoke-sessions LOGIN          log the user out everywhere
 `
 
@@ -71,6 +76,20 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return nil, false
 		}
 		return u, true
+	}
+	setupCode := func(u *db.User) bool {
+		secret, err := config.LoadOrCreateSecret(filepath.Join(cfg.DataDir, "secret.key"))
+		if err != nil {
+			fmt.Fprintf(stderr, "user: %v\n", err)
+			return false
+		}
+		code, err := auth.NewSetupCode(ctx, d, auth.SetupKey(secret), u.ID, time.Now())
+		if err != nil {
+			fmt.Fprintf(stderr, "user: %v\n", err)
+			return false
+		}
+		fmt.Fprintf(stdout, "setup code for %s (valid 72 hours, single use): %s\n", u.Login, code)
+		return true
 	}
 	audit := func(userID int64, action string) {
 		db.InsertAudit(ctx, d.W, &db.AuditEntry{Time: time.Now().Unix(), UserID: userID, IP: "cli", Action: action,
@@ -120,6 +139,9 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		audit(u.ID, "user_created")
 		fmt.Fprintf(stdout, "created user %s (id %d); two-factor authentication is set up at the first login\n", u.Login, u.ID)
+		if !setupCode(u) {
+			return 1
+		}
 		return 0
 
 	case "set-password":
@@ -137,6 +159,9 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			}
 			return db.DeleteUserSessions(ctx, tx, u.ID, nil)
 		})
+		if err == nil {
+			err = auth.UnlockUser(ctx, d, u.ID)
+		}
 		if err != nil {
 			fmt.Fprintf(stderr, "user: %v\n", err)
 			return 1
@@ -162,6 +187,37 @@ func cmdUser(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		audit(u.ID, "2fa_reset")
 		fmt.Fprintf(stdout, "second factors of %s removed, all sessions ended\n", u.Login)
+		if !setupCode(u) {
+			return 1
+		}
+		return 0
+
+	case "setup-code":
+		u, ok := target()
+		if !ok {
+			return 2
+		}
+		if f := factors(ctx, d, u.ID); strings.Contains(f, "totp") || strings.Contains(f, "passkeys") {
+			fmt.Fprintf(stderr, "user: %s already has a second factor (%s); use reset-2fa first\n", u.Login, f)
+			return 1
+		}
+		if !setupCode(u) {
+			return 1
+		}
+		audit(u.ID, "setup_code_issued")
+		return 0
+
+	case "unlock":
+		u, ok := target()
+		if !ok {
+			return 2
+		}
+		if err := auth.UnlockUser(ctx, d, u.ID); err != nil {
+			fmt.Fprintf(stderr, "user: %v\n", err)
+			return 1
+		}
+		audit(u.ID, "user_unlocked")
+		fmt.Fprintf(stdout, "login locks of %s lifted\n", u.Login)
 		return 0
 
 	case "revoke-sessions":

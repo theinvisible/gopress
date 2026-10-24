@@ -39,8 +39,11 @@ type Service struct {
 	totpKey  []byte
 	recovKey []byte
 
-	ipLimit    *ipLimiter
-	ceremonies *ceremonyStore
+	ipLimit      *ipLimiter
+	netLimit     *ipLimiter
+	passkeyLimit *ipLimiter
+	ceremonies   *ceremonyStore
+	deviceKey    []byte
 }
 
 // New creates the service.
@@ -56,7 +59,10 @@ func New(d *db.DB, opts Options) *Service {
 	s.loginKey = deriveKey(opts.Secret, "gopress login form")
 	s.totpKey = deriveKey(opts.Secret, "gopress totp secret encryption")
 	s.recovKey = deriveKey(opts.Secret, "gopress recovery codes")
+	s.deviceKey = deriveKey(opts.Secret, "gopress device cookie")
 	s.ipLimit = newIPLimiter(loginIPMax, loginIPWindow)
+	s.netLimit = newIPLimiter(loginNetMax, loginIPWindow)
+	s.passkeyLimit = newIPLimiter(passkeyBeginMax, loginIPWindow)
 	s.ceremonies = newCeremonyStore()
 	return s
 }

@@ -81,13 +81,13 @@ func (a *Admin) dashboard(w http.ResponseWriter, r *http.Request, c *reqCtx) err
 		}
 		return rows, nil
 	}
-	if d.Scheduled, err = list(db.StatusFuture, true, 5, 0); err != nil {
-		return err
-	}
-	if d.Published, err = list(db.StatusPublish, false, 5, 0); err != nil {
-		return err
-	}
 	if d.CanPost {
+		if d.Scheduled, err = list(db.StatusFuture, true, 5, 0); err != nil {
+			return err
+		}
+		if d.Published, err = list(db.StatusPublish, false, 5, 0); err != nil {
+			return err
+		}
 		if d.Drafts, err = list(db.StatusDraft, false, 3, c.user.ID); err != nil {
 			return err
 		}
@@ -102,7 +102,9 @@ func (a *Admin) dashboard(w http.ResponseWriter, r *http.Request, c *reqCtx) err
 		}
 	}
 	if r.URL.Query().Get("msg") == "draft-saved" {
-		d.Notice = &notice{"success", "Draft saved."}
+		if d.Notice == nil {
+			d.Notice = &notice{"success", "Draft saved."}
+		}
 	}
 	return a.render(w, "dashboard", d)
 }

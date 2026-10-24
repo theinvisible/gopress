@@ -10,9 +10,13 @@ const BLOCK_TAGS = new Set(['ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DD', '
 	'FIGURE', 'FOOTER', 'FORM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HEADER', 'HR', 'LI', 'MAIN', 'NAV', 'OL', 'P', 'PRE',
 	'SECTION', 'TABLE', 'TBODY', 'THEAD', 'TFOOT', 'TR', 'TD', 'TH', 'UL', 'CAPTION', 'DETAILS', 'SUMMARY']);
 
-// Inert parsing: <template> content does not load images or run scripts.
+// All parsing and serializing happens in a separate, inert document: its
+// elements never become part of the admin page, so content cannot load
+// resources or run handlers there.
+const inert = document.implementation.createHTMLDocument('');
+
 function fragmentOf(html) {
-	const t = document.createElement('template');
+	const t = inert.createElement('template');
 	t.innerHTML = html;
 	return t.content;
 }
@@ -89,7 +93,7 @@ function escapeText(s) {
 // tryParse returns the editor nodes for el if they serialize back to
 // equivalent HTML, else null.
 function tryParse(schema, parser, el) {
-	const wrap = document.createElement('div');
+	const wrap = inert.createElement('div');
 	wrap.appendChild(el.cloneNode(true));
 	let doc;
 	try {
@@ -109,8 +113,8 @@ export function exportHTML(schema, doc) {
 }
 
 function exportFragment(schema, fragment) {
-	const div = document.createElement('div');
-	div.appendChild(DOMSerializer.fromSchema(schema).serializeFragment(fragment, { document }));
+	const div = inert.createElement('div');
+	div.appendChild(DOMSerializer.fromSchema(schema).serializeFragment(fragment, { document: inert }));
 	postProcess(div);
 	const parts = [];
 	for (const n of Array.from(div.childNodes)) {
@@ -143,17 +147,17 @@ function postProcess(root) {
 		}
 	});
 	root.querySelectorAll('gp-shortcode').forEach((el) => {
-		el.replaceWith(document.createTextNode(el.getAttribute('data-text')));
+		el.replaceWith(inert.createTextNode(el.getAttribute('data-text')));
 	});
 	root.querySelectorAll('gp-more').forEach((el) => {
 		const t = el.getAttribute('data-text');
-		el.replaceWith(document.createComment(t ? 'more ' + t : 'more'));
+		el.replaceWith(inert.createComment(t ? 'more ' + t : 'more'));
 	});
 	root.querySelectorAll('gp-raw').forEach((el) => {
 		// Top-level raw blocks are emitted verbatim by exportFragment;
 		// nested ones (inside a quote) are inlined as markup.
 		if (el.parentNode === root) {
-			const out = document.createElement('gp-raw-out');
+			const out = inert.createElement('gp-raw-out');
 			out.setAttribute('data-html', el.getAttribute('data-html'));
 			el.replaceWith(out);
 		} else {
@@ -172,9 +176,9 @@ function serializeElement(el) {
 
 function prettyChildren(el) {
 	for (const c of Array.from(el.children)) {
-		el.insertBefore(document.createTextNode('\n'), c);
+		el.insertBefore(inert.createTextNode('\n'), c);
 	}
-	if (el.children.length) el.appendChild(document.createTextNode('\n'));
+	if (el.children.length) el.appendChild(inert.createTextNode('\n'));
 }
 
 // ---- Equivalence of HTML (for the load check) ----
@@ -248,7 +252,7 @@ function walk(node, out, inPre, marks) {
 // debugParse shows why a block is kept as HTML (round-trip test).
 export function debugParse(schema, html) {
 	const el = fragmentOf(html).firstElementChild;
-	const wrap = document.createElement('div');
+	const wrap = inert.createElement('div');
 	wrap.appendChild(el.cloneNode(true));
 	const doc = PMDOMParser.fromSchema(schema).parse(wrap);
 	const back = exportFragment(schema, doc.content);

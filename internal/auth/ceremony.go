@@ -22,13 +22,21 @@ type ceremony struct {
 
 func newCeremonyStore() *ceremonyStore { return &ceremonyStore{m: map[string]ceremony{}} }
 
-func (c *ceremonyStore) put(key string, data any, now time.Time) {
+// maxCeremonies bounds the memory used by started ceremonies.
+const maxCeremonies = 10000
+
+// put stores a ceremony; it reports false when the store is full.
+func (c *ceremonyStore) put(key string, data any, now time.Time) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if len(c.m) > 10000 {
+	if len(c.m) >= maxCeremonies {
 		c.pruneLocked(now)
+		if len(c.m) >= maxCeremonies {
+			return false
+		}
 	}
 	c.m[key] = ceremony{data: data, expires: now.Add(ceremonyTTL)}
+	return true
 }
 
 // take returns and removes the entry of key if it has not expired.

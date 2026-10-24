@@ -56,7 +56,7 @@
 										<fieldset class="gp-visibility">
 											<legend>Visibility:</legend>
 											<label><input type="radio" name="visibility" value="public"{{if eq .Visibility "public"}} checked{{end}}> Public</label>
-											{{- if eq .PT.Type "post"}}<label class="gp-sub"><input type="checkbox" name="sticky" value="1"{{if .Sticky}} checked{{end}}> Stick to the top of the blog</label>{{end}}
+											{{- if and (eq .PT.Type "post") .CanSticky}}<label class="gp-sub"><input type="checkbox" name="sticky" value="1"{{if .Sticky}} checked{{end}}> Stick to the top of the blog</label>{{end}}
 											<label><input type="radio" name="visibility" value="password"{{if eq .Visibility "password"}} checked{{end}}> Password protected</label>
 											<label class="gp-sub gp-password-field"{{if ne .Visibility "password"}} hidden{{end}}><input type="text" name="post_password" value="{{.Password}}" autocomplete="off" maxlength="255" placeholder="Password"></label>
 											{{- if .CanPublish}}<label><input type="radio" name="visibility" value="private"{{if eq .Visibility "private"}} checked{{end}}> Private</label>{{end}}

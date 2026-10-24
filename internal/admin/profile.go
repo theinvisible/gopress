@@ -59,7 +59,9 @@ func (a *Admin) renderProfile(w http.ResponseWriter, r *http.Request, c *reqCtx,
 	d.Nickname, _ = db.UserMeta(ctx, a.db.R, c.user.ID, "nickname")
 	d.Scripts = []string{"profile.js"}
 	if msg, ok := profileMessages[r.URL.Query().Get("msg")]; ok && errMsg == "" && pwErr == "" {
-		d.Notice = &msg
+		if d.Notice == nil {
+			d.Notice = &msg
+		}
 	}
 	if errMsg != "" || pwErr != "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -196,7 +198,9 @@ func (a *Admin) securityPage(w http.ResponseWriter, r *http.Request, c *reqCtx) 
 	d := &securityData{basePage: a.base(ctx, c, "Security", "security")}
 	d.Scripts = []string{"profile.js"}
 	if msg, ok := securityMessages[r.URL.Query().Get("msg")]; ok {
-		d.Notice = &msg
+		if d.Notice == nil {
+			d.Notice = &msg
+		}
 	}
 	var err error
 	if d.HasTOTP, err = a.auth.HasTOTP(ctx, c.user.ID); err != nil {
