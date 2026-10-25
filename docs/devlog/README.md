@@ -2,6 +2,7 @@
 
 One file per session or milestone: `YYYY-MM-DD-<topic>.md`. Newest first.
 
+- [2026-10-25 – M5 deployment](2026-10-25-m5-deployment.md)
 - [2026-10-25 – M4 plugins and live updates](2026-10-25-m4-plugins.md)
 - [2026-10-24 – M3 plugin host](2026-10-24-m3-plugin-host.md)
 - [2026-10-24 – M2c MCP interface](2026-10-24-m2c-mcp.md)

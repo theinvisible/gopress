@@ -260,9 +260,13 @@ GoPress serves a public, internet-facing site. Security follows current best pra
   - **Gallery:** the lightbox only uses http(s) and same-site URLs.
 
 **Operations (M5)**
-- Run as non-root in a `FROM scratch` image, read-only root filesystem, data volume only.
-- Secrets (session/HMAC keys) generated on first start and stored in the data dir with 0600 permissions.
-- Dependency updates and `govulncheck` in the build.
+- **Image:** `FROM scratch` (binary, CA bundle, user 65532), base image pinned by digest; the build context is an allowlist, so `local/` never reaches it; `make image-check` pins the exact file list.
+- **Runtime:** non-root, read-only root filesystem, no capabilities, `no-new-privileges`, memory limit; the data volume is the only writable path; umask 027.
+- **Secret:** one `secret.key` (0600, refused if more open), generated on first start; all keys are derived from it.
+- **Proxy headers:** `X-Real-Ip`, `X-Forwarded-*` and `Forwarded` are dropped unless the peer is a trusted proxy.
+- **Staging:** `--noindex` keeps search engines out; `--disable-outbound` stops plugin HTTP and mail, so a copy never uses the live site's keys or mails real people.
+- **Backups:** `gopress backup` (consistent `VACUUM INTO` snapshot, 0600, includes the secret) and `gopress restore` (empty target only; refuses links, traversal, unknown entries and newer schemas). An older binary refuses a newer database schema.
+- **Builds:** `make release` runs the tests, `govulncheck` (pinned), the plugin check and the image checks; images are only pushed from a clean tree.
 
 ## Milestones & checklists
 
@@ -345,12 +349,13 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [x] Tests (plugin modules with `pdk/go/fakehost`, host integration, e2e), parity without plugin exceptions, security review (see devlog)
 
 ### M5 – Deployment
-- [ ] Dockerfile (`golang:1.27` build → `FROM scratch`), volume `/data`
-- [ ] `gopress backup` (`VACUUM INTO` + tar of the uploads)
-- [ ] Staging hostname behind Traefik
-- [ ] URL parity crawl and visual comparison with live
-- [ ] Hardening: non-root, read-only rootfs, secrets in data dir, `govulncheck`
-- [ ] Cutover: switch the router, stop (not delete) the WP containers
+- [x] Dockerfile (`golang:1.27` build → `FROM scratch`), volume `/data`, `gopress healthcheck`, `make release`/`image-push`
+- [x] `gopress backup` (`VACUUM INTO` + tar of the uploads, secret, plugins) and `gopress restore`
+- [x] Staging switches (`--noindex`, `--disable-outbound`), deployment docs, example compose, runbook
+- [~] Staging hostname behind Traefik (the compose file and the server steps are done by the site owner, following `docs/deploy/runbook.md`)
+- [x] URL parity crawl and visual comparison with live (`dev/parity -ref <live>`, `dev/visual`): a fresh import matches the live site 162/162; fixed on the way: canonical feed redirects, block excerpts, gallery image size, submenu script
+- [x] Hardening: non-root, read-only rootfs, no capabilities, secrets in data dir, trusted proxy headers only, `govulncheck`
+- [ ] Staging acceptance and cutover: switch the router, stop (not delete) the WP containers (runbook)
 
 ## Verification
 
