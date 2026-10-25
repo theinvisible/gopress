@@ -11,12 +11,12 @@ import (
 	"strings"
 )
 
-// ClientIP returns the visitor address. X-Real-Ip/X-Forwarded-For are only
+// ClientIP returns the visitor address. X-Forwarded-For/X-Real-Ip are only
 // trusted when the direct peer is one of the trusted proxies (e.g. Traefik),
 // so clients reaching the server directly cannot fake their address. The
-// proxy must set (overwrite) X-Real-Ip or append to X-Forwarded-For;
-// a proxy that passes a client's X-Real-Ip through lets clients choose
-// their address.
+// last X-Forwarded-For entry (over all header lines) is the one the proxy
+// appended, whatever the client sent before it; X-Real-Ip is only used
+// without X-Forwarded-For.
 func ClientIP(r *http.Request, trusted []netip.Prefix) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -30,14 +30,14 @@ func ClientIP(r *http.Request, trusted []netip.Prefix) string {
 	if !fromTrusted(r, trusted) {
 		return peer.String()
 	}
-	if ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-Ip"))); err == nil {
-		return ip.Unmap().String()
-	}
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		if ip, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1])); err == nil {
+	if xff := lastValue(r.Header, "X-Forwarded-For"); xff != "" {
+		if ip, err := netip.ParseAddr(xff); err == nil {
 			return ip.Unmap().String()
 		}
+		return peer.String() // garbled: never fall back to a client-chosen header
+	}
+	if ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-Ip"))); err == nil {
+		return ip.Unmap().String()
 	}
 	return peer.String()
 }
@@ -79,9 +79,19 @@ func fromTrusted(r *http.Request, trusted []netip.Prefix) bool {
 }
 
 // IsHTTPS reports whether the visitor used HTTPS: directly, or through a
-// trusted proxy (see TrustedProxies) that says so.
+// trusted proxy (see TrustedProxies) that says so (its value is the last).
 func IsHTTPS(r *http.Request) bool {
-	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+	return r.TLS != nil || strings.EqualFold(lastValue(r.Header, "X-Forwarded-Proto"), "https")
+}
+
+// lastValue is the last comma-separated entry over all lines of a header.
+func lastValue(h http.Header, key string) string {
+	vals := h.Values(key)
+	if len(vals) == 0 {
+		return ""
+	}
+	parts := strings.Split(vals[len(vals)-1], ",")
+	return strings.TrimSpace(parts[len(parts)-1])
 }
 
 // NetKey groups IPv6 clients by /64 (one customer network), IPv4 by address.

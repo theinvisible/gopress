@@ -83,12 +83,17 @@ func Create(ctx context.Context, opts Options) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	if out == data || strings.HasPrefix(out, data+string(filepath.Separator)) {
-		return nil, errors.New("the backup directory must be outside the data directory")
-	}
 	if err := os.MkdirAll(out, 0o700); err != nil {
 		return nil, err
 	}
+	inside, err := within(out, data)
+	if err != nil {
+		return nil, err
+	}
+	if inside {
+		return nil, errors.New("the backup directory must be outside the data directory")
+	}
+	cleanStale(out, now())
 	root, err := os.OpenRoot(data)
 	if err != nil {
 		return nil, err
@@ -112,9 +117,6 @@ func Create(ctx context.Context, opts Options) (*Result, error) {
 		return nil, err
 	}
 	defer os.Remove(snap)
-	if err := os.Chmod(snap, 0o600); err != nil {
-		return nil, err
-	}
 	schema, err := db.Check(ctx, snap)
 	if err != nil {
 		return nil, fmt.Errorf("the database copy is not usable: %w", err)
@@ -174,9 +176,54 @@ func Create(ctx context.Context, opts Options) (*Result, error) {
 	ok = true
 	res := &Result{Path: final, Size: fi.Size(), Files: w.files}
 	if opts.Keep > 0 {
-		res.Removed, err = prune(out, opts.Keep)
+		res.Removed, err = prune(out, opts.Keep, name)
 	}
 	return res, err
+}
+
+// within reports whether dir is data or below it, comparing the actual
+// directories (os.SameFile), so symbolic links and bind mounts do not hide
+// it.
+func within(dir, data string) (bool, error) {
+	dataInfo, err := os.Stat(data)
+	if err != nil {
+		return false, err
+	}
+	dir, err = filepath.EvalSymlinks(dir)
+	if err != nil {
+		return false, err
+	}
+	for {
+		fi, err := os.Stat(dir)
+		if err != nil {
+			return false, err
+		}
+		if os.SameFile(fi, dataInfo) {
+			return true, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false, nil
+		}
+		dir = parent
+	}
+}
+
+// reStale matches the temporary files of an interrupted backup.
+var reStale = regexp.MustCompile(`^(\.gopress-\d{8}T\d{6}Z\.db|gopress-\d{8}T\d{6}Z\.tar\.gz)\.tmp$`)
+
+// cleanStale removes temporary files that a killed backup left behind
+// (older than a day, so a backup running in parallel keeps its files).
+func cleanStale(dir string, now time.Time) {
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if !e.Type().IsRegular() || !reStale.MatchString(e.Name()) {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && now.Sub(fi.ModTime()) > 24*time.Hour {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 func readSecret(root *os.Root) ([]byte, error) {
@@ -295,21 +342,23 @@ func skip(p string, d fs.DirEntry) bool {
 	return strings.HasSuffix(base, ".tmp")
 }
 
-// prune deletes the oldest archives in dir so that keep remain.
-func prune(dir string, keep int) ([]string, error) {
+// prune deletes the oldest archives in dir so that keep remain; current
+// (the archive just written) is never deleted, even if others look newer
+// (a clock that was ahead).
+func prune(dir string, keep int, current string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 	var names []string
 	for _, e := range entries {
-		if e.Type().IsRegular() && reName.MatchString(e.Name()) {
+		if e.Type().IsRegular() && reName.MatchString(e.Name()) && e.Name() != current {
 			names = append(names, e.Name())
 		}
 	}
 	sort.Strings(names) // the time stamp sorts
 	var removed []string
-	for len(names) > keep {
+	for len(names) > keep-1 {
 		if err := os.Remove(filepath.Join(dir, names[0])); err != nil {
 			return removed, err
 		}
@@ -387,8 +436,8 @@ func checkName(name string) (string, error) {
 			return "", fmt.Errorf("invalid path %q", name)
 		}
 	}
-	top, _, _ := strings.Cut(clean, "/")
-	if !slices.Contains(topLevel, top) {
+	top, _, nested := strings.Cut(clean, "/")
+	if !slices.Contains(topLevel, top) || nested && !slices.Contains(trees, top) {
 		return "", fmt.Errorf("unexpected entry %q", name)
 	}
 	return clean, nil

@@ -1,6 +1,8 @@
-# Example: GoPress behind Traefik (docker provider, external network
-# "proxy", entrypoint "websecure", certificate resolver "le"). Adjust the
-# names, the host and the subnet; see docs/deploy.md.
+# Example: GoPress behind Traefik (docker provider, entrypoint
+# "websecure", certificate resolver "le"). GoPress and Traefik share a
+# network of their own, "gopress-proxy", that no other container joins:
+#   docker network create gopress-proxy && docker network connect gopress-proxy traefik
+# Adjust the names, the host and the subnet; see docs/deploy.md.
 name: gopress
 
 services:
@@ -15,7 +17,7 @@ services:
     mem_limit: 768m
     environment:
       GOPRESS_BASE_URL: https://example.org
-      # Subnet of the "proxy" network (docker network inspect proxy).
+      # Subnet of the dedicated network (docker network inspect gopress-proxy).
       GOPRESS_TRUSTED_PROXIES: 172.18.0.0/16
       GOMEMLIMIT: 600MiB
       TZ: UTC
@@ -23,13 +25,13 @@ services:
       # install -d -o 65532 -g 65532 -m 0750 /srv/gopress/data /srv/gopress/backups
       - /srv/gopress/data:/data
       - /srv/gopress/backups:/backups
-    networks: [proxy]
+    networks: [gopress-proxy]
     logging:
       driver: json-file
       options: {max-size: 10m, max-file: "5"}
     labels:
       traefik.enable: "true"
-      traefik.docker.network: proxy
+      traefik.docker.network: gopress-proxy
       traefik.http.services.gopress.loadbalancer.server.port: "8080"
       traefik.http.routers.gopress.rule: Host(`example.org`)
       traefik.http.routers.gopress.entrypoints: websecure
@@ -45,9 +47,12 @@ services:
       traefik.http.middlewares.gopress-to-main.redirectregex.permanent: "true"
 
 networks:
-  proxy:
+  gopress-proxy:
     external: true
 
 # Staging: a second service (or project) with its own data directory,
 # GOPRESS_BASE_URL=https://staging.example.org, GOPRESS_NOINDEX=true and
-# GOPRESS_DISABLE_OUTBOUND=true, and its own router names.
+# GOPRESS_DISABLE_OUTBOUND=true, its own router names, and an IP allow
+# list on its router (it holds real personal data), e.g.
+#   traefik.http.middlewares.gopress-staging-ip.ipallowlist.sourcerange: 203.0.113.10/32
+#   traefik.http.routers.gopress-staging.middlewares: gopress-staging-ip

@@ -18,7 +18,7 @@ Fill them in once, in a private note outside the repository.
 | `<wp-db>` | MariaDB container | `docker ps` |
 | `<wp-net>` | Docker network of `<wp-db>` | `docker inspect <wp-db> -f '{{json .NetworkSettings.Networks}}'` |
 | `<wp-uploads>` | host path of `wp-content/uploads` | `docker inspect <wp-app> -f '{{json .Mounts}}'` |
-| `<proxy-net>` | network shared with Traefik | |
+| `<proxy-net>` | a network only GoPress and Traefik join (see [deploy.md](../deploy.md#behind-a-reverse-proxy-traefik)) | |
 | `<proxy-subnet>` | subnet of `<proxy-net>` | `docker network inspect <proxy-net>` |
 
 For the commands below:
@@ -33,15 +33,28 @@ RUN="docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges
   `make release && make image-push IMAGE=ghcr.io/…/gopress`.
 - **Registry login on the server:** `docker login ghcr.io`, with a token that may only read packages
   (`read:packages`).
-- **Database access for the import:** in a 0600 file that only root can read, removed after the
-  cutover:
+- **Database access for the import:** the importer only reads.
+  - Best: a database user that may only read, created with the MariaDB root password:
 
-  ```sh
-  umask 077
-  docker exec <wp-db> sh -c 'printf "GOPRESS_IMPORT_DSN=%s:%s@tcp(<wp-db>:3306)/%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > /root/gopress-import.env
-  ```
+    ```sql
+    CREATE USER 'gopress_import'@'%' IDENTIFIED BY '<random password>';
+    GRANT SELECT ON `<wp database>`.* TO 'gopress_import'@'%';
+    ```
 
-  The importer only reads from WordPress.
+    Drop it after the cutover: `DROP USER 'gopress_import'@'%';`.
+  - Store the DSN in a 0600 file that only root can read, and remove it after the cutover:
+
+    ```sh
+    umask 077
+    printf 'GOPRESS_IMPORT_DSN=gopress_import:%s@tcp(<wp-db>:3306)/<wp database>\n' '<random password>' > /root/gopress-import.env
+    ```
+
+  - Or, with WordPress' own database user:
+
+    ```sh
+    umask 077
+    docker exec <wp-db> sh -c 'printf "GOPRESS_IMPORT_DSN=%s:%s@tcp(<wp-db>:3306)/%s\n" "$MYSQL_USER" "$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > /root/gopress-import.env
+    ```
 
 ## 1. Staging
 
@@ -82,7 +95,9 @@ RUN="docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges
    - `GOPRESS_NOINDEX=true`;
    - `GOPRESS_DISABLE_OUTBOUND=true`;
    - its own router names and `Host(<staging>)`;
-   - optionally a geo block or IP allow list on the router.
+   - an IP allow list on the router: your own address (and the machine running the comparison).
+     Staging holds real personal data and the imported password hashes; it must not be open to
+     everyone.
 
    Staging then neither talks to Akismet or PayPal nor sends mail, and search engines stay out.
 
@@ -130,7 +145,7 @@ Pick a quiet time. The site is down for a few minutes, from step 3 to step 6.
 
    ```sh
    umask 077
-   docker exec <wp-db> sh -c 'exec mariadb-dump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --single-transaction "$MYSQL_DATABASE"' | gzip > /root/wp-final.sql.gz
+   docker exec <wp-db> sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mariadb-dump -u"$MYSQL_USER" --single-transaction "$MYSQL_DATABASE"' | gzip > /root/wp-final.sql.gz
    tar -czf /root/wp-content-final.tgz -C "$(dirname <wp-uploads>)" .
    ```
 
@@ -148,7 +163,7 @@ Pick a quiet time. The site is down for a few minutes, from step 3 to step 6.
    - Compare the counts the importer prints with WordPress, for example:
 
      ```sh
-     docker exec <wp-db> sh -c 'exec mariadb -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "SELECT post_type, post_status, COUNT(*) FROM wp_posts GROUP BY 1,2; SELECT comment_approved, COUNT(*) FROM wp_comments GROUP BY 1"'
+     docker exec <wp-db> sh -c 'MYSQL_PWD="$MYSQL_PASSWORD" exec mariadb -u"$MYSQL_USER" "$MYSQL_DATABASE" -e "SELECT post_type, post_status, COUNT(*) FROM wp_posts GROUP BY 1,2; SELECT comment_approved, COUNT(*) FROM wp_comments GROUP BY 1"'
      ```
 
 5. **Start GoPress:** use your production compose with `GOPRESS_BASE_URL=https://<domain>` and
@@ -168,7 +183,7 @@ Pick a quiet time. The site is down for a few minutes, from step 3 to step 6.
    - PayPal: "Record donations (IPN)" stays off until you want it.
 8. **Backups:** set up the daily backup (see [deploy.md](../deploy.md#backups)) and run the first
    one now.
-9. **Clean up:** `rm /root/gopress-import.env`.
+9. **Clean up:** `rm /root/gopress-import.env`; drop the import database user if you created one.
 10. **A few days later:** `docker stop <wp-db>`. Keep the WordPress containers, volumes, the
     wp-content directory and the final backup until you are sure. Never use `docker compose down -v`
     on the WordPress project.

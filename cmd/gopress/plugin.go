@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -146,7 +147,15 @@ func cmdPlugin(args []string, stdout, stderr io.Writer) int {
 		return fail(err)
 	}
 	defer store.Close()
-	host, err := plugins.New(ctx, plugins.Options{DB: d, Store: store, Site: pub, Log: log,
+	off, ok := outboundDisabled(stderr)
+	if !ok {
+		return 2
+	}
+	var client *http.Client
+	if off {
+		client = plugins.DisabledHTTP()
+	}
+	host, err := plugins.New(ctx, plugins.Options{DB: d, Store: store, Site: pub, Log: log, HTTP: client,
 		CacheDir: filepath.Join(cfg.DataDir, "cache", "wasm")})
 	if err != nil {
 		return fail(err)

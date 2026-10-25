@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -28,14 +27,19 @@ func SchemaVersion() int {
 // must not exist) with VACUUM INTO. It works while a server is using the
 // database: the copy is one read transaction and changes nothing in src.
 func Snapshot(ctx context.Context, src, dst string) error {
-	if _, err := os.Lstat(dst); !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("snapshot target %s already exists", dst)
-	}
 	if _, err := os.Stat(src); err != nil {
 		return err
 	}
+	// VACUUM INTO accepts an empty file: creating it first gives the copy
+	// mode 0600 from the start and refuses an existing target.
+	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("snapshot target: %w", err)
+	}
+	f.Close()
 	c, err := sql.Open("sqlite", dsn(src, []string{"busy_timeout(10000)"}))
 	if err != nil {
+		os.Remove(dst)
 		return err
 	}
 	defer c.Close()

@@ -328,3 +328,60 @@ func TestRestoreRefusesHostileArchives(t *testing.T) {
 		t.Error("size limit ignored")
 	}
 }
+
+func TestReviewFindings(t *testing.T) {
+	ctx := context.Background()
+	dir, _ := newData(t)
+
+	// A link (or another path) to a directory inside the data directory.
+	link := filepath.Join(t.TempDir(), "out")
+	if err := os.Symlink(filepath.Join(dir, "uploads"), link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Create(ctx, Options{DataDir: dir, OutDir: filepath.Join(link, "bk")}); err == nil {
+		t.Error("backup through a link into the data directory accepted")
+	}
+	dataLink := filepath.Join(t.TempDir(), "data")
+	os.Symlink(dir, dataLink)
+	if _, err := Create(ctx, Options{DataDir: dataLink, OutDir: filepath.Join(dir, "uploads", "bk")}); err == nil {
+		t.Error("backup into the data directory given through a link accepted")
+	}
+
+	// Retention never deletes the archive just written, and stale
+	// temporary files of killed backups go away.
+	out := t.TempDir()
+	future := filepath.Join(out, "gopress-29990101T000000Z.tar.gz")
+	os.WriteFile(future, []byte("x"), 0o600)
+	stale := filepath.Join(out, ".gopress-20200101T000000Z.db.tmp")
+	fresh := filepath.Join(out, "gopress-20200101T000001Z.tar.gz.tmp")
+	os.WriteFile(stale, []byte("x"), 0o600)
+	os.WriteFile(fresh, []byte("x"), 0o600)
+	old := time.Now().Add(-48 * time.Hour)
+	os.Chtimes(stale, old, old)
+	res, err := Create(ctx, Options{DataDir: dir, OutDir: out, Keep: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(res.Path); err != nil {
+		t.Error("the new backup was pruned")
+	}
+	if _, err := os.Stat(future); err == nil {
+		t.Error("the older (future-dated) archive was kept")
+	}
+	if _, err := os.Stat(stale); err == nil {
+		t.Error("stale temporary file kept")
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Error("a recent temporary file (backup in progress) was removed")
+	}
+
+	// Nested entries only below the backed-up trees.
+	for _, name := range []string{"gopress-backup.json/x", "secret.key/x", "gopress.db/x/y"} {
+		if _, err := checkName(name); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if _, err := checkName("uploads/2026/10/a.jpg"); err != nil {
+		t.Error(err)
+	}
+}

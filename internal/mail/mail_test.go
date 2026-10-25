@@ -245,7 +245,8 @@ func TestDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Flush(ctx)
-	if q, _ := db.MailQueue(ctx, d.R, 10); len(q) != 1 || q[0].Tries != 0 {
+	// Not kept for later: a restart with sending enabled must not mail it.
+	if q, _ := db.MailQueue(ctx, d.R, 10); len(q) != 1 || q[0].Status != db.MailFailed {
 		t.Errorf("queue = %+v", q)
 	}
 }

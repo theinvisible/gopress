@@ -108,9 +108,15 @@ func cmdServe(args []string, stderr io.Writer) int {
 	cacheMB := fs.Int("cache-mb", envInt("GOPRESS_CACHE_MB", 256), "page cache size in MiB, 0 disables (env GOPRESS_CACHE_MB)")
 	trustedProxies := fs.String("trusted-proxies", os.Getenv("GOPRESS_TRUSTED_PROXIES"),
 		"comma-separated CIDRs of reverse proxies whose X-Real-Ip/X-Forwarded-For are trusted, e.g. 172.16.0.0/12")
-	noIndex := fs.Bool("noindex", envBool("GOPRESS_NOINDEX"),
+	envNoIndex, err1 := envBool("GOPRESS_NOINDEX")
+	envNoOutbound, err2 := envBool("GOPRESS_DISABLE_OUTBOUND")
+	if err := errors.Join(err1, err2); err != nil {
+		fmt.Fprintf(stderr, "serve: %v\n", err)
+		return 2
+	}
+	noIndex := fs.Bool("noindex", envNoIndex,
 		"keep search engines out: robots.txt disallows all, every response says noindex (staging; env GOPRESS_NOINDEX)")
-	noOutbound := fs.Bool("disable-outbound", envBool("GOPRESS_DISABLE_OUTBOUND"),
+	noOutbound := fs.Bool("disable-outbound", envNoOutbound,
 		"no outgoing connections: plugins cannot make HTTP requests and mail stays queued (staging; env GOPRESS_DISABLE_OUTBOUND)")
 	mailSink := fs.String("mail-sink", "", "development: write outgoing mail as .eml files into this directory instead of sending it")
 	if err := fs.Parse(args); err != nil {
@@ -244,7 +250,7 @@ func cmdServe(args []string, stderr io.Writer) int {
 	if st := settings(); st.MCPEnabled && !mcpserver.SecureHome(st.Home) {
 		log.Warn("the MCP interface is on but the base URL is not https; it stays off", "base_url", st.Home)
 	}
-	startupWarnings(log, cfg.DataDir, settings().Home, *noIndex)
+	startupWarnings(log, cfg.DataDir, settings().Home, len(proxies), *noIndex, *noOutbound)
 	go authSvc.Maintain(ctx)
 	go contentSvc.RunScheduler(ctx)
 	go mailSvc.Run(ctx)
@@ -296,13 +302,18 @@ func cmdImportWP(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("import-wp", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg.RegisterFlags(fs)
-	fs.StringVar(&opts.DSN, "dsn", os.Getenv("GOPRESS_IMPORT_DSN"),
+	// The environment is read after parsing: as a flag default the DSN
+	// (with its password) would be printed in usage messages.
+	fs.StringVar(&opts.DSN, "dsn", "",
 		"WordPress database DSN, e.g. user:pass@tcp(127.0.0.1:3306)/wordpress (env GOPRESS_IMPORT_DSN keeps the password out of the process list)")
 	fs.StringVar(&opts.Prefix, "prefix", "wp_", "WordPress table prefix")
 	fs.StringVar(&opts.UploadsDir, "uploads", "", "WordPress wp-content/uploads directory to copy")
 	fs.BoolVar(&opts.Force, "force", false, "replace an existing GoPress database")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if opts.DSN == "" {
+		opts.DSN = os.Getenv("GOPRESS_IMPORT_DSN")
 	}
 	if opts.DSN == "" {
 		fmt.Fprintln(stderr, "import-wp: --dsn (or GOPRESS_IMPORT_DSN) is required")

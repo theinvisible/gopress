@@ -400,7 +400,8 @@ func (im *importer) importPostMeta(ctx context.Context) error {
 		case "_wp_attachment_metadata":
 			applyAttachmentMetadata(getMedia(id), phpser.Maybe(value))
 		default:
-			if skippedMeta[key] || typ == db.TypeAttachment && strings.HasPrefix(key, "_wp_attachment_") {
+			// _gopress_* keys are GoPress' own; a WordPress database must not set them.
+			if skippedMeta[key] || strings.HasPrefix(key, "_gopress_") || typ == db.TypeAttachment && strings.HasPrefix(key, "_wp_attachment_") {
 				continue
 			}
 			if err := db.AddPostMeta(ctx, im.tx, id, key, value); err != nil {

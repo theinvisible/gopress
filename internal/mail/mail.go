@@ -286,6 +286,10 @@ func (s *Service) Flush(ctx context.Context) {
 	if err := db.PruneMail(ctx, s.db.W, now.Add(-keepMail).Unix(), now.Unix()); err != nil {
 		s.opts.Log.Error("prune mail", "err", err)
 	}
+	if s.opts.Disabled {
+		s.discard(ctx, now)
+		return
+	}
 	if !s.Ready(ctx) {
 		return // stays queued until mail is configured
 	}
@@ -318,6 +322,28 @@ func (s *Service) Flush(ctx context.Context) {
 		}
 		if err := db.MailAttemptFailed(ctx, s.db.W, m.ID, next, msg); err != nil {
 			s.opts.Log.Error("mail queue", "err", err)
+		}
+	}
+}
+
+// discard marks the due messages as failed while sending is disabled
+// (staging): they must not go out if the instance is later started with
+// sending enabled. An administrator can still retry one on purpose.
+func (s *Service) discard(ctx context.Context, now time.Time) {
+	for {
+		due, err := db.DueMail(ctx, s.db.R, now.Unix(), 100)
+		if err != nil {
+			s.opts.Log.Error("mail queue", "err", err)
+			return
+		}
+		for _, m := range due {
+			if err := db.MailAttemptFailed(ctx, s.db.W, m.ID, 0, ErrDisabled.Error()); err != nil {
+				s.opts.Log.Error("mail queue", "err", err)
+				return
+			}
+		}
+		if len(due) < 100 {
+			return
 		}
 	}
 }

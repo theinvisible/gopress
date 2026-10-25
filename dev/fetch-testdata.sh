@@ -21,7 +21,7 @@ OUT="$(cd "$(dirname "$0")/.." && pwd)/local"
 mkdir -p "$OUT/uploads" "$OUT/wp-plugins" "$OUT/wp-themes"
 
 echo ">> DB dump"
-ssh "$HOST" "docker exec $DB_CONTAINER sh -c 'exec mariadb-dump -u\"\$MYSQL_USER\" -p\"\$MYSQL_PASSWORD\" --single-transaction --default-character-set=utf8mb4 \"\$MYSQL_DATABASE\"'" \
+ssh "$HOST" "docker exec $DB_CONTAINER sh -c 'MYSQL_PWD=\"\$MYSQL_PASSWORD\" exec mariadb-dump -u\"\$MYSQL_USER\" --single-transaction --default-character-set=utf8mb4 \"\$MYSQL_DATABASE\"'" \
 	| gzip > "$OUT/wp-dump.sql.gz.tmp"
 mv "$OUT/wp-dump.sql.gz.tmp" "$OUT/wp-dump.sql.gz"
 

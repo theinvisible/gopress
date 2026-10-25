@@ -77,7 +77,12 @@ func cmdMail(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "mail: %v\n", err)
 			return 1
 		}
-		svc := mail.New(d, mail.Options{Secret: secret, SiteName: func() string { return html.UnescapeString(st.Name) }, Home: func() string { return st.Home }})
+		off, ok := outboundDisabled(stderr)
+		if !ok {
+			return 2
+		}
+		svc := mail.New(d, mail.Options{Secret: secret, SiteName: func() string { return html.UnescapeString(st.Name) }, Home: func() string { return st.Home },
+			Disabled: off})
 		if err := svc.SendTest(ctx, *to); err != nil {
 			fmt.Fprintf(stderr, "mail test: %v\n", err)
 			return 1

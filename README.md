@@ -145,8 +145,10 @@ has a live preview next to the editor.
 
 ```sh
 make release        # tests, govulncheck, container image, image checks
-docker run -d -p 8080:8080 -v gopress:/data -e GOPRESS_BASE_URL=https://example.org ghcr.io/theinvisible/gopress
-docker exec <container> /gopress backup --out /backups --keep 14
+docker run -d --name gopress --read-only --cap-drop ALL --security-opt no-new-privileges \
+  -p 127.0.0.1:8080:8080 -v gopress:/data -v /srv/gopress/backups:/backups \
+  -e GOPRESS_BASE_URL=https://example.org ghcr.io/theinvisible/gopress
+docker exec gopress /gopress backup --out /backups --keep 14
 ```
 
 The image is `FROM scratch`: it holds only the binary, the CA certificates and a non-root user, and

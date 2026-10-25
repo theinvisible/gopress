@@ -95,9 +95,14 @@ image-smoke:
 # Everything that must pass before an image is pushed.
 release: test vulncheck plugins-check image image-check image-smoke
 
-# Publishing is a separate, deliberate step (needs docker login).
+# Publishing is a separate, deliberate step (needs docker login). Only a
+# tree without changes or untracked files is pushed (untracked files in
+# the build context would end up in the image), and the image is rebuilt
+# and checked first; :latest is the version just checked.
 image-push:
-	@case "$(VERSION)" in *dirty*) echo "refusing to push a build from a dirty tree"; exit 1;; esac
+	@test -z "$$(git status --porcelain --untracked-files=all)" || { echo "refusing to push: the working tree has changes or untracked files"; exit 1; }
+	$(MAKE) image image-check image-smoke
+	docker tag $(IMAGE):$(VERSION) $(IMAGE):latest
 	docker push $(IMAGE):$(VERSION)
 	docker push $(IMAGE):latest
 

@@ -6,7 +6,8 @@
 # healthy. Usage: dev/image-smoke.sh IMAGE
 set -euo pipefail
 IMAGE="${1:?usage: dev/image-smoke.sh IMAGE}"
-HELPER="golang:1.27.3-alpine" # only for looking into the volume
+# Only for looking into the volume; the same pinned image as the build.
+HELPER="golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c"
 NAME="gopress-smoke-$$"
 VOL="gopress-smoke-$$"
 HARDEN=(--read-only --cap-drop ALL --security-opt no-new-privileges)

@@ -68,7 +68,11 @@ All `serve` flags can also be set through the environment:
 | `--trusted-proxies` | `GOPRESS_TRUSTED_PROXIES` | CIDRs of the reverse proxy (see below) |
 | `--cache-mb` | `GOPRESS_CACHE_MB` | page cache size (default 256, 0 disables) |
 | `--noindex` | `GOPRESS_NOINDEX` | staging: robots.txt disallows everything, every response says `X-Robots-Tag: noindex` |
-| `--disable-outbound` | `GOPRESS_DISABLE_OUTBOUND` | staging: plugins cannot reach other servers (Akismet holds comments, PayPal IPN cannot verify), mail stays queued |
+| `--disable-outbound` | `GOPRESS_DISABLE_OUTBOUND` | staging: plugins cannot reach other servers (Akismet holds comments, PayPal IPN cannot verify). Mail is not sent: it is marked as failed, so it never goes out later. The CLI (`mail test`, `plugin`) follows the variable too |
+
+The switches accept `true`/`false` (also `1`/`0`, `yes`/`no`, `on`/`off`). Any other value stops
+GoPress from starting, so a typo cannot silently leave a staging copy open. The log shows their
+state at every start (`staging switches`).
 
 - **`import-wp` DSN:** `import-wp` reads it from `GOPRESS_IMPORT_DSN`, so the database password does
   not show up in the process list.
@@ -80,21 +84,32 @@ All `serve` flags can also be set through the environment:
 
 ## Behind a reverse proxy (Traefik)
 
-**`GOPRESS_TRUSTED_PROXIES`:** set it to the subnet of the Docker network that GoPress shares with
-the proxy:
+**`GOPRESS_TRUSTED_PROXIES`:** set it to the proxy's address only. Every peer in this range may
+claim any client address.
 
-```sh
-docker network inspect proxy -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}'
-```
+- **Use a dedicated network:** give GoPress and Traefik a network of their own, which no other
+  container joins, and trust its subnet:
 
-- **Requests from other peers:** GoPress removes `X-Real-Ip`, `X-Forwarded-*` and `Forwarded`
-  before any handler sees them.
-- **Requests from the proxy:** it believes `X-Real-Ip` (or the last `X-Forwarded-For` entry) and
-  `X-Forwarded-Proto`.
-- **What the proxy must do:** overwrite `X-Real-Ip` or append to `X-Forwarded-For`. Traefik does
+  ```sh
+  docker network create gopress-proxy
+  docker network connect gopress-proxy traefik
+  docker network inspect gopress-proxy -f '{{range .IPAM.Config}}{{.Subnet}} {{end}}'
+  ```
+
+  Trusting a network shared with other applications would let any of their containers fake client
+  addresses.
+- **Requests from other peers:** GoPress removes `X-Real-Ip`, `X-Forwarded-For`,
+  `X-Forwarded-Proto`, `X-Forwarded-Host` and `Forwarded` before any handler sees them.
+- **Requests from the proxy:**
+  - The client address is the last `X-Forwarded-For` entry over all header lines, i.e. the one the
+    proxy appended. `X-Real-Ip` counts only without `X-Forwarded-For`.
+  - HTTPS is the last `X-Forwarded-Proto` value.
+- **What the proxy must do:** append to `X-Forwarded-For` (or overwrite `X-Real-Ip`). Traefik does
   this unless `forwardedHeaders.trustedIPs` / `insecure` lets clients' headers through.
 - **Why it matters:** client addresses are used for rate limits, lockouts, comment checks and the
   audit log.
+- **No trusted proxy set:** GoPress warns at startup if the base URL is https without one. Without
+  it, every client looks like the proxy and HSTS is not sent.
 
 **Security headers:** GoPress sets them itself: CSP, HSTS over HTTPS, `X-Content-Type-Options`,
 `Referrer-Policy`, `Permissions-Policy`, COOP. The admin gets stricter ones. A proxy middleware
@@ -144,11 +159,14 @@ gopress restore --from /backups/gopress-20261025T030000Z.tar.gz --data /new/data
 - `secret.key`;
 - the uploads, uploaded plugins and theme overrides.
 
-Caches and temporary files are left out. `--keep N` deletes the oldest `gopress-*.tar.gz` in the
-target so that N remain; other files there are never touched.
+Caches and temporary files are left out. `--keep N` deletes the oldest archives in the target so
+that N remain. It only touches files named `gopress-<timestamp>.tar.gz`, never the one just
+written. Give each instance its own backup directory.
 
 **Restore:**
 - It only writes into an empty or missing directory.
+- In a container, the archive must be readable by uid 65532. Archives written by the container
+  itself are.
 - It refuses archives with unexpected entries, links or paths outside the directory.
 - It refuses backups from a newer GoPress (schema version).
 - It then checks and migrates the database.
