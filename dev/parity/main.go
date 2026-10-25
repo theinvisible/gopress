@@ -221,6 +221,7 @@ var knownStatus = map[string]bool{
 	"/xmlrpc.php": true, // removed in GoPress (410)
 	"/feed/atom/": true, // GoPress redirects Atom/RDF feeds to RSS2
 	"/?feed=rss2": true, // GoPress redirects to the pretty feed URL
+	"/feed/rss2/": true, // the live site redirects to /feed/ like GoPress; the local reference does not
 }
 
 func compare(path string) ([]string, error) {
