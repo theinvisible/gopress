@@ -15,6 +15,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -32,6 +34,9 @@ type Host struct {
 	Stash    map[string]map[string]json.RawMessage // kind → key → value
 	Comments map[int64]gp.Comment
 	Site     gp.SiteInfo
+	// Templates are the plugin's templates (file name → source); see
+	// LoadTemplates.
+	Templates map[string]string
 	// Fetch answers HTTP requests (nil: every request fails).
 	Fetch func(gp.HTTPRequest) (gp.HTTPResponse, error)
 
@@ -43,6 +48,26 @@ type Host struct {
 	Statuses    map[int64]string // comment id → status set by the plugin
 	Logs        []string
 	Invalidated int
+
+	templateVersion int
+}
+
+// LoadTemplates reads the plugin's templates/*.html (dir is usually
+// "templates").
+func (h *Host) LoadTemplates(dir string) error {
+	files, err := filepath.Glob(filepath.Join(dir, "*.html"))
+	if err != nil {
+		return err
+	}
+	h.Templates = map[string]string{}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return err
+		}
+		h.Templates[filepath.Base(f)] = string(b)
+	}
+	return nil
 }
 
 // Mail is a MailAdmins call.
@@ -220,6 +245,9 @@ func (h *Host) call(op string, raw json.RawMessage) (any, error) {
 	case "progress":
 		h.Progress = append(h.Progress, a.Percent)
 		return true, nil
+	case "templates":
+		h.templateVersion++
+		return map[string]any{"version": fmt.Sprint(h.templateVersion), "files": h.Templates}, nil
 	case "invalidate":
 		h.Invalidated++
 		return true, nil

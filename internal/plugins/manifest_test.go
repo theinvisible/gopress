@@ -176,6 +176,10 @@ func TestReadZip(t *testing.T) {
 	if _, ok := p.File("README.md"); ok {
 		t.Error("root file exposed as asset")
 	}
+	if _, err := ReadZip(makeZip(t, append(validFiles(), zipFile{name: "templates/a.html", data: []byte(`{{template "b.html" .}}`)},
+		zipFile{name: "templates/b.html", data: []byte(`<p>{{.x}}</p>`)})...), "uploaded"); err != nil {
+		t.Errorf("templates: %v", err)
+	}
 	with := func(extra ...zipFile) []byte { return makeZip(t, append(validFiles(), extra...)...) }
 	without := func(name string) []byte {
 		var fs []zipFile
@@ -206,6 +210,10 @@ func TestReadZip(t *testing.T) {
 		"too many":        manyFiles(t),
 		"bad manifest":    makeZip(t, zipFile{name: "plugin.json", data: []byte(`{"name":"x"}`)}, zipFile{name: "plugin.wasm", data: fakeWasm}),
 		"dir traversal 2": with(zipFile{name: "assets/a/../../b.js", data: []byte("1")}),
+		"template syntax": with(zipFile{name: "templates/x.html", data: []byte("{{.a")}),
+		"template folder": with(zipFile{name: "templates/sub/x.html", data: []byte("x")}),
+		"template js":     with(zipFile{name: "templates/x.js", data: []byte("x")}),
+		"template size":   with(zipFile{name: "templates/x.html", data: bytes.Repeat([]byte("x"), maxTemplateBytes+1)}),
 	}
 	for name, data := range bad {
 		if _, err := ReadZip(data, "uploaded"); err == nil {

@@ -1,0 +1,16 @@
+{{- /* The slider of a gallery. Themes can replace this file with
+       plugins/foto-slider-lightbox/gallery.html; view.js needs the fslb-*
+       classes and data attributes. */ -}}
+<div class="fslb-gallery fslb-gallery--shortcode" data-captions="{{if .Captions}}1{{else}}0{{end}}" data-label-dialog="Image gallery" data-label-close="Close">
+<div class="fslb-slider swiper" id="fslb-{{.ID}}">
+<div class="swiper-wrapper">
+{{- range $i, $s := .Slides}}
+<div class="swiper-slide fslb-slide"><button type="button" class="fslb-open" data-fslb-index="{{$i}}" data-full="{{$s.Full}}" data-thumb="{{$s.Thumb}}" data-caption="{{$s.Caption}}" aria-label="Open image in lightbox"><img src="{{$s.Src}}"
+	{{- if $s.Width}} width="{{$s.Width}}" height="{{$s.Height}}"{{end}}
+	{{- if $s.Srcset}} srcset="{{$s.Srcset}}" sizes="(max-width: {{$s.Width}}px) 100vw, {{$s.Width}}px"{{end}} class="fslb-image" alt="{{$s.Alt}}" loading="lazy" decoding="async"></button>
+	{{- if and $.Captions $s.Caption}}<figcaption class="fslb-caption">{{$s.Caption}}</figcaption>{{end}}</div>
+{{- end}}
+</div>
+<div class="swiper-button-prev fslb-prev"></div><div class="swiper-button-next fslb-next"></div><div class="swiper-pagination fslb-pagination"></div>
+</div>
+</div>

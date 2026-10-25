@@ -12,7 +12,7 @@ import (
 )
 
 // PackDir builds a plugin package from a source directory (plugin.json,
-// assets/, admin/, README/LICENSE) and a compiled plugin.wasm. The zip is
+// assets/, admin/, templates/, README/LICENSE) and a compiled plugin.wasm. The zip is
 // deterministic (sorted, fixed times) and validated like an upload.
 func PackDir(dir, wasmFile string) ([]byte, error) {
 	files := map[string]string{"plugin.wasm": wasmFile}
@@ -24,7 +24,7 @@ func PackDir(dir, wasmFile string) ([]byte, error) {
 			files[name] = p
 		}
 	}
-	for _, sub := range []string{"assets", "admin"} {
+	for _, sub := range []string{"assets", "admin", "templates"} {
 		root := filepath.Join(dir, sub)
 		if !fileExists(root) {
 			continue

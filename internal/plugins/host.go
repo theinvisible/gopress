@@ -63,6 +63,10 @@ type Site interface {
 	Settings(ctx context.Context) (*site.Settings, error)
 	Links(ctx context.Context) (*site.Links, error)
 	Invalidate()
+	// ThemeName and PluginTemplate give the active theme's overrides of
+	// plugin templates.
+	ThemeName() string
+	PluginTemplate(plugin, file string) ([]byte, bool)
 }
 
 // Options configures the host.
@@ -134,6 +138,9 @@ type plugin struct {
 	lastError string
 	logs      int // lines logged in the current minute
 	logMinute int64
+
+	tplMu    sync.Mutex
+	tplCache map[string]*templateFiles // by theme name
 }
 
 // New creates the host and starts the active plugins.

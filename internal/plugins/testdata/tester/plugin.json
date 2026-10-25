@@ -9,7 +9,7 @@
 		"frontend_assets": ["assets/hello.css", "assets/hello.js"]
 	},
 	"shortcodes": [{"name": "hello", "assets": ["assets/hello.css", "assets/hello.js"]}, {"name": "evil"}, {"name": "loop"},
-		{"name": "panic"}, {"name": "alloc"}, {"name": "big"}, {"name": "fail"}, {"name": "op"}, {"name": "slow"}],
+		{"name": "panic"}, {"name": "alloc"}, {"name": "big"}, {"name": "fail"}, {"name": "op"}, {"name": "slow"}, {"name": "tpl"}],
 	"widgets": [{"type": "tester_widget", "title": "Tester", "fields": [{"name": "text", "label": "Text"}]}],
 	"admin": [
 		{"id": "settings", "title": "Tester", "menu": "settings", "capability": "manage_options", "kind": "settings",

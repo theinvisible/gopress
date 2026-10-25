@@ -58,6 +58,10 @@ func init() {
 		}
 		return gp.Render{HTML: "slow"}, nil
 	})
+	gp.HandleShortcode("tpl", func(r gp.ShortcodeRequest) (gp.Render, error) {
+		out, err := gp.Template("greet.html", map[string]string{"name": r.Attr("name", "you"), "url": r.Attr("url", "/")})
+		return gp.Render{HTML: out}, err
+	})
 	gp.HandleShortcode("fail", func(gp.ShortcodeRequest) (gp.Render, error) {
 		return gp.Render{}, errors.New("deliberate failure")
 	})

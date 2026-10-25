@@ -24,6 +24,9 @@ func newHost(t *testing.T) *fakehost.Host {
 	h.Media[1] = img(1, "First <b>photo</b> & more")
 	h.Media[2] = img(2, "")
 	h.Media[3] = gp.Media{ID: 3, URL: "https://example.org/doc.pdf", Mime: "application/pdf"}
+	if err := h.LoadTemplates("templates"); err != nil {
+		t.Fatal(err)
+	}
 	h.Install()
 	return h
 }
@@ -47,6 +50,7 @@ func TestShortcode(t *testing.T) {
 	for _, want := range []string{
 		`<div class="fslb-gallery fslb-gallery--shortcode" data-captions="1"`,
 		`<div class="fslb-slider swiper" id="fslb-791">`,
+		`<div class="swiper-slide fslb-slide"><button type="button" class="fslb-open"`,
 		`data-fslb-index="0" data-full="https://example.org/wp-content/uploads/2026/07/p2.png"`,
 		`data-fslb-index="1"`,
 		`src="https://example.org/wp-content/uploads/2026/07/p1-1024x640.png" width="1024" height="640"`,

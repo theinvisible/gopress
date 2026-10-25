@@ -20,6 +20,7 @@ var pageKinds = []string{"index", "single", "page", "archive", "search", "404", 
 // Theme is a loaded theme.
 type Theme struct {
 	Name   string
+	root   fs.FS
 	static fs.FS
 	pages  map[string]*template.Template
 
@@ -37,7 +38,7 @@ func Load(fsys fs.FS, name string) (*Theme, error) {
 	if err != nil {
 		return nil, err
 	}
-	t := &Theme{Name: name, static: static, pages: map[string]*template.Template{}, hashes: map[string]string{}}
+	t := &Theme{Name: name, root: root, static: static, pages: map[string]*template.Template{}, hashes: map[string]string{}}
 
 	base := template.New("layout").Funcs(template.FuncMap{
 		"asset": t.AssetPath,
@@ -108,4 +109,14 @@ func (t *Theme) AssetPath(file string) string {
 		h = "missing"
 	}
 	return "/static/" + t.Name + "/" + h + "/" + file
+}
+
+// PluginTemplate returns the theme's override of a plugin template
+// (plugins/<plugin>/<file> in the theme), if it has one.
+func (t *Theme) PluginTemplate(plugin, file string) ([]byte, bool) {
+	if strings.Contains(plugin, "/") || strings.Contains(file, "/") || strings.HasPrefix(plugin, ".") || strings.HasPrefix(file, ".") {
+		return nil, false
+	}
+	b, err := fs.ReadFile(t.root, "plugins/"+plugin+"/"+file)
+	return b, err == nil
 }

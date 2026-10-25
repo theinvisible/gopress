@@ -420,6 +420,20 @@ func (p *plugin) op(ctx context.Context, op string, raw json.RawMessage) (any, e
 		}
 		return true, nil
 
+	case "templates":
+		a, err := args[struct{ Version string }](raw)
+		if err != nil {
+			return nil, err
+		}
+		t, err := p.templates()
+		if err != nil {
+			return nil, err
+		}
+		if a.Version == t.Version {
+			return templateFiles{Version: t.Version}, nil // the plugin's copy is current
+		}
+		return t, nil
+
 	case "invalidate":
 		// At most once a second per plugin: clearing the cache on every
 		// request would turn every page view into a render.

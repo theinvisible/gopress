@@ -545,3 +545,44 @@ func TestLiveEvents(t *testing.T) {
 		t.Errorf("notify without permission: %s", got)
 	}
 }
+
+// overrideSite gives the theme overrides of plugin templates.
+type overrideSite struct {
+	*site.Site
+	theme string
+	files map[string]string
+}
+
+func (s *overrideSite) ThemeName() string { return s.theme }
+
+func (s *overrideSite) PluginTemplate(plugin, file string) ([]byte, bool) {
+	v, ok := s.files[plugin+"/"+file]
+	return []byte(v), ok
+}
+
+func TestTemplates(t *testing.T) {
+	e := newHostEnv(t)
+	out, err := e.shortcode("tpl", map[string]string{"name": `<b>Ti</b>`, "url": "javascript:alert(1)"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.HTML != `<p class="greet">Hello, &lt;b&gt;Ti&lt;/b&gt;!</p><a href="#ZgotmplZ">more</a>`+"\n\n" {
+		t.Errorf("template: %q", out.HTML)
+	}
+	// The theme replaces a file; switching themes takes effect.
+	ov := &overrideSite{Site: e.site, theme: "custom", files: map[string]string{"tester/part.html": `<em>{{.name}}</em>`}}
+	e.h.opts.Site = ov
+	if out, _ := e.shortcode("tpl", map[string]string{"name": "Ti"}); !strings.Contains(out.HTML, "<em>Ti</em>") {
+		t.Errorf("override: %q", out.HTML)
+	}
+	ov.theme, ov.files = "other", map[string]string{"tester/part.html": `{{.broken`}
+	if _, err := e.shortcode("tpl", nil); err == nil || !strings.Contains(err.Error(), "part.html") {
+		t.Errorf("broken override: %v", err)
+	}
+	// Templates run inside the sandbox: an endless one hits the time limit.
+	ov.theme, ov.files = "loop", map[string]string{"tester/part.html": `{{range 2000000000}}{{end}}`}
+	start := time.Now()
+	if _, err := e.shortcode("tpl", nil); err == nil || time.Since(start) > 3*time.Second {
+		t.Errorf("endless template: %v after %s", err, time.Since(start))
+	}
+}

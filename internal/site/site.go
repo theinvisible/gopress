@@ -282,3 +282,12 @@ func (s *Site) SetExtensions(e Extensions) {
 	s.ext = e
 	s.Invalidate()
 }
+
+// ThemeName is the name of the active theme.
+func (s *Site) ThemeName() string { return s.theme.Name }
+
+// PluginTemplate returns the active theme's override of a plugin
+// template.
+func (s *Site) PluginTemplate(plugin, file string) ([]byte, bool) {
+	return s.theme.PluginTemplate(plugin, file)
+}

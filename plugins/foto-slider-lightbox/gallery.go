@@ -97,60 +97,44 @@ func parseBool(s string) bool {
 	return false
 }
 
+// slide is an image of the slider (templates/gallery.html).
+type slide struct {
+	Full, Thumb, Src, Srcset, Alt, Caption string
+	Width, Height                          int
+}
+
 // renderGallery builds the slider of g with the images in media (in the
 // gallery's order; ids the host did not return are left out).
-func renderGallery(g Gallery, media []gp.Media, captions bool) string {
+func renderGallery(g Gallery, media []gp.Media, captions bool) (string, error) {
 	byID := map[int64]gp.Media{}
 	for _, m := range media {
 		byID[m.ID] = m
 	}
-	esc := html.EscapeString
-	var slides strings.Builder
-	n := 0
+	var slides []slide
 	for _, id := range g.Images {
 		m, ok := byID[id]
 		if !ok || m.URL == "" || !strings.HasPrefix(m.Mime, "image/") {
 			continue
 		}
-		src, w, h := m.URL, m.Width, m.Height
+		s := slide{Full: m.URL, Thumb: m.URL, Src: m.URL, Width: m.Width, Height: m.Height, Alt: m.Alt,
+			Caption: strings.TrimSpace(html.UnescapeString(stripTags(m.Caption)))}
 		if l, ok := m.Sizes["large"]; ok && l.URL != "" {
-			src, w, h = l.URL, l.Width, l.Height
+			s.Src, s.Width, s.Height = l.URL, l.Width, l.Height
 		}
-		thumb := m.URL
 		if t, ok := m.Sizes["thumbnail"]; ok && t.URL != "" {
-			thumb = t.URL
+			s.Thumb = t.URL
 		}
-		caption := strings.TrimSpace(html.UnescapeString(stripTags(m.Caption)))
-		alt := m.Alt
-		fmt.Fprintf(&slides, `<div class="swiper-slide fslb-slide"><button type="button" class="fslb-open" data-fslb-index="%d"`+
-			` data-full="%s" data-thumb="%s" data-caption="%s" aria-label="Open image in lightbox">`, n, esc(m.URL), esc(thumb), esc(caption))
-		fmt.Fprintf(&slides, `<img src="%s"`, esc(src))
-		if w > 0 && h > 0 {
-			fmt.Fprintf(&slides, ` width="%d" height="%d"`, w, h)
+		if s.Width > 0 && s.Height > 0 {
+			s.Srcset = srcset(m)
+		} else {
+			s.Width, s.Height = 0, 0
 		}
-		if set := srcset(m); set != "" && w > 0 {
-			fmt.Fprintf(&slides, ` srcset="%s" sizes="(max-width: %dpx) 100vw, %dpx"`, esc(set), w, w)
-		}
-		fmt.Fprintf(&slides, ` class="fslb-image" alt="%s" loading="lazy" decoding="async"></button>`, esc(alt))
-		if captions && caption != "" {
-			fmt.Fprintf(&slides, `<figcaption class="fslb-caption">%s</figcaption>`, esc(caption))
-		}
-		slides.WriteString(`</div>`)
-		n++
+		slides = append(slides, s)
 	}
-	if n == 0 {
-		return ""
+	if len(slides) == 0 {
+		return "", nil
 	}
-	capFlag := "0"
-	if captions {
-		capFlag = "1"
-	}
-	return `<div class="fslb-gallery fslb-gallery--shortcode" data-captions="` + capFlag + `"` +
-		` data-label-dialog="Image gallery" data-label-close="Close">` +
-		`<div class="fslb-slider swiper" id="fslb-` + strconv.FormatInt(g.ID, 10) + `"><div class="swiper-wrapper">` +
-		slides.String() + `</div>` +
-		`<div class="swiper-button-prev fslb-prev"></div><div class="swiper-button-next fslb-next"></div>` +
-		`<div class="swiper-pagination fslb-pagination"></div></div></div>`
+	return gp.Template("gallery.html", map[string]any{"ID": g.ID, "Captions": captions, "Slides": slides})
 }
 
 // srcset lists the full image and the sizes with its aspect ratio.

@@ -27,7 +27,7 @@ type Package struct {
 	SHA256   string // of the zip file
 	Source   string // "bundled" or "uploaded"
 	Wasm     []byte
-	files    map[string][]byte // assets/… and admin/…
+	files    map[string][]byte // assets/…, admin/… and templates/…
 }
 
 // File returns a file of the package below assets/ or admin/.
@@ -85,8 +85,15 @@ func ReadZip(data []byte, source string) (*Package, error) {
 				return nil, fmt.Errorf("unexpected file %q", name)
 			}
 		case dir == "assets" && assetExt[ext], dir == "admin" && (assetExt[ext] || ext == ".html"):
+		case dir == "templates":
+			if !reTemplate.MatchString(name) {
+				return nil, fmt.Errorf("template %q: templates/ holds .html files (a-z, 0-9, - and _), no folders", name)
+			}
+			if f.UncompressedSize64 > maxTemplateBytes {
+				return nil, fmt.Errorf("template %s is larger than 64 KB", name)
+			}
 		default:
-			return nil, fmt.Errorf("file %q is not allowed (assets/ and admin/ hold css, js, images, fonts and json; admin/ also html)", name)
+			return nil, fmt.Errorf("file %q is not allowed (assets/ and admin/ hold css, js, images, fonts and json; admin/ also html; templates/ html)", name)
 		}
 		if f.UncompressedSize64 > maxFileBytes {
 			return nil, fmt.Errorf("%s is too large", name)
@@ -112,7 +119,7 @@ func ReadZip(data []byte, source string) (*Package, error) {
 			manifest = b
 		case name == "plugin.wasm":
 			p.Wasm = b
-		case dir == "assets" || dir == "admin":
+		case dir == "assets" || dir == "admin" || dir == "templates":
 			p.files[name] = b
 		}
 	}
@@ -123,6 +130,9 @@ func ReadZip(data []byte, source string) (*Package, error) {
 		return nil, errors.New("plugin.wasm is missing or not a WebAssembly module")
 	}
 	if p.Manifest, err = ParseManifest(manifest); err != nil {
+		return nil, err
+	}
+	if err := checkTemplates(p.files); err != nil {
 		return nil, err
 	}
 	for _, a := range p.Manifest.Permissions.FrontendAssets {

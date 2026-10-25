@@ -14,6 +14,7 @@ A plugin is a `.zip` with:
 | `plugin.wasm` | The compiled module. |
 | `assets/` | Files for public pages: CSS, JS, images, fonts, JSON. |
 | `admin/` | Files of custom admin pages: HTML, CSS, JS, images. |
+| `templates/` | HTML templates for the plugin's output (`*.html`, at most 64 KB each, no folders). |
 | `README.md`, `LICENSE`, `CHANGELOG.md` | Optional documentation. |
 
 Nothing else is accepted.
@@ -161,6 +162,21 @@ All other HTML from plugins is filtered:
 - allowed: formatting, links, images, media, forms (to https or same-site targets), `data-*` and `aria-*` attributes;
 - removed: scripts, event handlers, iframes and `javascript:` URLs.
 
+### Templates
+
+Plugins can render their HTML from templates in Go's `html/template` syntax instead of building strings. Values are escaped by context, so text, attributes and URLs are safe, and `javascript:` URLs become `#ZgotmplZ`.
+
+```go
+out, err := gp.Template("gallery.html", map[string]any{"title": g.Title, "images": imgs})
+return gp.Render{HTML: out}, err
+```
+
+- **Location:** templates are files in `templates/`. They can call each other by file name: `{{template "item.html" .}}`.
+- **Validation:** templates are checked when the package is uploaded.
+- **Sandbox:** they run inside the plugin's sandbox with its time and memory limits.
+- **Theme overrides:** a theme replaces a file with its own copy at `plugins/<plugin>/<file>` (e.g. `themes/twentytwelve/plugins/foto-slider-lightbox/gallery.html`), as WordPress themes override plugin templates. The plugin always gets the active theme's version.
+- **Filtering:** the result is filtered like any plugin HTML.
+
 ### Host functions
 
 | Function | Notes |
@@ -179,6 +195,7 @@ All other HTML from plugins is filtered:
 | `Progress(percent, text)` | Progress of the WordPress import, shown on the Plugins screen (only in `HandleMigrate`). |
 | `MailAdmins(subject, body)` | Plain text to the administrators (`mail:admins`). The host picks the recipients and puts the site and plugin name into the subject; at most 20 an hour. |
 | `Invalidate()` | Clear the page cache after changing what the plugin renders. |
+| `Template(name, data)` | Render `templates/<name>` (see Templates). |
 
 ## Runtime limits
 

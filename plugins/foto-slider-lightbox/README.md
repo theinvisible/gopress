@@ -7,6 +7,7 @@ Photo galleries as a slider with a lightbox. This is the GoPress port of the Wor
 - **Lightbox:** a click on an image opens it. It has zoom, a thumbnail strip and a counter. ESC closes it, focus stays inside while it is open, and it respects reduced motion.
 - **Admin:** "Photo Galleries" in the admin menu lists, creates, edits and deletes galleries. Images come from the media library, and you sort them by dragging or with the arrow buttons. Authors edit their own galleries; editors and administrators edit all of them.
 - **Editor:** the "Photo gallery" button inserts the shortcode of a chosen gallery.
+- **Template:** the slider's markup is `templates/gallery.html`. A theme can replace it with `plugins/foto-slider-lightbox/gallery.html`; the script needs the `fslb-*` classes and data attributes.
 - **Import:** on activation, the galleries of the WordPress plugin (`fslb_gallery` posts with their image ids and caption setting) are imported with their ids. Existing shortcodes therefore keep working.
 
 ## Changes from the WordPress plugin
