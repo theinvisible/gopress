@@ -2,6 +2,10 @@
 //
 //	go run ./dev/parity -ref http://127.0.0.1:8081 -got http://127.0.0.1:8080
 //
+// Against a live site (staging vs. production), crawl politely:
+//
+//	go run ./dev/parity -ref https://example.org -got https://staging.example.org -site-host example.org -concurrency 2 -delay 200ms
+//
 // It collects URLs from the reference sitemaps plus archives, paging,
 // comment pages, feeds and redirects, fetches each from both servers
 // without following redirects and compares status, redirect target,
@@ -21,6 +25,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/net/html"
@@ -34,7 +39,11 @@ var (
 	verbose = flag.Bool("v", false, "print every URL")
 	extra   = flag.String("extra", "local/parity-urls.txt", "file with additional paths to check, one per line; \"!/path/\" marks an intentional status difference (site-specific, not committed)")
 	site    = flag.String("site-host", os.Getenv("SITE_HOST"), "host name of the original site; absolute links to it in content are compared as root-relative (env SITE_HOST)")
+	workers = flag.Int("concurrency", 4, "URLs checked at the same time")
+	delay   = flag.Duration("delay", 0, "pause of each worker between URLs (be gentle with live sites)")
 )
+
+const userAgent = "GoPress-parity/1.0 (+https://github.com/theinvisible/gopress)"
 
 var client = &http.Client{
 	Timeout:       30 * time.Second,
@@ -49,7 +58,12 @@ type page struct {
 }
 
 func fetch(base, path string) (*page, error) {
-	resp, err := client.Get(base + path)
+	req, err := http.NewRequest(http.MethodGet, base+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -70,17 +84,39 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	var failures []string
-	checked := 0
+	var todo []string
 	for _, p := range paths {
-		if *only != "" && !strings.Contains(p, *only) {
-			continue
+		if *only == "" || strings.Contains(p, *only) {
+			todo = append(todo, p)
 		}
-		checked++
-		diffs, err := compare(p)
-		if err != nil {
-			diffs = []string{"error: " + err.Error()}
-		}
+	}
+	results := make([][]string, len(todo))
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for range max(1, *workers) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				diffs, err := compare(todo[i])
+				if err != nil {
+					diffs = []string{"error: " + err.Error()}
+				}
+				results[i] = diffs
+				time.Sleep(*delay)
+			}
+		}()
+	}
+	for i := range todo {
+		jobs <- i
+	}
+	close(jobs)
+	wg.Wait()
+
+	var failures []string
+	checked := len(todo)
+	for i, p := range todo {
+		diffs := results[i]
 		if len(diffs) == 0 {
 			if *verbose {
 				fmt.Println("ok  ", p)
@@ -212,6 +248,9 @@ func compare(path string) ([]string, error) {
 	if len(diffs) > 0 || a.status >= 300 || knownStatus[path] {
 		return diffs, nil
 	}
+	if ma, mb := mediaType(a.ctype), mediaType(b.ctype); ma != mb {
+		diffs = append(diffs, fmt.Sprintf("content type ref=%s got=%s", ma, mb))
+	}
 	switch {
 	case strings.Contains(a.ctype, "html"):
 		diffs = append(diffs, compareHTML(a.body, b.body)...)
@@ -219,6 +258,12 @@ func compare(path string) ([]string, error) {
 		diffs = append(diffs, compareFeed(a.body, b.body)...)
 	}
 	return diffs, nil
+}
+
+// mediaType is the content type without parameters, in lower case.
+func mediaType(ct string) string {
+	mt, _, _ := strings.Cut(ct, ";")
+	return strings.ToLower(strings.TrimSpace(mt))
 }
 
 var hostRE *regexp.Regexp
