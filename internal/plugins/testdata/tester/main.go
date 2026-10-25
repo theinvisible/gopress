@@ -99,6 +99,12 @@ func init() {
 			out, err = gp.Fetch(gp.HTTPRequest{URL: r.Attr("url", ""), TimeoutMS: ms})
 		case "mail":
 			err = gp.MailAdmins(r.Attr("subject", "Hi"), r.Attr("body", "Body"))
+		case "notify":
+			err = gp.NotifyAdmins(r.Attr("text", "Hello"), r.Attr("kind", ""), r.Attr("cap", ""))
+		case "livepub":
+			err = gp.LivePublish(r.Attr("page", "app"), map[string]string{"n": r.Attr("n", "1")})
+		case "progress":
+			err = gp.Progress(50, "half")
 		}
 		if err != nil {
 			return gp.Render{HTML: "error: " + err.Error()}, nil
@@ -158,6 +164,9 @@ func init() {
 		return gp.Render{HTML: "<p>stats for " + r.User.Login + "<script>x</script></p>"}, nil
 	})
 	gp.HandleMigrate(func() (string, error) {
+		if err := gp.Progress(10, "starting"); err != nil {
+			return "", err
+		}
 		items, err := gp.Stash("post:tester_item")
 		if err != nil {
 			return "", err

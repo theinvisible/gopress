@@ -234,3 +234,25 @@ func Invalidate() error { return call("invalidate", nil, nil) }
 func MailAdmins(subject, body string) error {
 	return call("mail_admins", map[string]string{"subject": subject, "body": body}, nil)
 }
+
+// NotifyAdmins shows a live notice in the admin to the users with
+// capability (manage_options, edit_posts, edit_others_posts,
+// moderate_comments or upload_files; "" = manage_options). kind is
+// success, info, warning or error. Plain text, at most 300 characters and
+// 30 a minute; permission notify:admins.
+func NotifyAdmins(text, kind, capability string) error {
+	return call("notify_admins", map[string]string{"text": text, "kind": kind, "capability": capability}, nil)
+}
+
+// LivePublish sends data to the plugin's iframe page (gopress.on("event",
+// fn) in its script) for everyone who has it open. At most 16 KB of
+// JSON and 120 a minute.
+func LivePublish(page string, data any) error {
+	return call("live_publish", map[string]any{"page": page, "data": data}, nil)
+}
+
+// Progress reports how far the WordPress import is (0–100); the plugins
+// screen shows it. Only inside HandleMigrate.
+func Progress(percent int, text string) error {
+	return call("progress", map[string]any{"percent": percent, "text": text}, nil)
+}

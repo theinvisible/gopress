@@ -4,9 +4,14 @@
 	'use strict';
 	var next = 1;
 	var pending = {};
+	var listeners = [];
 	window.addEventListener('message', function (ev) {
 		if (ev.source !== window.parent) return;
 		var m = ev.data;
+		if (m && m.gopress === 1 && m.event !== undefined && m.id === undefined) {
+			listeners.forEach(function (fn) { try { fn(m.event); } catch (e) { console.error(e); } });
+			return;
+		}
 		if (!m || m.gopress !== 1 || !pending[m.id]) return;
 		var p = pending[m.id];
 		delete pending[m.id];
@@ -32,6 +37,9 @@
 		// insertShortcode(tag, attrs, content): editor dialogs only.
 		insertShortcode: function (tag, attrs, content) { return send({ type: 'insert', tag: tag, attrs: attrs, content: content }, false); },
 		close: function () { return send({ type: 'close' }, false); },
+		// on("event", fn): fn(data) for each live event the plugin publishes
+		// for this page (LivePublish).
+		on: function (name, fn) { if (name === 'event' && typeof fn === 'function') listeners.push(fn); },
 	};
 	if (window.ResizeObserver) {
 		new ResizeObserver(function () { window.gopress.resize(); }).observe(document.documentElement);

@@ -24,6 +24,7 @@ import (
 
 	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/live"
 )
 
 // Host function limits.
@@ -382,6 +383,43 @@ func (p *plugin) op(ctx context.Context, op string, raw json.RawMessage) (any, e
 		}
 		return true, p.mailAdmins(ctx, a.Subject, a.Body)
 
+	case "notify_admins":
+		if !p.can(DataNotifyAdmins) {
+			return nil, errDenied
+		}
+		a, err := args[struct{ Text, Kind, Capability string }](raw)
+		if err != nil {
+			return nil, err
+		}
+		return true, p.notifyAdmins(a.Text, a.Kind, a.Capability)
+
+	case "live_publish":
+		a, err := args[struct {
+			Page string
+			Data json.RawMessage
+		}](raw)
+		if err != nil {
+			return nil, err
+		}
+		return true, p.livePublish(a.Page, a.Data)
+
+	case "progress":
+		a, err := args[struct {
+			Percent int
+			Text    string
+		}](raw)
+		if err != nil {
+			return nil, err
+		}
+		if ctx.Value(migratingKey{}) == nil {
+			return nil, userErr("progress is only for the WordPress import")
+		}
+		if h.progressLimit.allow(name, h.now()) {
+			h.publish(live.Event{Type: "import.progress", Capability: auth.CapActivatePlugins,
+				Data: map[string]any{"plugin": name, "percent": min(max(a.Percent, 0), 100), "text": plainText(a.Text, 200)}})
+		}
+		return true, nil
+
 	case "invalidate":
 		// At most once a second per plugin: clearing the cache on every
 		// request would turn every page view into a render.
@@ -631,5 +669,82 @@ func (p *plugin) mailAdmins(ctx context.Context, subject, body string) error {
 	d, _ := json.Marshal(map[string]any{"plugin": p.pkg.Manifest.Name, "subject": subject, "recipients": sent})
 	db.InsertAudit(ctx, h.opts.DB.W, &db.AuditEntry{Time: h.now().Unix(), Action: "plugin_mail", ObjectType: "plugin",
 		Detail: string(d)})
+	return nil
+}
+
+// Live events.
+const (
+	noticesPerMin  = 30
+	eventsPerMin   = 120
+	maxNoticeText  = 300
+	maxPluginEvent = 16 << 10
+)
+
+// migratingKey marks the context of a migrate_wordpress call.
+type migratingKey struct{}
+
+func (h *Host) publish(e live.Event) {
+	if h.opts.Live != nil {
+		h.opts.Live.Publish(e)
+	}
+}
+
+// plainText collapses whitespace and cuts s to max runes.
+func plainText(s string, max int) string {
+	s = strings.Join(strings.Fields(strings.ToValidUTF8(s, "")), " ")
+	if r := []rune(s); len(r) > max {
+		s = string(r[:max]) + "…"
+	}
+	return s
+}
+
+// notifyAdmins shows a live notice to the users with capability (one of
+// the admin capabilities plugin pages use). The text is plain; the admin
+// shows it with the plugin's title.
+func (p *plugin) notifyAdmins(text, kind, capability string) error {
+	text = plainText(text, maxNoticeText)
+	if text == "" {
+		return userErr("the text is empty")
+	}
+	if kind == "" {
+		kind = "info"
+	}
+	if !slices.Contains([]string{"success", "info", "warning", "error"}, kind) {
+		return userErr("kind must be success, info, warning or error")
+	}
+	if capability == "" {
+		capability = auth.CapManageOptions
+	}
+	if !slices.Contains(adminCapabilities, capability) {
+		return userErr("capability must be one of " + strings.Join(adminCapabilities, ", "))
+	}
+	if !p.h.noticeLimit.allow(p.pkg.Manifest.Name, p.h.now()) {
+		return userErr("notice limit reached (30 a minute)")
+	}
+	p.h.publish(live.Event{Type: "notice", Capability: capability,
+		Data: map[string]any{"text": text, "kind": kind, "source": p.pkg.Manifest.Title}})
+	return nil
+}
+
+// livePublish sends data to the plugin's own iframe page (gopress.on in
+// the page), to users who may open that page.
+func (p *plugin) livePublish(page string, data json.RawMessage) error {
+	var pg *AdminPage
+	for i := range p.pkg.Manifest.Admin {
+		if a := &p.pkg.Manifest.Admin[i]; a.ID == page && a.Kind == "iframe" {
+			pg = a
+		}
+	}
+	if pg == nil {
+		return userErr("page must be one of the plugin's iframe pages")
+	}
+	if len(data) == 0 || len(data) > maxPluginEvent || !json.Valid(data) {
+		return userErr("data must be JSON of at most 16 KB")
+	}
+	if !p.h.eventLimit.allow(p.pkg.Manifest.Name, p.h.now()) {
+		return userErr("event limit reached (120 a minute)")
+	}
+	p.h.publish(live.Event{Type: "plugin.event", Topic: live.PluginTopic(p.pkg.Manifest.Name, page), Capability: pg.Capability,
+		Data: map[string]any{"plugin": p.pkg.Manifest.Name, "page": page, "data": data}})
 	return nil
 }

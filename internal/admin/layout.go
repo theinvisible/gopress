@@ -28,6 +28,10 @@ type basePage struct {
 	Assets    *assets
 	Scripts   []string // extra scripts (asset paths)
 	Styles    []string // extra stylesheets (asset paths)
+	// Live enables live updates (live.js); LiveTopics are the page's
+	// topics (e.g. "post:12"), checked when the stream opens.
+	Live       bool
+	LiveTopics string
 }
 
 type notice struct {
@@ -72,6 +76,7 @@ func (a *Admin) base(ctx context.Context, c *reqCtx, title, screen string) baseP
 		}
 	}
 	if c.cur.Session.State == db.SessionFull {
+		p.Live = a.live != nil
 		if auth.Can(c.user, auth.CapModerateComments) {
 			counts, err := db.CommentStatusCounts(ctx, a.db.R, 0)
 			if err == nil {

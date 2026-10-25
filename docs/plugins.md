@@ -52,7 +52,7 @@ The manifest is validated strictly: unknown keys are errors.
     "legacy_routes": [{"query": {"old_param": "value"}, "route": "/stats"}],
     "hooks": ["the_content", "head", "footer", "comment_pre_save", "comment_status_changed"],
     "data": ["posts:read", "media:read", "comments:read", "comments:moderate", "import:post:my_type",
-             "import:option:my_option", "mail:admins"],
+             "import:option:my_option", "mail:admins", "notify:admins"],
     "frontend_assets": ["assets/hello.css", "assets/hello.js"]
   },
   "shortcodes": [{"name": "hello", "assets": ["assets/hello.css"]}],
@@ -83,6 +83,7 @@ These are what the approval screen lists:
   - `import:<kind>`: imported WordPress data of that kind (e.g. `post:my_type`).
   - `import:option:<name>`: one imported WordPress option. Options are granted one by one, because the import holds the options of all plugins of the source site, API keys included.
   - `mail:admins`: send plain-text mail to the administrators (`MailAdmins`).
+  - `notify:admins`: show live notices in the admin (`NotifyAdmins`).
 - **`frontend_assets`:** CSS and JavaScript files added to public pages, and only to pages whose content uses them. Scripts on the site are trusted code; this is the only way a plugin can run JavaScript there.
 
 An update that asks for more permissions stays inactive until an administrator approves it again.
@@ -111,6 +112,7 @@ Settings pages, widget forms and editor dialogs share one field format:
     gopress.navigate(pageID)            // another page of the plugin (not in editor dialogs)
     gopress.insertShortcode(tag, attrs, content)  // in editor dialogs
     gopress.close()                     // close an editor dialog
+    gopress.on("event", fn)             // live events the plugin publishes for this page (LivePublish)
     ```
 
 - **Trust:** the iframe page can still navigate itself to another site, and data the bridge hands it could leave that way. Popups are not allowed.
@@ -172,6 +174,9 @@ All other HTML from plugins is filtered:
 | `GetComment`, `SetCommentStatus` | `comments:read` / `comments:moderate`. |
 | `Fetch(HTTPRequest)` | HTTPS to `permissions.http` hosts; 10 s (or `TimeoutMS`, 100–10000), 1 MB request, 2 MB response. |
 | `Stash(kind)` | Imported WordPress data (`import:<kind>`); `Stash("option")` returns the options granted with `import:option:<name>`. |
+| `NotifyAdmins(text, kind, capability)` | A live notice in the admin for users with the capability (`notify:admins`); plain text, at most 300 characters and 30 a minute. |
+| `LivePublish(page, data)` | JSON (at most 16 KB, 120 a minute) to everyone who has the plugin's iframe page open (`gopress.on("event", fn)`). |
+| `Progress(percent, text)` | Progress of the WordPress import, shown on the Plugins screen (only in `HandleMigrate`). |
 | `MailAdmins(subject, body)` | Plain text to the administrators (`mail:admins`). The host picks the recipients and puts the site and plugin name into the subject; at most 20 an hour. |
 | `Invalidate()` | Clear the page cache after changing what the plugin renders. |
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/live"
 	"github.com/theinvisible/gopress/internal/media"
 	"github.com/theinvisible/gopress/internal/render"
 	"github.com/theinvisible/gopress/internal/site"
@@ -39,7 +40,17 @@ type Service struct {
 	uploads uploadLimiter
 	// statusHook is told about moderated comments (plugins).
 	statusHook CommentStatusHook
+	// live tells open admin pages about changes.
+	live Publisher
 }
+
+// Publisher delivers live events to open admin pages (internal/live).
+type Publisher interface {
+	Publish(live.Event)
+}
+
+// SetLive enables live events.
+func (s *Service) SetLive(p Publisher) { s.live = p }
 
 // New creates the service.
 func New(d *db.DB, s Site, a *auth.Service, log *slog.Logger) *Service {
@@ -320,6 +331,11 @@ func (e *Editor) Save(ctx context.Context, p *db.Post, in *PostInput) (*db.Post,
 	}
 	e.s.audit(ctx, e.r, e.user.ID, action, p.Type, p.ID, map[string]any{"status": p.Status})
 	e.s.site.Invalidate()
+	if !isNew && e.s.live != nil {
+		// Others with the post open learn that their copy is old.
+		e.s.live.Publish(live.Event{Type: "post.saved", Topic: live.PostTopic(p.ID), ExceptUser: e.user.ID,
+			Data: map[string]any{"post": p.ID, "by": e.user.DisplayName, "modified": p.ModifiedGMT.UTC().Format(time.RFC3339)}})
+	}
 	return p, nil
 }
 

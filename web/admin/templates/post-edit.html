@@ -11,6 +11,9 @@
 	</div>
 	{{- end}}
 
+	<div class="notice notice-warning gp-presence" hidden><p></p></div>
+	<div class="notice notice-error gp-stale" hidden><p><span></span> <button type="button" class="button-link gp-stale-reload">Reload the newer version</button></p></div>
+
 	<form name="post" action="{{.Action}}" method="post" id="post" class="gp-post-form" data-post-id="{{if .Post}}{{.Post.ID}}{{end}}" data-post-type="{{.PT.Type}}" data-preview="{{.PreviewURL}}" data-base="{{.PT.Base}}">
 		{{template "csrf" .CSRF}}
 		<div id="poststuff">
@@ -47,7 +50,7 @@
 									{{- if not (or (eq .Status "publish") (eq .Status "private") (eq .Status "future"))}}
 									<div id="save-action"><input type="submit" name="save_draft" id="save-post" value="Save Draft" class="button"></div>
 									{{- end}}
-									<div id="preview-action"><button type="button" class="preview button" id="post-preview">Preview</button></div>
+									<div id="preview-action"><button type="button" class="button" id="post-live-preview" aria-expanded="false" aria-controls="gp-live-preview">Live preview</button> <button type="button" class="preview button" id="post-preview">Preview</button></div>
 									<div class="clear"></div>
 								</div>
 								<div id="misc-publishing-actions">
@@ -195,4 +198,9 @@
 		</div>
 	</form>
 </div>
+<aside id="gp-live-preview" class="gp-live-preview" hidden aria-label="Live preview">
+	<div class="gp-live-preview-bar"><strong>Live preview</strong> <span class="gp-live-preview-state" aria-live="polite"></span>
+		<button type="button" class="button-link gp-live-preview-close" aria-label="Close the live preview">×</button></div>
+	<iframe title="Live preview" src="about:blank"></iframe>
+</aside>
 {{template "admin-bottom" .}}{{end}}

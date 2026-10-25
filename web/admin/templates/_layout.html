@@ -33,7 +33,7 @@
 <link rel="icon" href="{{asset "gopress-icon.svg"}}" type="image/svg+xml">
 {{template "admin-styles" .}}
 </head>
-<body class="wp-admin wp-core-ui no-js auto-fold admin-bar admin-color-{{.Color}} {{.BodyClass}}" data-csrf="{{.CSRF}}">
+<body class="wp-admin wp-core-ui no-js auto-fold admin-bar admin-color-{{.Color}} {{.BodyClass}}" data-csrf="{{.CSRF}}"{{if .Live}} data-live="/admin/events" data-live-topics="{{.LiveTopics}}" data-user="{{.User.ID}}"{{end}}>
 <div id="wpwrap">
 <div id="adminmenumain" role="navigation" aria-label="Main menu">
 <a href="#wpbody-content" class="screen-reader-shortcut">Skip to main content</a>
@@ -108,6 +108,9 @@
 </div>
 </div><!-- wpwrap -->
 <script src="{{asset "admin.js"}}"></script>
+{{- if .Live}}
+<script src="{{asset "live.js"}}"></script>
+{{- end}}
 {{- range .Scripts}}
 <script src="{{asset .}}"></script>
 {{- end}}

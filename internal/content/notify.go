@@ -7,6 +7,7 @@ import (
 
 	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/live"
 	"github.com/theinvisible/gopress/internal/mail"
 )
 
@@ -36,6 +37,11 @@ func (s *Service) SetMailer(m Mailer) { s.mail = m }
 // comments to the post author unless they wrote the comment themselves.
 // Errors are logged: a notification must never fail the comment.
 func (s *Service) NotifyComment(ctx context.Context, c *db.Comment, approved bool) {
+	if s.live != nil && c.Status == db.CommentPending && !approved {
+		counts, _ := db.CommentStatusCounts(ctx, s.db.R, 0)
+		s.live.Publish(live.Event{Type: "comment.pending", Capability: auth.CapModerateComments,
+			Data: map[string]any{"pending": counts[db.CommentPending], "author": oneLine(c.Author)}})
+	}
 	if s.mail == nil || c.Status == db.CommentSpam || c.Status == db.CommentTrash {
 		return
 	}

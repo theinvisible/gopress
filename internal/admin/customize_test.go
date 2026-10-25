@@ -37,9 +37,14 @@ func TestCustomizer(t *testing.T) {
 	if res := post(e, "/admin/api/customize/draft", admin, draft); res.StatusCode != 200 {
 		t.Fatalf("draft: %d", res.StatusCode)
 	}
-	iframe := map[string]string{"Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin"}
+	iframe := map[string]string{"Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin", "Referer": "https://example.org/admin/customize"}
 	if b := e.do("GET", "/", admin, nil, iframe).Body.String(); !strings.Contains(b, "Preview &lt;Title&gt;") || strings.Contains(b, "<script>x") {
 		t.Error("draft not shown in the preview frame (or CSS not sanitized)")
+	}
+	// Other frames (the editor's live preview) show the published look.
+	editorFrame := map[string]string{"Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin", "Referer": "https://example.org/admin/posts/1/edit"}
+	if b := e.do("GET", "/", admin, nil, editorFrame).Body.String(); strings.Contains(b, "Preview &lt;Title&gt;") {
+		t.Error("customizer draft in the editor's preview frame")
 	}
 	if b := e.do("GET", "/", admin, nil, nil).Body.String(); strings.Contains(b, "Preview &lt;Title&gt;") || !strings.Contains(b, "wpadminbar") {
 		t.Error("draft shown outside the preview frame, or no toolbar")

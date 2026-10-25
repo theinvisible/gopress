@@ -84,6 +84,102 @@
 		});
 	}
 
+	// ---- Live preview ----
+	// A side panel with the preview of the newest autosave, reloaded a
+	// moment after each change (same as the Preview button, without a new
+	// window).
+	var panel = document.getElementById('gp-live-preview');
+	var liveBtn = document.getElementById('post-live-preview');
+	if (panel && liveBtn) {
+		var frame = panel.querySelector('iframe');
+		var state = panel.querySelector('.gp-live-preview-state');
+		var shown = null;
+		var changedAt = 0;
+		var busy = false;
+		var refresh = function () {
+			if (panel.hidden || busy) { return; }
+			busy = true;
+			state.textContent = 'Updating…';
+			var y = 0;
+			try { y = frame.contentWindow.scrollY; } catch (e) {}
+			lastSaved = null;
+			autosave().then(function () {
+				shown = snapshot();
+				var url = form.getAttribute('data-preview');
+				frame.onload = function () {
+					try { frame.contentWindow.scrollTo(0, y); } catch (e) {}
+					state.textContent = '';
+					busy = false;
+				};
+				frame.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+			}).catch(function () { busy = false; state.textContent = 'Update failed'; });
+		};
+		var setOpen = function (open) {
+			panel.hidden = !open;
+			document.body.classList.toggle('gp-live-preview-open', open);
+			liveBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+			if (open) { refresh(); } else { frame.src = 'about:blank'; }
+		};
+		liveBtn.addEventListener('click', function () { setOpen(panel.hidden); });
+		panel.querySelector('.gp-live-preview-close').addEventListener('click', function () { setOpen(false); liveBtn.focus(); });
+		setInterval(function () {
+			if (panel.hidden) { return; }
+			var snap = snapshot();
+			if (snap === shown) { changedAt = 0; return; }
+			if (!changedAt) { changedAt = Date.now(); return; }
+			if (Date.now() - changedAt >= 1500) { changedAt = 0; refresh(); }
+		}, 500);
+	}
+
+	// ---- Others editing the same post ----
+	// The editor tells the server every 30 s that the post is open; live
+	// updates (live.js) report others opening it and newer saves.
+	var me = document.body.getAttribute('data-user');
+	var presenceBox = document.querySelector('.gp-presence');
+	var staleBox = document.querySelector('.gp-stale');
+	var showEditors = function (list) {
+		if (!presenceBox) { return; }
+		var others = (list || []).filter(function (e) { return String(e.id) !== me; });
+		presenceBox.hidden = others.length === 0;
+		presenceBox.querySelector('p').textContent = others.length === 0 ? '' :
+			others.map(function (e) { return e.name; }).join(', ') + (others.length === 1 ? ' is' : ' are') +
+			' editing this ' + (postType === 'page' ? 'page' : 'post') + ' too. Changes saved by one of you can overwrite the other\'s.';
+	};
+	var beat = function (editing) {
+		if (postId === '0' || !document.body.getAttribute('data-live')) { return; }
+		var fd = new FormData();
+		fd.append('editing', editing ? '1' : '0');
+		return fetch('/admin/api/posts/' + postId + '/presence', {
+			method: 'POST', body: fd, credentials: 'same-origin', keepalive: !editing,
+			headers: { 'X-CSRF-Token': gp.csrf, 'Accept': 'application/json' }
+		}).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+			if (j && editing) { showEditors(j.editors); }
+		}).catch(function () {});
+	};
+	if (document.body.getAttribute('data-live')) {
+		beat(true);
+		setInterval(function () { if (!document.hidden) { beat(true); } }, 30000);
+		document.addEventListener('visibilitychange', function () { if (!document.hidden) { beat(true); } });
+		window.addEventListener('pagehide', function () { beat(false); });
+		document.addEventListener('gp-live', function (ev) {
+			var d = ev.detail.data;
+			if (String(d.post) !== postId) { return; }
+			if (ev.detail.type === 'post.presence') {
+				showEditors(d.editors);
+			} else if (ev.detail.type === 'post.saved' && staleBox) {
+				staleBox.hidden = false;
+				staleBox.querySelector('span').textContent = d.by + ' saved a newer version of this ' +
+					(postType === 'page' ? 'page' : 'post') + '. Saving now would overwrite their changes.';
+			}
+		});
+		if (staleBox) {
+			staleBox.querySelector('.gp-stale-reload').addEventListener('click', function () {
+				submitting = true; // the user chose to drop their changes
+				location.reload();
+			});
+		}
+	}
+
 	// ---- Leaving with unsaved changes ----
 	window.addEventListener('beforeunload', function (ev) {
 		if (!submitting && isDirty()) { ev.preventDefault(); ev.returnValue = ''; }

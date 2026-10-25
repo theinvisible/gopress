@@ -11,6 +11,7 @@ import (
 
 	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/live"
 	"github.com/theinvisible/gopress/internal/render"
 )
 
@@ -94,6 +95,12 @@ func (e *Editor) ModerateComments(ctx context.Context, action string, ids []int6
 		e.s.site.Invalidate()
 		if e.s.statusHook != nil && action != CommentDelete {
 			e.s.statusHook(ctx, changed, previous, action, e.user)
+		}
+		if e.s.live != nil {
+			// Open admin pages update their moderation badge.
+			counts, _ := db.CommentStatusCounts(ctx, e.s.db.R, 0)
+			e.s.live.Publish(live.Event{Type: "comment.pending", Capability: auth.CapModerateComments,
+				Data: map[string]any{"pending": counts[db.CommentPending]}})
 		}
 	}
 	for _, c := range approved {

@@ -82,8 +82,20 @@
 				break;
 			}
 		}
+		// Live events the plugin publishes for this page (live_publish).
+		var path = (api || '').split('/');
+		var plugin = path[4], page = path[5];
+		function onLive(ev) {
+			var d = ev.detail.data;
+			if (ev.detail.type !== 'plugin.event' || d.plugin !== plugin || d.page !== page || !frame.contentWindow) return;
+			frame.contentWindow.postMessage({ gopress: 1, event: d.data }, '*');
+		}
 		window.addEventListener('message', onMessage);
-		return function () { window.removeEventListener('message', onMessage); };
+		document.addEventListener('gp-live', onLive);
+		return function () {
+			window.removeEventListener('message', onMessage);
+			document.removeEventListener('gp-live', onLive);
+		};
 	}
 
 	gp.pluginBridge = { connect: connect };

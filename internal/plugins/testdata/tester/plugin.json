@@ -5,7 +5,7 @@
 		"routes": ["/ping"],
 		"legacy_routes": [{"query": {"tester_ping": "1"}, "route": "/ping"}],
 		"hooks": ["the_content", "comment_pre_save", "comment_status_changed"],
-		"data": ["posts:read", "media:read", "comments:moderate", "import:post:tester_item", "import:option:tester_key", "mail:admins"],
+		"data": ["posts:read", "media:read", "comments:moderate", "import:post:tester_item", "import:option:tester_key", "mail:admins", "notify:admins"],
 		"frontend_assets": ["assets/hello.css", "assets/hello.js"]
 	},
 	"shortcodes": [{"name": "hello", "assets": ["assets/hello.css", "assets/hello.js"]}, {"name": "evil"}, {"name": "loop"},

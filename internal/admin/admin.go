@@ -18,6 +18,7 @@ import (
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
 	"github.com/theinvisible/gopress/internal/httpx"
+	"github.com/theinvisible/gopress/internal/live"
 	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/plugins"
 	"github.com/theinvisible/gopress/internal/site"
@@ -31,6 +32,8 @@ type Options struct {
 	MailSink bool
 	// Plugins is the plugin host (nil: no plugin screens).
 	Plugins *plugins.Host
+	// Live delivers events to open admin pages (nil: no live updates).
+	Live *live.Hub
 }
 
 // Admin serves /admin/ and the login pages.
@@ -48,6 +51,12 @@ type Admin struct {
 	sync     bool // run background work synchronously (tests)
 	regen    regenJob
 	plugins  *plugins.Host
+	live     *live.Hub
+	// presenceOf tracks who edits which post.
+	presenceOf *live.Presence
+	// liveStop ends the open streams (StopLive).
+	liveStop     chan struct{}
+	liveStopOnce sync.Once
 }
 
 // New creates the admin.
@@ -56,7 +65,10 @@ func New(d *db.DB, a *auth.Service, s *site.Site, cs *content.Service, opts Opti
 		opts.Log = slog.Default()
 	}
 	ad := &Admin{db: d, auth: a, site: s, content: cs, log: opts.Log, flash: newFlashStore(), mail: opts.Mail, mailSink: opts.MailSink,
-		plugins: opts.Plugins}
+		plugins: opts.Plugins, live: opts.Live, liveStop: make(chan struct{})}
+	if opts.Live != nil {
+		ad.presenceOf = live.NewPresence(opts.Live)
+	}
 	var err error
 	if ad.assets, err = loadAssets(); err != nil {
 		return nil, err
@@ -82,6 +94,7 @@ func (a *Admin) Register(mux *http.ServeMux) {
 	mux.Handle("POST /login/2fa/passkey/finish", a.pending(a.secondFactorPasskeyFinish))
 	mux.Handle("POST /logout", a.anySession(a.logout))
 	a.registerRecover(mux)
+	a.registerLive(mux)
 
 	// WordPress addresses: bookmarks keep working, bots posting to
 	// wp-login.php get nothing.
@@ -190,7 +203,11 @@ const maxFormBytes = 4 << 20 // post content can be large
 func (a *Admin) serve(w http.ResponseWriter, r *http.Request, allow func(*auth.Current) bool, capability string, h handler) {
 	a.securityHeaders(w, r)
 	ctx := r.Context()
-	cur, err := a.auth.Load(ctx, r)
+	load := a.auth.Load
+	if ctx.Value(passiveKey{}) != nil {
+		load = a.auth.LoadPassive
+	}
+	cur, err := load(ctx, r)
 	if err != nil {
 		a.fail(w, r, nil, err)
 		return
@@ -328,7 +345,7 @@ func (a *Admin) anySession(h handler) http.Handler {
 }
 
 func isAPI(r *http.Request) bool {
-	return strings.HasPrefix(r.URL.Path, "/admin/api/") || strings.HasSuffix(r.URL.Path, "/begin") ||
+	return strings.HasPrefix(r.URL.Path, "/admin/api/") || r.URL.Path == "/admin/events" || strings.HasSuffix(r.URL.Path, "/begin") ||
 		strings.HasSuffix(r.URL.Path, "/finish") || r.Header.Get("Accept") == "application/json"
 }
 

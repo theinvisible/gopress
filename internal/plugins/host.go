@@ -17,7 +17,9 @@ import (
 	extism "github.com/extism/go-sdk"
 	"github.com/tetratelabs/wazero"
 
+	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/live"
 	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/site"
 )
@@ -78,6 +80,13 @@ type Options struct {
 	ClientIP func(*http.Request) string
 	// Mail queues mail to administrators (mail_admins); nil disables it.
 	Mail Mailer
+	// Live delivers events to open admin pages; nil disables them.
+	Live Publisher
+}
+
+// Publisher delivers live events (internal/live).
+type Publisher interface {
+	Publish(live.Event)
 }
 
 // Mailer queues mail (internal/mail).
@@ -100,6 +109,9 @@ type Host struct {
 	routeLimit      *limiter
 	invalidateLimit *limiter
 	mailLimit       *limiter
+	noticeLimit     *limiter
+	eventLimit      *limiter
+	progressLimit   *limiter
 }
 
 // plugin is an active plugin.
@@ -131,7 +143,8 @@ func New(ctx context.Context, opts Options) (*Host, error) {
 	}
 	h := &Host{opts: opts, log: opts.Log, now: time.Now, active: map[string]*plugin{}, http: opts.HTTP,
 		routeLimit: newLimiter(routePerMin, time.Minute), invalidateLimit: newLimiter(1, time.Second),
-		mailLimit: newLimiter(mailPerHour, time.Hour)}
+		mailLimit: newLimiter(mailPerHour, time.Hour), noticeLimit: newLimiter(noticesPerMin, time.Minute),
+		eventLimit: newLimiter(eventsPerMin, time.Minute), progressLimit: newLimiter(4, time.Second)}
 	if h.http == nil {
 		h.http = safeClient()
 	}
@@ -414,6 +427,8 @@ func (p *plugin) fail(err error) {
 		p.paused = now.Add(breakerPause)
 		p.failures = nil
 		p.h.log.Error("plugin paused after repeated errors", "plugin", p.pkg.Manifest.Name, "err", err, "until", p.paused)
+		p.h.publish(live.Event{Type: "plugin.paused", Capability: auth.CapActivatePlugins,
+			Data: map[string]any{"plugin": p.pkg.Manifest.Name, "title": p.pkg.Manifest.Title, "error": p.lastError}})
 		return
 	}
 	p.h.log.Warn("plugin error", "plugin", p.pkg.Manifest.Name, "err", err)

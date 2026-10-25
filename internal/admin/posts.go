@@ -13,6 +13,7 @@ import (
 	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/live"
 	"github.com/theinvisible/gopress/internal/theme"
 )
 
@@ -783,6 +784,9 @@ func (a *Admin) renderEditor(w http.ResponseWriter, r *http.Request, c *reqCtx, 
 	d.BodyClass += " post-php gp-editor-screen"
 	d.Styles = []string{"editor/editor.css"}
 	d.Scripts = []string{"upload.js", "plugin-bridge.js", "editor/editor.js", "post.js"}
+	if !isNew && p != nil && p.ID > 0 {
+		d.LiveTopics = live.PostTopic(p.ID) // who else edits it, newer saves
+	}
 	if msg, ok := editorMessages[r.URL.Query().Get("msg")]; ok && errMsg == "" {
 		if d.Notice == nil {
 			d.Notice = &msg

@@ -76,3 +76,29 @@ document.querySelectorAll('[data-toggle]').forEach(function (b) {
 		if (el) { el.hidden = !el.hidden; if (!el.hidden) { var f = el.querySelector('input[type=file]'); if (f) f.focus(); } }
 	});
 });
+
+// Plugins screen: progress of a plugin's WordPress import (live.js).
+(function () {
+	'use strict';
+	document.addEventListener('gp-live', function (ev) {
+		if (ev.detail.type !== 'import.progress') return;
+		var d = ev.detail.data;
+		var row = Array.prototype.find.call(document.querySelectorAll('tr[data-plugin]'), function (tr) {
+			return tr.getAttribute('data-plugin') === d.plugin;
+		});
+		if (!row) return;
+		var box = row.querySelector('.gp-import-progress');
+		if (!box) {
+			box = document.createElement('p');
+			box.className = 'gp-import-progress';
+			var bar = document.createElement('progress');
+			bar.max = 100;
+			var label = document.createElement('span');
+			box.append(bar, ' ', label);
+			row.querySelector('.column-description').appendChild(box);
+		}
+		box.querySelector('progress').value = d.percent;
+		box.querySelector('span').textContent = (d.text ? d.text + ' ' : '') + '(' + d.percent + ' %)';
+		if (d.percent >= 100) setTimeout(function () { box.remove(); }, 5000);
+	});
+})();

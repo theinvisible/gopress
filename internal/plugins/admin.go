@@ -174,6 +174,7 @@ func (h *Host) Migrate(ctx context.Context, name string) (string, error) {
 		return "", ErrUnavailable
 	}
 	var out AdminDoOut
+	ctx = context.WithValue(ctx, migratingKey{}, true)
 	if err := p.call(ctx, ExportMigrate, callMigrate, struct{}{}, &out); err != nil {
 		return "", err
 	}

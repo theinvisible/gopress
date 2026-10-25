@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/live"
 	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/plugins/plugintest"
 	"github.com/theinvisible/gopress/internal/site"
@@ -42,6 +43,27 @@ type hostEnv struct {
 	h    *Host
 	srv  *httptest.Server
 	mail *fakeMailer
+	live *fakeLive
+}
+
+// fakeLive records live events.
+type fakeLive struct {
+	mu     sync.Mutex
+	events []live.Event
+}
+
+func (l *fakeLive) Publish(e live.Event) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.events = append(l.events, e)
+}
+
+func (l *fakeLive) take() []live.Event {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ev := l.events
+	l.events = nil
+	return ev
 }
 
 // fakeMailer records queued mail.
@@ -122,8 +144,8 @@ func newHostEnv(t *testing.T) *hostEnv {
 		},
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}}
-	e.mail = &fakeMailer{}
-	e.h, err = New(ctx, Options{DB: d, Store: store, Site: s, Log: log, HTTP: client, Mail: e.mail})
+	e.mail, e.live = &fakeMailer{}, &fakeLive{}
+	e.h, err = New(ctx, Options{DB: d, Store: store, Site: s, Log: log, HTTP: client, Mail: e.mail, Live: e.live})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -439,5 +461,87 @@ func TestHostExtensions(t *testing.T) {
 	}
 	if got := e.op(map[string]string{"do": "stash", "kind": "option"}); strings.Contains(got, "abc") {
 		t.Errorf("options without permission: %s", got)
+	}
+}
+
+// Live events from plugins: notices, page events, import progress, and
+// the core's notice when a plugin is paused.
+func TestLiveEvents(t *testing.T) {
+	e := newHostEnv(t)
+	ctx := context.Background()
+	if got := e.op(map[string]string{"do": "notify", "text": "New\n donation  <b>", "kind": "success", "cap": "moderate_comments"}); got != "null" {
+		t.Fatalf("notify: %s", got)
+	}
+	ev := e.live.take()
+	if len(ev) != 1 || ev[0].Type != "notice" || ev[0].Capability != "moderate_comments" {
+		t.Fatalf("notice: %+v", ev)
+	}
+	if d := ev[0].Data.(map[string]any); d["text"] != "New donation <b>" || d["source"] != "Tester" {
+		t.Errorf("notice data: %v", d)
+	}
+	for attrs, want := range map[[2]string]string{
+		{"kind", "evil"}:            "kind",
+		{"cap", "activate_plugins"}: "capability",
+		{"text", " "}:               "empty",
+	} {
+		a := map[string]string{"do": "notify", attrs[0]: attrs[1]}
+		if got := e.op(a); !strings.Contains(got, want) {
+			t.Errorf("notify %v: %s", attrs, got)
+		}
+	}
+	// Page events only to the plugin's own iframe pages.
+	if got := e.op(map[string]string{"do": "livepub", "page": "app"}); got != "null" {
+		t.Fatalf("livepub: %s", got)
+	}
+	ev = e.live.take()
+	if len(ev) != 1 || ev[0].Topic != "plugin:tester:app" || ev[0].Capability != "manage_options" {
+		t.Errorf("page event: %+v", ev)
+	}
+	if got := e.op(map[string]string{"do": "livepub", "page": "settings"}); !strings.Contains(got, "iframe") {
+		t.Errorf("event to a settings page: %s", got)
+	}
+	// Progress only during the import.
+	if got := e.op(map[string]string{"do": "progress"}); !strings.Contains(got, "only for the WordPress import") {
+		t.Errorf("progress outside the import: %s", got)
+	}
+	e.live.take()
+	if _, err := e.h.Migrate(ctx, "tester"); err != nil {
+		t.Fatal(err)
+	}
+	if ev = e.live.take(); len(ev) == 0 || ev[0].Type != "import.progress" {
+		t.Errorf("import progress: %+v", ev)
+	}
+	// The notice limit.
+	var last string
+	for range noticesPerMin + 1 {
+		last = e.op(map[string]string{"do": "notify"})
+	}
+	if !strings.Contains(last, "limit") {
+		t.Errorf("notice limit: %s", last)
+	}
+	// Paused after errors: administrators are told.
+	e.live.take()
+	for range breakerFailures {
+		e.shortcode("panic", nil)
+	}
+	found := false
+	for _, x := range e.live.take() {
+		found = found || (x.Type == "plugin.paused" && x.Capability == "activate_plugins")
+	}
+	if !found {
+		t.Error("no plugin.paused event")
+	}
+	// Without the permission.
+	p := e.h.get("tester")
+	p.mu.Lock()
+	p.paused = time.Time{}
+	p.mu.Unlock()
+	pkg := e.h.Package("tester")
+	pkg.Manifest.Permissions.Data = nil
+	if err := e.h.Activate(ctx, "tester", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.op(map[string]string{"do": "notify"}); !strings.Contains(got, "permission denied") {
+		t.Errorf("notify without permission: %s", got)
 	}
 }

@@ -154,6 +154,7 @@ const (
 	DataImportPrefix   = "import:"        // import:<kind> of the import stash, e.g. import:post:fslb_gallery
 	DataImportOption   = "import:option:" // import:option:<name>: one imported option
 	DataMailAdmins     = "mail:admins"    // send plain-text mail to the administrators
+	DataNotifyAdmins   = "notify:admins"  // live notices in the admin
 )
 
 var fieldTypes = []string{"text", "textarea", "number", "checkbox", "select", "url", "email", "password", "color", "media", "media_list"}
@@ -375,7 +376,8 @@ func (p *Permissions) validate() error {
 	}
 	for _, d := range p.Data {
 		switch {
-		case d == DataPostsRead, d == DataMediaRead, d == DataCommentsRead, d == DataCommentsModify, d == DataMailAdmins:
+		case d == DataPostsRead, d == DataMediaRead, d == DataCommentsRead, d == DataCommentsModify, d == DataMailAdmins,
+			d == DataNotifyAdmins:
 		case strings.HasPrefix(d, DataImportOption):
 			// Imported options are granted one by one: the stash holds the
 			// options of every plugin of the source site (API keys too).
@@ -553,6 +555,7 @@ var dataLabels = map[string]string{
 	DataCommentsRead:   "Read comments",
 	DataCommentsModify: "Change the status of comments (approve, spam, trash)",
 	DataMailAdmins:     "Send e-mail to the administrators",
+	DataNotifyAdmins:   "Show live notices in the admin",
 }
 
 // CompareVersions compares two semantic versions (-1, 0, 1); pre-releases

@@ -26,6 +26,7 @@ import (
 	"github.com/theinvisible/gopress/internal/config"
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/live"
 	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/mcpserver"
 	"github.com/theinvisible/gopress/internal/media"
@@ -196,7 +197,9 @@ func cmdServe(args []string, stderr io.Writer) int {
 		return 1
 	}
 	defer pluginStore.Close()
-	pluginHost, err := plugins.New(ctx, plugins.Options{DB: d, Store: pluginStore, Site: public, Log: log,
+	liveHub := live.NewHub()
+	contentSvc.SetLive(liveHub)
+	pluginHost, err := plugins.New(ctx, plugins.Options{Live: liveHub, DB: d, Store: pluginStore, Site: public, Log: log,
 		CacheDir: filepath.Join(cfg.DataDir, "cache", "wasm"), ClientIP: authSvc.ClientIP, Mail: mailSvc})
 	if err != nil {
 		log.Error("plugins", "err", err)
@@ -207,7 +210,7 @@ func cmdServe(args []string, stderr io.Writer) int {
 	public.SetCommentFilter(pluginHost.CommentFilter())
 	contentSvc.SetCommentStatusHook(pluginHost.CommentStatusChanged)
 	content.SetPluginShortcodes(pluginHost.ShortcodeNames)
-	adm, err := admin.New(d, authSvc, public, contentSvc, admin.Options{Log: log, Mail: mailSvc, MailSink: *mailSink != "",
+	adm, err := admin.New(d, authSvc, public, contentSvc, admin.Options{Log: log, Mail: mailSvc, Live: liveHub, MailSink: *mailSink != "",
 		Plugins: pluginHost})
 	if err != nil {
 		log.Error("admin", "err", err)
@@ -234,6 +237,7 @@ func cmdServe(args []string, stderr io.Writer) int {
 		MaxHeaderBytes:    64 << 10,
 	}
 
+	srv.RegisterOnShutdown(adm.StopLive)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 	log.Info("listening", "addr", cfg.Addr, "data", cfg.DataDir, "version", buildinfo.String())

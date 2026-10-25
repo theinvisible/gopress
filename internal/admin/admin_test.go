@@ -19,6 +19,7 @@ import (
 	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/live"
 	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/media"
 	"github.com/theinvisible/gopress/internal/plugins"
@@ -42,6 +43,7 @@ type testEnv struct {
 	cs      *content.Service
 	uploads string
 	plugins *plugins.Host
+	live    *live.Hub
 }
 
 // mails delivers the queued mail and returns the messages sent so far
@@ -124,13 +126,15 @@ func newEnvWith(t *testing.T, withPlugins bool) *testEnv {
 	cs.SetMediaStore(store)
 	pub.SetCommentNotifier(cs.NotifyComment)
 	e.pub, e.cs = pub, cs
+	e.live = live.NewHub()
+	cs.SetLive(e.live)
 	var host *plugins.Host
 	if withPlugins {
 		pstore, err := plugins.OpenStore(t.TempDir(), nil, log)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if host, err = plugins.New(ctx, plugins.Options{DB: d, Store: pstore, Site: pub, Log: log}); err != nil {
+		if host, err = plugins.New(ctx, plugins.Options{DB: d, Store: pstore, Site: pub, Log: log, Live: e.live}); err != nil {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { host.Close(context.Background()) })
@@ -146,7 +150,7 @@ func newEnvWith(t *testing.T, withPlugins bool) *testEnv {
 		cs.SetCommentStatusHook(host.CommentStatusChanged)
 		e.plugins = host
 	}
-	ad, err := New(d, e.auth, pub, cs, Options{Log: log, Mail: e.mail, MailSink: true, Plugins: host})
+	ad, err := New(d, e.auth, pub, cs, Options{Log: log, Mail: e.mail, MailSink: true, Plugins: host, Live: e.live})
 	if err != nil {
 		t.Fatal(err)
 	}

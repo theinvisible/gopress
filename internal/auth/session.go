@@ -115,11 +115,31 @@ func (s *Service) StartSession(ctx context.Context, w http.ResponseWriter, r *ht
 // Load returns the valid session of r, or nil. Expired sessions are
 // deleted.
 func (s *Service) Load(ctx context.Context, r *http.Request) (*Current, error) {
+	return s.load(ctx, r, true)
+}
+
+// LoadPassive is Load for background requests (live updates, presence):
+// it does not count as activity, so an open tab does not keep an idle
+// session alive.
+func (s *Service) LoadPassive(ctx context.Context, r *http.Request) (*Current, error) {
+	return s.load(ctx, r, false)
+}
+
+// Recheck reloads the session cur belongs to (and its user) without
+// counting as activity; nil if it ended (logout, expiry, revocation).
+func (s *Service) Recheck(ctx context.Context, cur *Current) (*Current, error) {
+	return s.loadHash(ctx, cur.Session.IDHash, false)
+}
+
+func (s *Service) load(ctx context.Context, r *http.Request, touch bool) (*Current, error) {
 	c, err := r.Cookie(SessionCookie)
 	if err != nil || c.Value == "" || len(c.Value) > 100 {
 		return nil, nil
 	}
-	h := hashToken(c.Value)
+	return s.loadHash(ctx, hashToken(c.Value), touch)
+}
+
+func (s *Service) loadHash(ctx context.Context, h []byte, touch bool) (*Current, error) {
 	sess, err := db.GetSession(ctx, s.db.R, h)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -140,7 +160,7 @@ func (s *Service) Load(ctx context.Context, r *http.Request) (*Current, error) {
 	if err != nil {
 		return nil, err
 	}
-	if now-sess.LastSeen >= int64(touchInterval/time.Second) {
+	if touch && now-sess.LastSeen >= int64(touchInterval/time.Second) {
 		if err := db.TouchSession(ctx, s.db.W, h, now); err != nil {
 			return nil, err
 		}
