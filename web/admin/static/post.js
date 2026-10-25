@@ -111,7 +111,7 @@
 					state.textContent = '';
 					busy = false;
 				};
-				frame.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+				frame.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'gp_live_preview=1&t=' + Date.now();
 			}).catch(function () { busy = false; state.textContent = 'Update failed'; });
 		};
 		var setOpen = function (open) {

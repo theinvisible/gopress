@@ -96,7 +96,7 @@
 				document.dispatchEvent(new CustomEvent('gp-live', { detail: { type: type, data: data } }));
 			});
 		});
-		es.addEventListener('open', function () { backoff = 5000; });
+		es.addEventListener('open', function () { backoff = 5000; window.gp.live = { connected: true }; });
 		es.addEventListener('error', function () {
 			// The browser retries by itself unless the server refused the
 			// stream (closed): then back off, up to five minutes.
@@ -110,5 +110,8 @@
 	window.addEventListener('pageshow', function (ev) {
 		if (ev.persisted) { stopped = false; connect(); } // back from the page cache
 	});
-	connect();
+	// Connect a moment after the page has loaded: the stream stays open and
+	// must not hold up the page.
+	var start = function () { setTimeout(connect, 1000); };
+	if (document.readyState === 'complete') { start(); } else { window.addEventListener('load', start); }
 })();

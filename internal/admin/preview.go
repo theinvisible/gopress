@@ -3,7 +3,6 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
-	"net/url"
 
 	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/db"
@@ -66,9 +65,8 @@ func (pv *previewer) Visitor(r *http.Request) *site.Visitor {
 	}
 	if r.Header.Get("Sec-Fetch-Dest") == "iframe" && r.Header.Get("Sec-Fetch-Site") == "same-origin" {
 		v.ShowBar = false // framed by the customizer or the editor's live preview
-		// Drafts of the customizer only in its own frame.
-		ref, _ := url.Parse(r.Referer())
-		if ref != nil && ref.Path == "/admin/customize" && auth.Can(u, auth.CapEditThemeOptions) {
+		// Customizer drafts not in the editor's live preview.
+		if r.URL.Query().Get("gp_live_preview") == "" && auth.Can(u, auth.CapEditThemeOptions) {
 			if raw, _ := db.UserMeta(ctx, pv.a.db.R, u.ID, metaCustomizeDraft); raw != "" {
 				var d map[string]any
 				if json.Unmarshal([]byte(raw), &d) == nil {

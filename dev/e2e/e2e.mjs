@@ -14,7 +14,7 @@ async function step(name, fn) {
 		console.log(`ok   ${name} (${Date.now() - t} ms)`);
 	} catch (e) {
 		results.push([false, name]);
-		console.log(`FAIL ${name}\n     ${e.stack.split('\n').slice(0, 3).join('\n     ')}`);
+		console.log(`FAIL ${name}\n     ${e.message.slice(0, 400).replace(/\n/g, '\n     ')}\n     ${e.stack.split('\n').filter((l) => l.includes('e2e.mjs')).slice(0, 2).join('\n     ')}`);
 		if (process.env.SHOTS) await page.screenshot({ path: `/tmp/e2e-fail-${results.length}.png`, fullPage: true });
 	}
 }
@@ -661,6 +661,143 @@ await step('plugins: upload hello, approve, settings, editor button, board page,
 	await go('/admin/plugins/');
 	await submit('form[action="/admin/plugins/hello/deactivate"] button');
 	assert.doesNotMatch(await fetchPage('/?p=' + id), /hello-greeting/);
+});
+
+await step('live updates: new comment toast and badge, live preview in the editor', async () => {
+	// A post to comment on and to preview.
+	await go('/admin/posts/new');
+	await page.waitForSelector('.gp-content');
+	await page.type('#title', 'E2E Live');
+	await page.click('.gp-content');
+	await page.keyboard.type('Live body text.');
+	await submit('#publish');
+	const id = page.url().match(/posts\/(\d+)\/edit/)[1];
+
+	// Comments wait for moderation during this step.
+	const moderation = async (on) => {
+		await go('/admin/settings/discussion');
+		if (await page.$eval('input[name=comment_moderation]', (i) => i.checked) !== on) await page.click('input[name=comment_moderation]');
+		await submit('p.submit input[type=submit]');
+	};
+	await moderation(true);
+
+	// The dashboard has the live stream open; a visitor comments.
+	await go('/admin/');
+	await page.waitForFunction(() => window.gp.live && window.gp.live.connected, { timeout: 10000 });
+	const before = await page.$eval('#wp-admin-bar-comments .pending-count', (e) => Number(e.textContent));
+	const o = await otherBrowser();
+	await o.go('/?p=' + id);
+	await o.p.type('#author', 'Live Visitor');
+	await o.p.type('#email', 'live-visitor@example.net');
+	await o.p.type('#comment', 'A comment for the live test.');
+	await new Promise((r) => setTimeout(r, 3500)); // the form's minimum fill time
+	await o.submit('#commentform #submit');
+	await o.ctx.close();
+	await page.waitForSelector('.gp-toast', { timeout: 10000 });
+	assert.match(await text('.gp-toast p'), /New comment by Live Visitor awaits moderation/);
+	await page.waitForFunction((n) => Number(document.querySelector('#wp-admin-bar-comments .pending-count').textContent) === n + 1,
+		{ timeout: 5000 }, before);
+
+	// Live preview: a side panel that follows the editor.
+	await go('/admin/posts/' + id + '/edit');
+	await page.waitForSelector('.gp-content');
+	await page.click('#post-live-preview');
+	const frame = await (await page.waitForSelector('#gp-live-preview iframe')).contentFrame();
+	await page.waitForFunction(() => document.querySelector('#gp-live-preview iframe').contentDocument?.body?.textContent.includes('Live body text.'),
+		{ timeout: 15000 });
+	assert.ok(frame);
+	await page.click('.gp-content');
+	await page.keyboard.press('End');
+	await page.keyboard.type(' Typed later.');
+	await page.waitForFunction(() => document.querySelector('#gp-live-preview iframe').contentDocument?.body?.textContent.includes('Typed later.'),
+		{ timeout: 15000 });
+	await page.click('.gp-live-preview-close');
+	assert.equal(await page.$eval('#gp-live-preview', (e) => e.hidden), true);
+	await moderation(false);
+});
+
+await step('bundled plugins: activate, gallery with lightbox, donation widget, Akismet settings', async () => {
+	const reauth = async () => {
+		if (!page.url().includes('/admin/reauth')) return false;
+		await page.type('#pwd', PASSWORD);
+		await page.type('#code', await freshTOTP(secret));
+		await submit('form[action="/admin/reauth"] button[type=submit]');
+		return true;
+	};
+	const activate = async (name, want) => {
+		await go('/admin/plugins/' + name + '/activate');
+		if (await reauth()) await go('/admin/plugins/' + name + '/activate');
+		assert.match(await text('.gp-permission-list'), want);
+		await submit('form[action="/admin/plugins/' + name + '/activate"] button[type=submit]');
+		if (await reauth()) await submit('form[action="/admin/plugins/' + name + '/activate"] button[type=submit]');
+		assert.match(await text('.notice'), /Plugin activated/);
+	};
+	await activate('foto-slider-lightbox', /Read imported WordPress data \(post:fslb_gallery\)/);
+	await activate('paypal-donations', /Send e-mail to the administrators/);
+
+	// Gallery: create one in the sandboxed admin page.
+	await go('/admin/plugin/foto-slider-lightbox/galleries');
+	const gframe = await (await page.waitForSelector('iframe[data-plugin-frame]')).contentFrame();
+	await gframe.waitForFunction(() => !document.getElementById('rows').textContent.includes('Loading'));
+	await gframe.click('#add');
+	await gframe.type('#title', 'E2E Gallery');
+	await gframe.click('#pick');
+	await page.waitForSelector('.gp-media-dialog li[role=option]');
+	const options = await page.$$('.gp-media-dialog li[role=option]');
+	await options[0].click();
+	if (options[1]) await options[1].click({ modifiers: ['Control'] });
+	await page.click('.gp-media-frame footer .button-primary');
+	await gframe.waitForSelector('#images li img');
+	await gframe.click('#save');
+	await page.waitForSelector('.notice-success');
+	const sc = await gframe.$eval('#shortcode', (e) => e.textContent);
+	const gid = sc.match(/id="(\d+)"/)[1];
+
+	// Insert it with the editor button (dialog page), publish.
+	await go('/admin/posts/new');
+	await page.waitForSelector('.gp-content');
+	await page.type('#title', 'E2E Gallery Post');
+	await page.click('.gp-content');
+	const btn = await page.waitForSelector('xpath/.//div[contains(@class,"gp-editor-header")]//button[contains(., "Photo gallery")]');
+	await btn.click();
+	const dframe = await (await page.waitForSelector('dialog.gp-dialog iframe')).contentFrame();
+	await dframe.waitForSelector('input[name=gallery]');
+	await dframe.$eval('input[name=gallery][value="' + gid + '"]', (r) => r.click());
+	await dframe.click('#insert');
+	await page.waitForFunction((g) => document.querySelector('.gp-content').textContent.includes('[fotogalerie id="' + g + '"]'), {}, gid);
+	await submit('#publish');
+	const pid = page.url().match(/posts\/(\d+)\/edit/)[1];
+
+	// The public page: slider and lightbox.
+	await go('/?p=' + pid);
+	await page.waitForSelector('.fslb-gallery .swiper-initialized', { timeout: 5000 });
+	await page.click('.fslb-open');
+	await page.waitForFunction(() => { const lb = document.querySelector('.fslb-lightbox'); return lb && !lb.hidden; });
+	await page.waitForFunction(() => document.activeElement.className === 'fslb-lb-close', { timeout: 3000 });
+	await page.keyboard.press('Escape');
+	await page.waitForFunction(() => document.querySelector('.fslb-lightbox').hidden);
+
+	// PayPal: the widget's form on the site, the donation list, no IPN
+	// while recording is off.
+	const home = await fetchPage('/');
+	assert.match(home, /<form action="https:\/\/www\.paypal\.com\/cgi-bin\/webscr" method="post"/);
+	assert.match(home, /name="cmd" value="_donations"/);
+	assert.equal(await page.evaluate(async (u) => (await fetch(u, { method: 'POST', credentials: 'omit', body: 'x=1' })).status,
+		BASE + '/plugins/paypal-donations/ipn'), 404);
+	await go('/admin/plugin/paypal-donations/donations');
+	assert.ok(await page.$('table'), 'donation list');
+
+	// Akismet: activated, the key is never shown. The settings are not
+	// saved here: that would check the imported key with Akismet.
+	await activate('akismet', /Read the imported WordPress option wordpress_api_key/);
+	await go('/admin/plugin/akismet/settings');
+	assert.equal(await page.$eval('input[name=api_key]', (i) => i.value), '', 'the key is never shown');
+	await go('/admin/');
+	assert.match(await text('#wpbody-content'), /Akismet has protected your site/);
+
+	// Done: deactivate Akismet (no comment of later steps goes anywhere).
+	await go('/admin/plugins/');
+	await submit('form[action="/admin/plugins/akismet/deactivate"] button');
 });
 
 await step('scheduled post is published by the scheduler', async () => {
