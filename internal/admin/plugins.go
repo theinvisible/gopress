@@ -381,8 +381,12 @@ func (a *Admin) renderPluginPage(w http.ResponseWriter, r *http.Request, c *reqC
 			d.Error = plugins.ErrorMessage(err)
 		} else {
 			d.Table = out
-			if len(out.Rows) > 0 {
-				d.Pages = max(1, (out.Total+len(out.Rows)-1)/max(len(out.Rows), 1))
+			per := out.PerPage
+			if per <= 0 {
+				per = len(out.Rows)
+			}
+			if per > 0 {
+				d.Pages = max(1, (out.Total+per-1)/per)
 			}
 		}
 	case "iframe":

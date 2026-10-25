@@ -586,3 +586,18 @@ func TestTemplates(t *testing.T) {
 		t.Errorf("endless template: %v after %s", err, time.Since(start))
 	}
 }
+
+func TestImportSettings(t *testing.T) {
+	e := newHostEnv(t)
+	ctx := context.Background()
+	if got := e.op(map[string]string{"do": "setsettings"}); !strings.Contains(got, "only be set during the WordPress import") {
+		t.Errorf("outside the import: %s", got)
+	}
+	if _, err := e.h.Migrate(ctx, "tester"); err != nil {
+		t.Fatal(err)
+	}
+	set, _ := e.h.Settings(ctx, "tester", "settings")
+	if set["greeting"] != "Imported" || set["count"] != 5.0 {
+		t.Errorf("imported settings: %v", set)
+	}
+}

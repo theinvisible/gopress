@@ -109,6 +109,8 @@ func init() {
 			err = gp.LivePublish(r.Attr("page", "app"), map[string]string{"n": r.Attr("n", "1")})
 		case "progress":
 			err = gp.Progress(50, "half")
+		case "setsettings":
+			err = gp.SetSettings("settings", map[string]any{"greeting": "x"})
 		}
 		if err != nil {
 			return gp.Render{HTML: "error: " + err.Error()}, nil
@@ -170,6 +172,15 @@ func init() {
 	gp.HandleMigrate(func() (string, error) {
 		if err := gp.Progress(10, "starting"); err != nil {
 			return "", err
+		}
+		if err := gp.SetSettings("settings", map[string]any{"greeting": "Imported", "count": 5}); err != nil {
+			return "", err
+		}
+		if err := gp.SetSettings("settings", map[string]any{"count": 99}); err == nil {
+			return "", errors.New("out of range settings accepted")
+		}
+		if err := gp.SetSettings("settings", map[string]any{"evil": 1}); err == nil {
+			return "", errors.New("unknown field accepted")
 		}
 		items, err := gp.Stash("post:tester_item")
 		if err != nil {

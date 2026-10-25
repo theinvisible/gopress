@@ -151,6 +151,7 @@ type Option struct {
 type Table struct {
 	Rows    []Row    `json:"rows"`
 	Total   int      `json:"total"`
+	PerPage int      `json:"per_page,omitempty"` // rows per page; the admin pages with Query["paged"]
 	Actions []Option `json:"actions,omitempty"`
 	Notice  string   `json:"notice,omitempty"`
 }

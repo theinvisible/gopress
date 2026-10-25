@@ -174,3 +174,68 @@ func (h *Host) SaveSettings(ctx context.Context, name, page string, values map[s
 	h.opts.Site.Invalidate()
 	return nil
 }
+
+// ImportSettings sets values of a settings page during the WordPress
+// import (host function settings_set): the plugin brings over its old
+// options. Unknown fields are refused; the result is validated like the
+// admin form.
+func (h *Host) ImportSettings(ctx context.Context, name, page string, values map[string]any) error {
+	pg, err := h.settingsPage(name, page)
+	if err != nil {
+		return err
+	}
+	cur, err := h.Settings(ctx, name, page)
+	if err != nil {
+		return err
+	}
+	for k, v := range values {
+		if !slices.ContainsFunc(pg.Fields, func(f Field) bool { return f.Name == k }) {
+			return userErr("unknown field " + strconv.Quote(k))
+		}
+		cur[k] = v
+	}
+	form := map[string][]string{}
+	for _, f := range pg.Fields {
+		form[f.Name] = formStrings(f, cur[f.Name])
+	}
+	parsed, err := ParseFields(pg.Fields, func(n string) []string { return form[n] })
+	if err != nil {
+		return userErr(err.Error())
+	}
+	return h.SaveSettings(ctx, name, page, parsed)
+}
+
+// formStrings turns a stored or imported value into form input.
+func formStrings(f Field, v any) []string {
+	switch x := v.(type) {
+	case nil:
+		return nil
+	case bool:
+		if x {
+			return []string{"1"}
+		}
+		return nil
+	case float64:
+		if f.Type == "checkbox" {
+			if x != 0 {
+				return []string{"1"}
+			}
+			return nil
+		}
+		return []string{strconv.FormatFloat(x, 'f', -1, 64)}
+	case string:
+		if f.Type == "checkbox" && (x == "" || x == "0") {
+			return nil
+		}
+		return []string{x}
+	case []any:
+		var out []string
+		for _, e := range x {
+			if n, ok := e.(float64); ok {
+				out = append(out, strconv.FormatFloat(n, 'f', -1, 64))
+			}
+		}
+		return []string{strings.Join(out, ",")}
+	}
+	return nil
+}

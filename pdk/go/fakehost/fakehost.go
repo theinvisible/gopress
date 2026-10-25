@@ -245,6 +245,19 @@ func (h *Host) call(op string, raw json.RawMessage) (any, error) {
 	case "progress":
 		h.Progress = append(h.Progress, a.Percent)
 		return true, nil
+	case "settings_set":
+		var r struct {
+			Page   string         `json:"page"`
+			Values map[string]any `json:"values"`
+		}
+		json.Unmarshal(raw, &r)
+		if h.Settings[r.Page] == nil {
+			h.Settings[r.Page] = map[string]any{}
+		}
+		for k, v := range r.Values {
+			h.Settings[r.Page][k] = v
+		}
+		return true, nil
 	case "templates":
 		h.templateVersion++
 		return map[string]any{"version": fmt.Sprint(h.templateVersion), "files": h.Templates}, nil

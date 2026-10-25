@@ -256,3 +256,11 @@ func LivePublish(page string, data any) error {
 func Progress(percent int, text string) error {
 	return call("progress", map[string]any{"percent": percent, "text": text}, nil)
 }
+
+// SetSettings sets values of one of the plugin's settings pages; only
+// inside HandleMigrate (to bring over the WordPress plugin's options).
+// The values are checked like the admin form (unknown fields, types,
+// ranges).
+func SetSettings(page string, values map[string]any) error {
+	return call("settings_set", map[string]any{"page": page, "values": values}, nil)
+}

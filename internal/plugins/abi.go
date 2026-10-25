@@ -159,7 +159,8 @@ type TableRow struct {
 type AdminPageOut struct {
 	Rows    []TableRow `json:"rows"`
 	Total   int        `json:"total"`
-	Actions []Option   `json:"actions,omitempty"` // bulk actions (value, label)
+	PerPage int        `json:"per_page,omitempty"` // rows per page (paging); default: the rows of this page
+	Actions []Option   `json:"actions,omitempty"`  // bulk actions (value, label)
 	Notice  string     `json:"notice,omitempty"`
 }
 

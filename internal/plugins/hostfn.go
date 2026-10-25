@@ -420,6 +420,19 @@ func (p *plugin) op(ctx context.Context, op string, raw json.RawMessage) (any, e
 		}
 		return true, nil
 
+	case "settings_set":
+		if ctx.Value(migratingKey{}) == nil {
+			return nil, userErr("settings can only be set during the WordPress import")
+		}
+		a, err := args[struct {
+			Page   string
+			Values map[string]any
+		}](raw)
+		if err != nil {
+			return nil, err
+		}
+		return true, h.ImportSettings(ctx, name, a.Page, a.Values)
+
 	case "templates":
 		a, err := args[struct{ Version string }](raw)
 		if err != nil {
