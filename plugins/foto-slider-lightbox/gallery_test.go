@@ -43,6 +43,7 @@ func render(t *testing.T, attrs map[string]string) gp.Render {
 func TestShortcode(t *testing.T) {
 	h := newHost(t)
 	h.Put("galleries", "791", Gallery{ID: 791, Title: "Trip", Images: []int64{2, 1, 3, 99}, Captions: true})
+	h.Site.ContentWidth = 625 // Twenty Twelve
 	out := render(t, map[string]string{"id": "791"})
 	if len(out.Assets) != 4 {
 		t.Errorf("assets: %v", out.Assets)
@@ -53,9 +54,9 @@ func TestShortcode(t *testing.T) {
 		`<div class="swiper-slide fslb-slide"><button type="button" class="fslb-open"`,
 		`data-fslb-index="0" data-full="https://example.org/wp-content/uploads/2026/07/p2.png"`,
 		`data-fslb-index="1"`,
-		`src="https://example.org/wp-content/uploads/2026/07/p1-1024x640.png" width="1024" height="640"`,
+		`src="https://example.org/wp-content/uploads/2026/07/p1-1024x640.png" width="625" height="391"`,
 		`srcset="https://example.org/wp-content/uploads/2026/07/p1-300x188.png 300w, https://example.org/wp-content/uploads/2026/07/p1-1024x640.png 1024w, https://example.org/wp-content/uploads/2026/07/p1.png 1440w"`,
-		`sizes="(max-width: 1024px) 100vw, 1024px"`,
+		`sizes="auto, (max-width: 625px) 100vw, 625px"`,
 		`<figcaption class="fslb-caption">First photo &amp; more</figcaption>`,
 		`data-caption="First photo &amp; more"`,
 		`<div class="swiper-pagination fslb-pagination"></div>`,
@@ -201,5 +202,18 @@ func TestLargeGallery(t *testing.T) {
 	out := render(t, map[string]string{"id": "9"})
 	if n := strings.Count(out.HTML, `class="fslb-open"`); n != 250 {
 		t.Errorf("slides: %d", n)
+	}
+}
+
+func TestConstrain(t *testing.T) {
+	for _, c := range [][5]int{
+		{1024, 640, 625, 625, 391}, // wp_get_attachment_image( 'large' ) in Twenty Twelve
+		{600, 400, 625, 600, 400},  // narrower than the column
+		{1024, 640, 0, 1024, 640},  // no content width
+		{2000, 3, 625, 625, 1},     // never 0
+	} {
+		if w, h := constrain(c[0], c[1], c[2]); w != c[3] || h != c[4] {
+			t.Errorf("constrain(%d, %d, %d) = %d, %d; want %d, %d", c[0], c[1], c[2], w, h, c[3], c[4])
+		}
 	}
 }

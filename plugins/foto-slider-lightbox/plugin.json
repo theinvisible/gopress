@@ -1,6 +1,6 @@
 {
 	"name": "foto-slider-lightbox",
-	"version": "2.0.0",
+	"version": "2.0.1",
 	"title": "Photo Slider & Lightbox",
 	"description": "Photo galleries as a slider with a lightbox (zoom, thumbnails, keyboard). Galleries are managed in the admin and placed with the [fotogalerie id=\"…\"] shortcode.",
 	"author": "GoPress",

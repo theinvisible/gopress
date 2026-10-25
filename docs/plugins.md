@@ -184,7 +184,7 @@ return gp.Render{HTML: out}, err
 | Function | Notes |
 |---|---|
 | `Log(level, msg)` | Server log, rate-limited. |
-| `Site()` | Name, tagline, URL, language, time zone. |
+| `Site()` | Name, tagline, URL, language, time zone, and the theme's content width (WordPress limits "large" images to it). |
 | `KVGet`, `KVSet`, `KVDelete`, `KVList`, `KVCount` | The plugin's own storage: JSON values up to 1 MB, 50 MB in total. |
 | `Settings(page)` | Values of a settings page. |
 | `Posts`, `GetPost` | Published content (`posts:read`). |

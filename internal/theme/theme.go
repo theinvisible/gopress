@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -19,7 +20,11 @@ var pageKinds = []string{"index", "single", "page", "archive", "search", "404", 
 
 // Theme is a loaded theme.
 type Theme struct {
-	Name   string
+	Name string
+	// ContentWidth is the theme's $content_width: the widest image the
+	// content column shows; WordPress limits "large" images to it.
+	ContentWidth int
+
 	root   fs.FS
 	static fs.FS
 	pages  map[string]*template.Template
@@ -39,6 +44,15 @@ func Load(fsys fs.FS, name string) (*Theme, error) {
 		return nil, err
 	}
 	t := &Theme{Name: name, root: root, static: static, pages: map[string]*template.Template{}, hashes: map[string]string{}}
+	if data, err := fs.ReadFile(root, "theme.json"); err == nil {
+		var meta struct {
+			ContentWidth int `json:"content_width"`
+		}
+		if err := json.Unmarshal(data, &meta); err != nil {
+			return nil, fmt.Errorf("theme %s: theme.json: %w", name, err)
+		}
+		t.ContentWidth = max(meta.ContentWidth, 0)
+	}
 
 	base := template.New("layout").Funcs(template.FuncMap{
 		"asset": t.AssetPath,

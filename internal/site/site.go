@@ -109,6 +109,7 @@ func (s *Site) current(ctx context.Context) (*state, error) {
 		settings.Home = strings.TrimRight(s.opts.BaseURL, "/")
 	}
 	settings.NoIndex = s.opts.NoIndex
+	settings.ContentWidth = s.theme.ContentWidth
 	ix, err := buildIndex(ctx, s.db.R)
 	if err != nil {
 		return nil, err

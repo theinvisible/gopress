@@ -44,7 +44,11 @@ func shortcode(r gp.ShortcodeRequest) (gp.Render, error) {
 	if err != nil {
 		return gp.Render{}, err
 	}
-	out, err := renderGallery(g, media, captions)
+	site, err := gp.Site()
+	if err != nil {
+		return gp.Render{}, err
+	}
+	out, err := renderGallery(g, media, captions, site.ContentWidth)
 	if err != nil || out == "" {
 		return gp.Render{}, err
 	}

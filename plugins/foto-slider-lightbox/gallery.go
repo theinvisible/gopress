@@ -104,8 +104,10 @@ type slide struct {
 }
 
 // renderGallery builds the slider of g with the images in media (in the
-// gallery's order; ids the host did not return are left out).
-func renderGallery(g Gallery, media []gp.Media, captions bool) (string, error) {
+// gallery's order; ids the host did not return are left out). Like
+// wp_get_attachment_image( $id, 'large' ), the image is limited to the
+// theme's content width (0 = no limit).
+func renderGallery(g Gallery, media []gp.Media, captions bool, contentWidth int) (string, error) {
 	byID := map[int64]gp.Media{}
 	for _, m := range media {
 		byID[m.ID] = m
@@ -125,6 +127,7 @@ func renderGallery(g Gallery, media []gp.Media, captions bool) (string, error) {
 			s.Thumb = t.URL
 		}
 		if s.Width > 0 && s.Height > 0 {
+			s.Width, s.Height = constrain(s.Width, s.Height, contentWidth)
 			s.Srcset = srcset(m)
 		} else {
 			s.Width, s.Height = 0, 0
@@ -135,6 +138,20 @@ func renderGallery(g Gallery, media []gp.Media, captions bool) (string, error) {
 		return "", nil
 	}
 	return gp.Template("gallery.html", map[string]any{"ID": g.ID, "Captions": captions, "Slides": slides})
+}
+
+// constrain is wp_constrain_dimensions() for a maximum width.
+func constrain(w, h, maxW int) (int, int) {
+	if maxW <= 0 || w <= maxW {
+		return w, h
+	}
+	ratio := float64(maxW) / float64(w)
+	nw := max(1, int(math.Round(float64(w)*ratio)))
+	nh := max(1, int(math.Round(float64(h)*ratio)))
+	if nw == maxW-1 {
+		nw = maxW
+	}
+	return nw, nh
 }
 
 // srcset lists the full image and the sizes with its aspect ratio.

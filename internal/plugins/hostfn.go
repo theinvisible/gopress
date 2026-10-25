@@ -149,8 +149,8 @@ func (p *plugin) op(ctx context.Context, op string, raw json.RawMessage) (any, e
 		if st.Loc != nil {
 			tz = st.Loc.String()
 		}
-		return map[string]string{"name": html.UnescapeString(st.Name), "tagline": html.UnescapeString(st.Description),
-			"url": st.Home + "/", "language": st.Lang, "timezone": tz}, nil
+		return map[string]any{"name": html.UnescapeString(st.Name), "tagline": html.UnescapeString(st.Description),
+			"url": st.Home + "/", "language": st.Lang, "timezone": tz, "content_width": st.ContentWidth}, nil
 
 	case "kv_get":
 		a, err := args[struct{ Collection, Key string }](raw)

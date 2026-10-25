@@ -27,6 +27,7 @@ type Settings struct {
 	Sticky        []int64
 	BlogPublic    bool
 	NoIndex       bool // set by the server (staging), not an option
+	ContentWidth  int  // the theme's content width (theme.json)
 
 	DateFormat, TimeFormat string
 	Loc                    *time.Location

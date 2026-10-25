@@ -7,7 +7,7 @@
 {{- range $i, $s := .Slides}}
 <div class="swiper-slide fslb-slide"><button type="button" class="fslb-open" data-fslb-index="{{$i}}" data-full="{{$s.Full}}" data-thumb="{{$s.Thumb}}" data-caption="{{$s.Caption}}" aria-label="Open image in lightbox"><img src="{{$s.Src}}"
 	{{- if $s.Width}} width="{{$s.Width}}" height="{{$s.Height}}"{{end}}
-	{{- if $s.Srcset}} srcset="{{$s.Srcset}}" sizes="(max-width: {{$s.Width}}px) 100vw, {{$s.Width}}px"{{end}} class="fslb-image" alt="{{$s.Alt}}" loading="lazy" decoding="async"></button>
+	{{- if $s.Srcset}} srcset="{{$s.Srcset}}" sizes="auto, (max-width: {{$s.Width}}px) 100vw, {{$s.Width}}px"{{end}} class="fslb-image" alt="{{$s.Alt}}" loading="lazy" decoding="async"></button>
 	{{- if and $.Captions $s.Caption}}<figcaption class="fslb-caption">{{$s.Caption}}</figcaption>{{end}}</div>
 {{- end}}
 </div>

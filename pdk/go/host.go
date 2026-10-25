@@ -50,6 +50,9 @@ type SiteInfo struct {
 	URL      string `json:"url"`
 	Language string `json:"language"`
 	TimeZone string `json:"timezone"`
+	// ContentWidth is the active theme's content column width in pixels
+	// (0 = unknown). WordPress limits "large" images to it.
+	ContentWidth int `json:"content_width"`
 }
 
 // Site returns information about the site.
