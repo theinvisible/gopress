@@ -45,21 +45,45 @@
 	};
 } )();
 
-// Better focus for hidden submenu items for accessibility.
-( function( $ ) {
-	$( '.main-navigation' ).find( 'a' ).on( 'focus.twentytwelve blur.twentytwelve', function() {
-		$( this ).parents( '.menu-item, .page_item' ).toggleClass( 'focus' );
-	} );
+// Better focus for hidden submenu items for accessibility. (GoPress: the
+// original uses jQuery, which GoPress does not load; same behavior in
+// plain JavaScript.)
+( function() {
+	var nav = document.querySelector( '.main-navigation' );
+	if ( ! nav ) {
+		return;
+	}
+	var parentLinks = '.menu-item-has-children > a, .page_item_has_children > a';
 
-  if ( 'ontouchstart' in window ) {
-    $('body').on( 'touchstart.twentytwelve',  '.menu-item-has-children > a, .page_item_has_children > a', function( e ) {
-      var el = $( this ).parent( 'li' );
+	function toggleFocus() {
+		for ( var el = this.parentElement; el; el = el.parentElement ) {
+			if ( el.classList.contains( 'menu-item' ) || el.classList.contains( 'page_item' ) ) {
+				el.classList.toggle( 'focus' );
+			}
+		}
+	}
+	var links = nav.getElementsByTagName( 'a' );
+	for ( var i = 0; i < links.length; i++ ) {
+		links[ i ].addEventListener( 'focus', toggleFocus );
+		links[ i ].addEventListener( 'blur', toggleFocus );
+	}
 
-      if ( ! el.hasClass( 'focus' ) ) {
-        e.preventDefault();
-        el.toggleClass( 'focus' );
-        el.siblings( '.focus').removeClass( 'focus' );
-      }
-    } );
-  }
-} )( jQuery );
+	if ( 'ontouchstart' in window ) {
+		document.body.addEventListener( 'touchstart', function( e ) {
+			var link = e.target.closest && e.target.closest( parentLinks );
+			if ( ! link ) {
+				return;
+			}
+			var el = link.parentElement;
+			if ( ! el.classList.contains( 'focus' ) ) {
+				e.preventDefault();
+				el.classList.toggle( 'focus' );
+				for ( var sib = el.parentElement.firstElementChild; sib; sib = sib.nextElementSibling ) {
+					if ( sib !== el ) {
+						sib.classList.remove( 'focus' );
+					}
+				}
+			}
+		}, { passive: false } );
+	}
+} )();
