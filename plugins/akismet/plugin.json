@@ -1,0 +1,24 @@
+{
+	"name": "akismet",
+	"version": "2.0.0",
+	"title": "Akismet Anti-spam",
+	"description": "Checks new comments with the Akismet service and reports spam and legitimate comments your moderators mark, so Akismet learns from them. Needs an Akismet API key.",
+	"author": "GoPress",
+	"api": 1,
+	"permissions": {
+		"http": ["rest.akismet.com"],
+		"hooks": ["comment_pre_save", "comment_status_changed"],
+		"data": ["import:option:wordpress_api_key", "import:option:akismet_strictness", "import:option:akismet_spam_count"]
+	},
+	"admin": [
+		{"id": "settings", "title": "Akismet Anti-spam", "menu": "settings", "capability": "manage_options", "kind": "settings",
+		 "fields": [
+			{"name": "api_key", "label": "API key", "type": "password", "max_length": 64,
+			 "help": "Your Akismet API key (from akismet.com). It is checked with Akismet when you save. Without a key, comments are not checked."},
+			{"name": "strictness", "label": "Obvious spam", "type": "select", "default": "spam", "options": [
+				{"value": "spam", "label": "Put it in the spam folder for review"},
+				{"value": "discard", "label": "Discard it silently"}]}
+		 ]}
+	],
+	"dashboard": [{"id": "stats", "title": "Akismet Anti-spam", "capability": "moderate_comments"}]
+}

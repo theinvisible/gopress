@@ -1,0 +1,19 @@
+{{- /* Dashboard box (inside the admin: text, lists and tables only). */ -}}
+{{- if not .HasKey}}
+<p><strong>Comments are not checked:</strong> enter an Akismet API key under Settings › Akismet Anti-spam.</p>
+{{- end}}
+<p>Akismet has protected your site from <strong>{{.Spam}}</strong> spam {{if eq .Spam "1"}}comment{{else}}comments{{end}}.</p>
+{{- if .Months}}
+<table>
+<thead><tr><th scope="col">Month</th><th scope="col">Spam</th><th scope="col">Legitimate</th><th scope="col">Not checked</th></tr></thead>
+<tbody>
+{{- range .Months}}
+<tr><td>{{.Month}}</td><td>{{.Spam}}</td><td>{{.Ham}}</td><td>{{.Errors}}</td></tr>
+{{- end}}
+</tbody>
+</table>
+{{- end}}
+{{- if .Corrections}}
+<p>Your moderators corrected Akismet {{.Corrections}} {{if eq .Corrections "1"}}time{{else}}times{{end}}; Akismet learns from that.</p>
+{{- end}}
+<p><a href="/admin/comments/?comment_status=spam">Spam folder</a></p>
