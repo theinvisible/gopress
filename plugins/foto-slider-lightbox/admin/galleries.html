@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Photo Galleries</title>
+<link rel="stylesheet" href="admin.css">
+<script src="/plugin-ui/_frame.js"></script>
+</head>
+<body>
+<section id="list-view">
+	<p><button type="button" class="primary" id="add">Add gallery</button></p>
+	<table class="list">
+		<thead><tr><th scope="col">Title</th><th scope="col">Images</th><th scope="col">Shortcode</th><th scope="col"><span class="sr">Actions</span></th></tr></thead>
+		<tbody id="rows"><tr><td colspan="4">Loading…</td></tr></tbody>
+	</table>
+</section>
+
+<section id="edit-view" hidden>
+	<p><button type="button" class="link" id="back">← All galleries</button></p>
+	<form id="edit">
+		<p><label for="title">Title</label><br><input type="text" id="title" maxlength="200" required></p>
+		<p><label><input type="checkbox" id="captions"> Show captions (from the media library)</label></p>
+		<p class="actions">
+			<button type="button" id="pick">Add images…</button>
+			<button type="button" id="clear">Remove all</button>
+		</p>
+		<p class="hint">Drag images to sort them, or use the arrow buttons. Click × to remove an image.</p>
+		<ul id="images" class="images" aria-label="Images of the gallery"></ul>
+		<p class="empty" id="no-images" hidden>No images yet.</p>
+		<p class="actions">
+			<button type="submit" class="primary" id="save">Save gallery</button>
+			<span id="shortcode" class="shortcode"></span>
+		</p>
+	</form>
+</section>
+<script src="galleries.js"></script>
+</body>
+</html>

@@ -1,0 +1,252 @@
+/**
+ * Foto Slider & Lightbox – front-end styles.
+ * Prefixed with .fslb- to avoid clashes; builds on the bundled Swiper CSS.
+ */
+
+/* ----------------------------------------------------------------------- *
+ * Inline slider                                                            *
+ * ----------------------------------------------------------------------- */
+
+.fslb-gallery {
+	margin-block: 1.5rem;
+}
+
+.fslb-slider {
+	width: 100%;
+	position: relative;
+	background: #000;
+}
+
+.fslb-slide {
+	display: flex;
+	flex-direction: column;
+}
+
+.fslb-open {
+	display: block;
+	width: 100%;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	cursor: zoom-in;
+	line-height: 0;
+}
+
+.fslb-open:focus-visible {
+	outline: 3px solid #4f9cff;
+	outline-offset: -3px;
+}
+
+.fslb-image {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+.fslb-caption {
+	padding: 0.6em 0.8em;
+	font-size: 0.9em;
+	line-height: 1.4;
+	text-align: center;
+	color: #444;
+}
+
+/* Arrows: a dark pill with a light ring + shadow, so they read on the dark
+   letterbox background as well as on light or dark images. */
+.fslb-slider .swiper-button-prev,
+.fslb-slider .swiper-button-next {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: rgba( 0, 0, 0, 0.5 );
+	color: #fff;
+	--swiper-navigation-color: #fff;
+	--swiper-navigation-size: 36px;
+	border: 1px solid rgba( 255, 255, 255, 0.7 );
+	box-shadow: 0 1px 4px rgba( 0, 0, 0, 0.4 );
+	transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.fslb-slider .swiper-button-prev:hover,
+.fslb-slider .swiper-button-next:hover {
+	background: rgba( 0, 0, 0, 0.72 );
+	border-color: #fff;
+	transform: scale( 1.06 );
+}
+
+.fslb-slider .swiper-button-prev::after,
+.fslb-slider .swiper-button-next::after {
+	font-size: 14px;
+	font-weight: 700;
+	text-shadow: 0 1px 2px rgba( 0, 0, 0, 0.5 );
+}
+
+.fslb-slider .swiper-button-prev:focus-visible,
+.fslb-slider .swiper-button-next:focus-visible {
+	outline: 3px solid #4f9cff;
+	outline-offset: 2px;
+}
+
+/* Pagination dots. */
+.fslb-slider .swiper-pagination-bullet {
+	background: #fff;
+	opacity: 0.6;
+}
+
+.fslb-slider .swiper-pagination-bullet-active {
+	opacity: 1;
+}
+
+/* ----------------------------------------------------------------------- *
+ * Lightbox                                                                 *
+ * ----------------------------------------------------------------------- */
+
+.fslb-lightbox {
+	position: fixed;
+	inset: 0;
+	z-index: 100000;
+	display: flex;
+}
+
+.fslb-lightbox[hidden] {
+	display: none;
+}
+
+.fslb-lb-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba( 0, 0, 0, 0.92 );
+}
+
+.fslb-lb-inner {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	padding: 3.25rem 1rem 1rem;
+	box-sizing: border-box;
+}
+
+.fslb-lb-close {
+	position: absolute;
+	top: 0.5rem;
+	right: 0.75rem;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: rgba( 255, 255, 255, 0.12 );
+	color: #fff;
+	font-size: 28px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.fslb-lb-close:hover {
+	background: rgba( 255, 255, 255, 0.25 );
+}
+
+.fslb-lb-close:focus-visible,
+.fslb-lb-thumbs .swiper-slide:focus-visible {
+	outline: 3px solid #4f9cff;
+	outline-offset: 2px;
+}
+
+.fslb-lb-counter {
+	position: absolute;
+	top: 1rem;
+	left: 1rem;
+	color: #fff;
+	font-size: 0.95rem;
+	font-variant-numeric: tabular-nums;
+	opacity: 0.85;
+}
+
+.fslb-lb-main {
+	flex: 1 1 auto;
+	min-height: 0;
+	width: 100%;
+}
+
+.fslb-lb-main .swiper-slide {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.fslb-lb-image {
+	max-width: 100%;
+	max-height: 100%;
+	width: auto;
+	height: auto;
+	object-fit: contain;
+}
+
+.fslb-lb-main .swiper-button-prev,
+.fslb-lb-main .swiper-button-next {
+	color: #fff;
+}
+
+.fslb-lb-caption {
+	flex: 0 0 auto;
+	padding: 0.75rem 1rem 0.25rem;
+	color: #eee;
+	text-align: center;
+	font-size: 0.95rem;
+}
+
+.fslb-lb-thumbs {
+	flex: 0 0 auto;
+	height: 72px;
+	margin-top: 0.75rem;
+	box-sizing: border-box;
+}
+
+.fslb-lb-thumbs .swiper-slide {
+	width: auto;
+	height: 100%;
+	opacity: 0.45;
+	cursor: pointer;
+	transition: opacity 0.15s ease;
+}
+
+.fslb-lb-thumbs .swiper-slide-thumb-active {
+	opacity: 1;
+}
+
+.fslb-lb-thumbs img {
+	display: block;
+	height: 100%;
+	width: auto;
+	border-radius: 3px;
+	object-fit: cover;
+}
+
+/* Prevent background scrolling while the lightbox is open. */
+body.fslb-lb-open {
+	overflow: hidden;
+}
+
+/* ----------------------------------------------------------------------- *
+ * Theme awareness + reduced motion                                         *
+ * ----------------------------------------------------------------------- */
+
+@media ( prefers-color-scheme: dark ) {
+
+	.fslb-caption {
+		color: #ccc;
+	}
+}
+
+@media ( prefers-reduced-motion: reduce ) {
+
+	.fslb-slider .swiper-button-prev,
+	.fslb-slider .swiper-button-next,
+	.fslb-lb-thumbs .swiper-slide {
+		transition: none;
+	}
+}

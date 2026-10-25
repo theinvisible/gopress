@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Insert a photo gallery</title>
+<link rel="stylesheet" href="admin.css">
+<script src="/plugin-ui/_frame.js"></script>
+</head>
+<body class="dialog">
+<form id="pick">
+	<fieldset>
+		<legend>Gallery</legend>
+		<div id="list" class="choices"><p>Loading…</p></div>
+	</fieldset>
+	<p><label for="captions">Captions</label>
+		<select id="captions">
+			<option value="">As set in the gallery</option>
+			<option value="1">Show</option>
+			<option value="0">Hide</option>
+		</select></p>
+	<p class="actions">
+		<button type="submit" class="primary" id="insert" disabled>Insert gallery</button>
+		<button type="button" id="cancel">Cancel</button>
+	</p>
+	<p class="hint">Galleries are created and edited under Photo Galleries in the admin menu.</p>
+</form>
+<script src="pick.js"></script>
+</body>
+</html>

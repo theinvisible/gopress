@@ -1,0 +1,22 @@
+{
+	"name": "foto-slider-lightbox",
+	"version": "2.0.0",
+	"title": "Photo Slider & Lightbox",
+	"description": "Photo galleries as a slider with a lightbox (zoom, thumbnails, keyboard). Galleries are managed in the admin and placed with the [fotogalerie id=\"…\"] shortcode.",
+	"author": "GoPress",
+	"api": 1,
+	"permissions": {
+		"data": ["media:read", "import:post:fslb_gallery"],
+		"frontend_assets": ["assets/swiper/swiper-bundle.min.css", "assets/view.css",
+			"assets/swiper/swiper-bundle.min.js", "assets/view.js"]
+	},
+	"shortcodes": [{"name": "fotogalerie", "assets": ["assets/swiper/swiper-bundle.min.css", "assets/view.css",
+		"assets/swiper/swiper-bundle.min.js", "assets/view.js"]}],
+	"admin": [
+		{"id": "galleries", "title": "Photo Galleries", "menu": "plugin", "capability": "edit_posts", "kind": "iframe",
+		 "file": "admin/galleries.html"},
+		{"id": "pick", "title": "Insert a photo gallery", "menu": "none", "capability": "edit_posts", "kind": "iframe",
+		 "file": "admin/pick.html"}
+	],
+	"editor": [{"id": "gallery", "label": "Photo gallery", "icon": "format-gallery", "shortcode": "fotogalerie", "page": "pick"}]
+}
