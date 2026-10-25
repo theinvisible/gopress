@@ -176,7 +176,7 @@ func SanitizePluginHTML(s string) string {
 		p.AllowAttrs("style").Globally()
 		p.AllowStyles("text-align", "color", "background-color", "background-image", "width", "height", "max-width",
 			"max-height", "float", "margin", "padding", "display", "font-weight", "font-style", "font-size",
-			"text-decoration", "border", "border-radius", "aspect-ratio", "object-fit", "gap").Globally()
+			"text-decoration", "border", "border-radius", "aspect-ratio", "object-fit", "gap", "cursor").Globally()
 		p.AllowDataAttributes()
 		p.AllowAttrs("aria-label", "aria-labelledby", "aria-describedby", "aria-hidden", "aria-expanded", "aria-controls",
 			"aria-current", "aria-live", "aria-modal", "aria-pressed", "aria-selected", "aria-roledescription").Globally()

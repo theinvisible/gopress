@@ -15,10 +15,14 @@ type Mailer interface {
 	Enqueue(ctx context.Context, to, template string, data mail.Data) error
 }
 
-// SetCommentStatusHook installs a function told about comments whose
-// status an editor changed (approve, unapprove, spam, unspam, trash,
-// untrash); the plugin host uses it.
-func (s *Service) SetCommentStatusHook(f func(ctx context.Context, ids []int64, action string)) {
+// CommentStatusHook is told about comments whose status an editor
+// changed (approve, unapprove, spam, unspam, trash, untrash): their ids,
+// each one's status before, the action and the editor.
+type CommentStatusHook func(ctx context.Context, ids []int64, previous []string, action string, by *db.User)
+
+// SetCommentStatusHook installs the comment status hook; the plugin host
+// uses it.
+func (s *Service) SetCommentStatusHook(f CommentStatusHook) {
 	s.statusHook = f
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/plugins/plugintest"
 	"github.com/theinvisible/gopress/internal/site"
 	"github.com/theinvisible/gopress/internal/theme"
@@ -39,6 +41,22 @@ type hostEnv struct {
 	site *site.Site
 	h    *Host
 	srv  *httptest.Server
+	mail *fakeMailer
+}
+
+// fakeMailer records queued mail.
+type fakeMailer struct {
+	mu   sync.Mutex
+	sent []string // "to|template|subject|body"
+}
+
+func (m *fakeMailer) Ready(context.Context) bool { return true }
+
+func (m *fakeMailer) Enqueue(_ context.Context, to, tpl string, data mail.Data) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sent = append(m.sent, fmt.Sprintf("%s|%s|%v|%v", to, tpl, data["Subject"], data["Body"]))
+	return nil
 }
 
 func newHostEnv(t *testing.T) *hostEnv {
@@ -91,6 +109,8 @@ func newHostEnv(t *testing.T) *hostEnv {
 			http.Redirect(w, r, "https://evil.example/", http.StatusFound)
 		case "/big":
 			w.Write(bytes.Repeat([]byte("z"), maxHTTPResponse+10))
+		case "/slow":
+			time.Sleep(2 * time.Second)
 		default:
 			w.Write([]byte("api says " + r.Method + " " + r.Header.Get("X-Test")))
 		}
@@ -102,7 +122,8 @@ func newHostEnv(t *testing.T) *hostEnv {
 		},
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}}
-	e.h, err = New(ctx, Options{DB: d, Store: store, Site: s, Log: log, HTTP: client})
+	e.mail = &fakeMailer{}
+	e.h, err = New(ctx, Options{DB: d, Store: store, Site: s, Log: log, HTTP: client, Mail: e.mail})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,4 +377,67 @@ func e2eWasm(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// Host extensions of M4: imported options one by one, request timeouts,
+// mail to administrators.
+func TestHostExtensions(t *testing.T) {
+	e := newHostEnv(t)
+	ctx := context.Background()
+	db.Stash(ctx, e.d.W, "wordpress", "option", "tester_key", "abc")
+	db.Stash(ctx, e.d.W, "wordpress", "option", "other_api_key", "secret-key")
+	got := e.op(map[string]string{"do": "stash", "kind": "option"})
+	if !strings.Contains(got, `"tester_key":"abc"`) || strings.Contains(got, "secret-key") {
+		t.Errorf("options: %s", got)
+	}
+	if got := e.op(map[string]string{"do": "stash", "kind": "option:tester_key"}); !strings.Contains(got, "permission denied") {
+		t.Errorf("option kind: %s", got)
+	}
+
+	start := time.Now()
+	got = e.op(map[string]string{"do": "fetchtimeout", "url": "https://api.example.org/slow", "ms": "200"})
+	if !strings.Contains(got, "request failed") || time.Since(start) > 1500*time.Millisecond {
+		t.Errorf("timeout: %s after %s", got, time.Since(start))
+	}
+	if got := e.op(map[string]string{"do": "fetchtimeout", "url": "https://api.example.org/", "ms": "20000"}); !strings.Contains(got, "timeout_ms") {
+		t.Errorf("timeout too long: %s", got)
+	}
+
+	// Mail goes to the administrators only, as one line of subject.
+	db.InsertUser(ctx, e.d.W, &db.User{ID: 2, Login: "admin", Email: "admin@example.org", Role: "administrator"})
+	db.InsertUser(ctx, e.d.W, &db.User{ID: 3, Login: "ed", Email: "ed@example.org", Role: "editor"})
+	if got := e.op(map[string]string{"do": "mail", "subject": "New\r\nBcc: x@evil.example donation", "body": "Thanks"}); got != "null" {
+		t.Fatalf("mail: %s", got)
+	}
+	if len(e.mail.sent) != 1 || !strings.HasPrefix(e.mail.sent[0], "admin@example.org|plugin_notice|") ||
+		strings.ContainsAny(e.mail.sent[0], "\r\n") {
+		t.Errorf("sent: %q", e.mail.sent)
+	}
+	if got := e.op(map[string]string{"do": "mail", "subject": strings.Repeat("x", 151)}); !strings.Contains(got, "subject") {
+		t.Errorf("long subject: %s", got)
+	}
+	for range mailPerHour - 1 {
+		e.op(map[string]string{"do": "mail"})
+	}
+	if got := e.op(map[string]string{"do": "mail"}); !strings.Contains(got, "limit") {
+		t.Errorf("mail limit: %s", got)
+	}
+	var n int
+	e.d.R.QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_log WHERE action = 'plugin_mail'`).Scan(&n)
+	if n == 0 {
+		t.Error("mail not audited")
+	}
+
+	// Without the permission.
+	pkg := e.h.Package("tester")
+	pkg.Manifest.Permissions.Data = nil
+	if err := e.h.Activate(ctx, "tester", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.op(map[string]string{"do": "mail"}); !strings.Contains(got, "permission denied") {
+		t.Errorf("mail without permission: %s", got)
+	}
+	if got := e.op(map[string]string{"do": "stash", "kind": "option"}); strings.Contains(got, "abc") {
+		t.Errorf("options without permission: %s", got)
+	}
 }

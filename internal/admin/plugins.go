@@ -353,7 +353,9 @@ func (a *Admin) renderPluginPage(w http.ResponseWriter, r *http.Request, c *reqC
 	// A table action's notice comes from the plugin: kept server-side for
 	// this session, never taken from the URL.
 	if v, ok := a.flash.take(a.flashKey(c, "plugin")); ok {
-		d.Notice = &notice{"success", v.(string)}
+		if n, ok := v.(notice); ok {
+			d.Notice = &n
+		}
 	}
 	switch pg.Kind {
 	case "settings":
@@ -448,7 +450,16 @@ func (a *Admin) pluginPageSubmit(w http.ResponseWriter, r *http.Request, c *reqC
 			return err
 		}
 		a.auth.Audit(ctx, r, c.user.ID, "plugin_settings_saved", "plugin", 0, map[string]any{"name": name, "page": pg.ID})
-		return seeOther(w, r, pluginPageURL(name, pg.ID)+"?msg=saved")
+		// The plugin may check the new values (e.g. an API key).
+		switch n, err := a.plugins.Saved(ctx, name, pg.ID, c.user); {
+		case err != nil:
+			a.flash.put(a.flashKey(c, "plugin"), notice{"error", "Settings saved. " + plugins.ErrorMessage(err)})
+		case n != "":
+			a.flash.put(a.flashKey(c, "plugin"), notice{"success", "Settings saved. " + n})
+		default:
+			return seeOther(w, r, pluginPageURL(name, pg.ID)+"?msg=saved")
+		}
+		return seeOther(w, r, pluginPageURL(name, pg.ID))
 	case "table":
 		action := r.PostFormValue("action")
 		ids := r.PostForm["ids[]"]
@@ -462,7 +473,7 @@ func (a *Admin) pluginPageSubmit(w http.ResponseWriter, r *http.Request, c *reqC
 		a.auth.Audit(ctx, r, c.user.ID, "plugin_action", "plugin", 0, map[string]any{"name": name, "page": pg.ID,
 			"action": action, "count": len(ids)})
 		if n != "" {
-			a.flash.put(a.flashKey(c, "plugin"), n)
+			a.flash.put(a.flashKey(c, "plugin"), notice{"success", n})
 		}
 		return seeOther(w, r, pluginPageURL(name, pg.ID))
 	}
@@ -679,7 +690,7 @@ func (a *Admin) menuWithPlugins(m []menuItem, can func(string) bool) []menuItem 
 			Sub: []subItem{{ID: "plugins", Label: "Installed Plugins", URL: "/admin/plugins/"}}})
 	}
 	for _, ref := range a.plugins.AdminPages() {
-		if !can(ref.Page.Capability) {
+		if !can(ref.Page.Capability) || ref.Page.Menu == "none" {
 			continue
 		}
 		sub := subItem{ID: "plugin-" + ref.Plugin + "-" + ref.Page.ID, Label: ref.Page.Title, URL: pluginPageURL(ref.Plugin, ref.Page.ID)}

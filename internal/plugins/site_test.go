@@ -114,22 +114,41 @@ func TestCommentHooks(t *testing.T) {
 	filter := e.h.CommentFilter()
 	post, _ := db.GetPost(ctx, e.d.R, 10)
 	r := httptest.NewRequest("POST", "https://example.org/wp-comments-post.php", nil)
+	r.Header.Set("Accept", "text/html")
+	r.Header.Set("Cookie", "secret=1")
+	r.Header.Set("Referer", "https://example.org/hello/")
 	for content, want := range map[string]string{"nice post": "", "buy viagra": db.CommentSpam, "discard-me": "discard"} {
 		if got := filter(r, &db.Comment{Content: content, Status: db.CommentPending}, post); got != want {
 			t.Errorf("%q: verdict %q, want %q", content, got, want)
 		}
+	}
+	// The check gets the post's modified time, terms, the commenter's
+	// role and allowlisted headers (never cookies).
+	db.InsertUser(ctx, e.d.W, &db.User{ID: 5, Login: "ed", Email: "ed@example.org", Role: "editor"})
+	filter(r, &db.Comment{Content: "from ed", UserID: 5}, post)
+	v, _, _ := db.KVGet(ctx, e.d.R, "tester", "events", "last_check")
+	for _, want := range []string{`"post_modified":"20`, `"user_role":"editor"`, `"Accept":"text/html"`,
+		`"referrer":"https://example.org/hello/"`, `"post_url":"https://example.org/hello/"`} {
+		if !strings.Contains(v, want) {
+			t.Errorf("comment check lacks %s: %s", want, v)
+		}
+	}
+	if strings.Contains(v, "secret=1") {
+		t.Errorf("cookie passed to the plugin: %s", v)
 	}
 	// A hanging check fails open after its time limit.
 	start := time.Now()
 	if got := filter(r, &db.Comment{Content: "slow-check"}, post); got != "" || time.Since(start) > 7*time.Second {
 		t.Errorf("slow check: %q after %s", got, time.Since(start))
 	}
-	e.h.CommentStatusChanged(ctx, []int64{1}, "spam")
+	ed, _ := db.GetUser(ctx, e.d.R, 5)
+	e.h.CommentStatusChanged(ctx, []int64{1}, []string{"approved"}, "spam", ed)
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		v, ok, _ := db.KVGet(ctx, e.d.R, "tester", "events", "last_status")
 		if ok {
-			if !strings.Contains(v, `"status":"spam"`) {
+			if !strings.Contains(v, `"status":"spam"`) || !strings.Contains(v, `"previous":"approved"`) ||
+				!strings.Contains(v, `"login":"ed"`) {
 				t.Errorf("event: %s", v)
 			}
 			break

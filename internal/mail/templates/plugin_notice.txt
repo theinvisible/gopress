@@ -1,0 +1,5 @@
+Subject: [{{.SiteName}}] {{.Plugin}}: {{.Subject}}
+{{.Body}}
+
+This message was sent by the plugin "{{.Plugin}}" to the administrators of
+{{.SiteName}}. Plugins can be managed at {{.Home}}/admin/plugins/

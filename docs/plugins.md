@@ -51,7 +51,8 @@ The manifest is validated strictly: unknown keys are errors.
     "routes": ["/stats", "/api/*"],
     "legacy_routes": [{"query": {"old_param": "value"}, "route": "/stats"}],
     "hooks": ["the_content", "head", "footer", "comment_pre_save", "comment_status_changed"],
-    "data": ["posts:read", "media:read", "comments:read", "comments:moderate", "import:post:my_type"],
+    "data": ["posts:read", "media:read", "comments:read", "comments:moderate", "import:post:my_type",
+             "import:option:my_option", "mail:admins"],
     "frontend_assets": ["assets/hello.css", "assets/hello.js"]
   },
   "shortcodes": [{"name": "hello", "assets": ["assets/hello.css"]}],
@@ -79,7 +80,9 @@ These are what the approval screen lists:
   - `posts:read`: published posts and pages.
   - `media:read`: attachments of published posts.
   - `comments:read` and `comments:moderate`.
-  - `import:<kind>`: imported WordPress data of that kind.
+  - `import:<kind>`: imported WordPress data of that kind (e.g. `post:my_type`).
+  - `import:option:<name>`: one imported WordPress option. Options are granted one by one, because the import holds the options of all plugins of the source site, API keys included.
+  - `mail:admins`: send plain-text mail to the administrators (`MailAdmins`).
 - **`frontend_assets`:** CSS and JavaScript files added to public pages, and only to pages whose content uses them. Scripts on the site are trusted code; this is the only way a plugin can run JavaScript there.
 
 An update that asks for more permissions stays inactive until an administrator approves it again.
@@ -111,7 +114,8 @@ Settings pages, widget forms and editor dialogs share one field format:
     ```
 
 - **Trust:** the iframe page can still navigate itself to another site, and data the bridge hands it could leave that way. Popups are not allowed.
-- **Menu placement:** `menu` places the page under Settings, Tools, Posts or Comments, or as the plugin's own entry (`plugin`).
+- **Menu placement:** `menu` places the page under Settings, Tools, Posts or Comments, or as the plugin's own entry (`plugin`). `none` keeps an iframe page out of the menu; editor dialogs use such pages. Its capability is still checked.
+- **Checking settings:** after a settings page was saved, `HandleSettingsSaved(page, fn)` runs. It can check the new values (for example an API key against its service). Its result is shown as a notice; a returned error is shown as a problem, and the values stay saved.
 - **Capability:** `capability` is one of `manage_options`, `edit_posts`, `edit_others_posts`, `moderate_comments`, `upload_files`.
 
 ### Editor buttons
@@ -140,12 +144,13 @@ func init() {
 | `HandleShortcode(name, fn)` | A shortcode; returns HTML and assets. |
 | `HandleWidget(type, fn)` | A widget; `TitleHTML` is the title in the theme's markup. |
 | `HandleFilter(hook, fn)` | `the_content`, `head` (only `<meta>` and `<link>` to own assets pass), `footer`. |
-| `HandleComment(fn)` | `comment_pre_save`: `Keep`, `Approve`, `Hold`, `Spam` or `Discard`. |
-| `HandleAction(name, fn)` | `activate`, `deactivate`, `comment_status_changed` (`{comment, status}`). |
+| `HandleComment(fn)` | `comment_pre_save`: `Keep`, `Approve`, `Hold`, `Spam` or `Discard`. The input has the comment, the post's URL, title, modified time and terms, the commenter's role, the referrer and the `Accept`, `Accept-Charset` and `Accept-Encoding` headers. |
+| `HandleAction(name, fn)` | `activate`, `deactivate`, `comment_status_changed` (`CommentStatusChange`: the comment, the action, the status before and the editor). |
 | `HandleRoute(path, fn)` | Requests to a route. |
 | `HandleTable(page, fn)`, `HandleSubmit(page, fn)` | Table pages. |
 | `HandleAPI(page, fn)` | Bridge calls of an iframe page. |
 | `HandleDashboard(id, fn)` | A dashboard box. |
+| `HandleSettingsSaved(page, fn)` | After a settings page was saved. |
 | `HandleMigrate(fn)` | The WordPress import; it runs once when the plugin is first activated, and administrators can run it again. |
 
 Dashboard boxes are shown inside the admin, so a stricter filter applies to them: text, links, lists, tables and images only (no `class`, `id`, `style`, `data-*` or form elements).
@@ -165,8 +170,9 @@ All other HTML from plugins is filtered:
 | `Posts`, `GetPost` | Published content (`posts:read`). |
 | `GetMedia(ids…)` | Attachment details (`media:read`). |
 | `GetComment`, `SetCommentStatus` | `comments:read` / `comments:moderate`. |
-| `Fetch(HTTPRequest)` | HTTPS to `permissions.http` hosts; 10 s, 1 MB request, 2 MB response. |
-| `Stash(kind)` | Imported WordPress data (`import:<kind>`). |
+| `Fetch(HTTPRequest)` | HTTPS to `permissions.http` hosts; 10 s (or `TimeoutMS`, 100–10000), 1 MB request, 2 MB response. |
+| `Stash(kind)` | Imported WordPress data (`import:<kind>`); `Stash("option")` returns the options granted with `import:option:<name>`. |
+| `MailAdmins(subject, body)` | Plain text to the administrators (`mail:admins`). The host picks the recipients and puts the site and plugin name into the subject; at most 20 an hour. |
 | `Invalidate()` | Clear the page cache after changing what the plugin renders. |
 
 ## Runtime limits
@@ -180,3 +186,23 @@ All other HTML from plugins is filtered:
 - **Crashes:** a crash, timeout or oversized answer (more than 2 MB) discards the instance.
 - **Cache:** `Invalidate()` takes effect at most once a second per plugin. Five of them within a minute pause the plugin for five minutes: its output is empty, its hooks are skipped and comments keep the core's decision. The admin shows the last error.
 - **Errors the plugin reports** (`return err`) do not count.
+
+## Testing plugins
+
+Outside WebAssembly the PDK runs against a fake host, so plugin code can be tested with `go test`:
+
+```go
+func TestShortcode(t *testing.T) {
+	gp.SetTestHost(func(op string, args json.RawMessage) (any, error) {
+		switch op {
+		case "kv_get":
+			return map[string]any{"found": false}, nil
+		}
+		return nil, errors.New("unexpected " + op)
+	})
+	var out gp.Render
+	if err := gp.CallExport("render_shortcode", gp.ShortcodeRequest{Tag: "hello"}, &out); err != nil {
+		t.Fatal(err)
+	}
+}
+```

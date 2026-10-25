@@ -197,7 +197,7 @@ func cmdServe(args []string, stderr io.Writer) int {
 	}
 	defer pluginStore.Close()
 	pluginHost, err := plugins.New(ctx, plugins.Options{DB: d, Store: pluginStore, Site: public, Log: log,
-		CacheDir: filepath.Join(cfg.DataDir, "cache", "wasm"), ClientIP: authSvc.ClientIP})
+		CacheDir: filepath.Join(cfg.DataDir, "cache", "wasm"), ClientIP: authSvc.ClientIP, Mail: mailSvc})
 	if err != nil {
 		log.Error("plugins", "err", err)
 		return 1
@@ -206,6 +206,7 @@ func cmdServe(args []string, stderr io.Writer) int {
 	public.SetExtensions(pluginHost)
 	public.SetCommentFilter(pluginHost.CommentFilter())
 	contentSvc.SetCommentStatusHook(pluginHost.CommentStatusChanged)
+	content.SetPluginShortcodes(pluginHost.ShortcodeNames)
 	adm, err := admin.New(d, authSvc, public, contentSvc, admin.Options{Log: log, Mail: mailSvc, MailSink: *mailSink != "",
 		Plugins: pluginHost})
 	if err != nil {

@@ -78,11 +78,27 @@ type CommentData struct {
 
 // CommentIn is the input of comment_pre_save.
 type CommentIn struct {
-	Comment   CommentData `json:"comment"`
-	PostTitle string      `json:"post_title"`
-	PostURL   string      `json:"post_url"`
-	Referrer  string      `json:"referrer,omitempty"`
-	Language  string      `json:"language,omitempty"`
+	Comment      CommentData       `json:"comment"`
+	PostTitle    string            `json:"post_title"`
+	PostURL      string            `json:"post_url"`
+	PostModified string            `json:"post_modified,omitempty"` // GMT, RFC 3339
+	PostTerms    []string          `json:"post_terms,omitempty"`    // category and tag names
+	UserRole     string            `json:"user_role,omitempty"`     // of a logged-in commenter
+	Referrer     string            `json:"referrer,omitempty"`
+	Language     string            `json:"language,omitempty"` // the Accept-Language header
+	Headers      map[string]string `json:"headers,omitempty"`  // see commentHeaders
+}
+
+// commentHeaders are the request headers comment_pre_save receives
+// (spam filters use them); never cookies or credentials.
+var commentHeaders = []string{"Accept", "Accept-Charset", "Accept-Encoding"}
+
+// CommentStatusData is the data of the comment_status_changed action.
+type CommentStatusData struct {
+	Comment  CommentData `json:"comment"`  // after the change
+	Status   string      `json:"status"`   // approve, unapprove, spam, unspam, trash, untrash
+	Previous string      `json:"previous"` // the status before
+	By       *UserData   `json:"by,omitempty"`
 }
 
 // CommentOut is the output of comment_pre_save: "" (keep), "approve",
@@ -127,7 +143,7 @@ type AdminIn struct {
 	Page   string            `json:"page"`
 	User   UserData          `json:"user"`
 	Query  map[string]string `json:"query,omitempty"`  // admin_page: paging, search
-	Action string            `json:"action,omitempty"` // admin_submit
+	Action string            `json:"action,omitempty"` // admin_submit; "saved" after a settings page was saved
 	IDs    []string          `json:"ids,omitempty"`    // admin_submit
 	Method string            `json:"method,omitempty"` // admin_api
 	Params json.RawMessage   `json:"params,omitempty"` // admin_api

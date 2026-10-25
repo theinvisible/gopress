@@ -50,14 +50,20 @@ func TestManifest(t *testing.T) {
 		t.Fatalf("valid manifest: %v", err)
 	}
 	bad := map[string]func(m map[string]any){
-		"unknown key":    func(m map[string]any) { m["permisions"] = map[string]any{} },
-		"name upper":     func(m map[string]any) { m["name"] = "Hello" },
-		"name path":      func(m map[string]any) { m["name"] = "../x" },
-		"version":        func(m map[string]any) { m["version"] = "1.0" },
-		"api":            func(m map[string]any) { m["api"] = 2 },
-		"title control":  func(m map[string]any) { m["title"] = "a\nb" },
-		"http url":       func(m map[string]any) { perms(m)["http"] = []any{"https://x.org"} },
-		"http ip":        func(m map[string]any) { perms(m)["http"] = []any{"10.0.0.1"} },
+		"unknown key":   func(m map[string]any) { m["permisions"] = map[string]any{} },
+		"name upper":    func(m map[string]any) { m["name"] = "Hello" },
+		"name path":     func(m map[string]any) { m["name"] = "../x" },
+		"version":       func(m map[string]any) { m["version"] = "1.0" },
+		"api":           func(m map[string]any) { m["api"] = 2 },
+		"title control": func(m map[string]any) { m["title"] = "a\nb" },
+		"http url":      func(m map[string]any) { perms(m)["http"] = []any{"https://x.org"} },
+		"http ip":       func(m map[string]any) { perms(m)["http"] = []any{"10.0.0.1"} },
+		"all options":   func(m map[string]any) { perms(m)["data"] = []any{"import:option"} },
+		"option name":   func(m map[string]any) { perms(m)["data"] = []any{"import:option:a b"} },
+		"mail typo":     func(m map[string]any) { perms(m)["data"] = []any{"mail:everyone"} },
+		"hidden settings": func(m map[string]any) {
+			m["admin"].([]any)[0].(map[string]any)["menu"] = "none"
+		},
 		"http localhost": func(m map[string]any) { perms(m)["http"] = []any{"localhost"} },
 		"http port":      func(m map[string]any) { perms(m)["http"] = []any{"x.org:8080"} },
 		"http internal":  func(m map[string]any) { perms(m)["http"] = []any{"db.internal"} },
@@ -108,6 +114,10 @@ func TestPermissionCover(t *testing.T) {
 	}
 	if len(m.Permissions.Describe()) < 8 {
 		t.Error("describe")
+	}
+	p := Permissions{Data: []string{"import:option:api_key", "mail:admins"}}
+	if d := strings.Join(p.Describe(), "|"); !strings.Contains(d, "option api_key") || !strings.Contains(d, "e-mail") {
+		t.Errorf("describe: %s", d)
 	}
 }
 

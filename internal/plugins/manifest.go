@@ -88,7 +88,7 @@ type Widget struct {
 type AdminPage struct {
 	ID         string  `json:"id"`
 	Title      string  `json:"title"`
-	Menu       string  `json:"menu"`       // "plugin" (own top level entry), "settings", "tools", "posts", "comments"
+	Menu       string  `json:"menu"`       // "plugin" (own top level entry), "settings", "tools", "posts", "comments", "none"
 	Capability string  `json:"capability"` // see adminCapabilities
 	Kind       string  `json:"kind"`       // "settings", "table", "iframe"
 	Fields     []Field `json:"fields,omitempty"`
@@ -151,7 +151,9 @@ const (
 	DataMediaRead      = "media:read"
 	DataCommentsRead   = "comments:read"
 	DataCommentsModify = "comments:moderate"
-	DataImportPrefix   = "import:" // import:<kind> of the import stash, e.g. import:post:fslb_gallery
+	DataImportPrefix   = "import:"        // import:<kind> of the import stash, e.g. import:post:fslb_gallery
+	DataImportOption   = "import:option:" // import:option:<name>: one imported option
+	DataMailAdmins     = "mail:admins"    // send plain-text mail to the administrators
 )
 
 var fieldTypes = []string{"text", "textarea", "number", "checkbox", "select", "url", "email", "password", "color", "media", "media_list"}
@@ -159,7 +161,8 @@ var fieldTypes = []string{"text", "textarea", "number", "checkbox", "select", "u
 // adminCapabilities may guard plugin pages and dashboard boxes.
 var adminCapabilities = []string{"manage_options", "edit_posts", "edit_others_posts", "moderate_comments", "upload_files"}
 
-var adminMenus = []string{"plugin", "settings", "tools", "posts", "comments"}
+// adminMenus: "none" is a page only editor dialogs open.
+var adminMenus = []string{"plugin", "settings", "tools", "posts", "comments", "none"}
 
 // coreShortcodes cannot be taken over by plugins.
 var coreShortcodes = []string{"gallery", "caption", "wp_caption", "embed", "audio", "video", "playlist"}
@@ -180,6 +183,7 @@ var (
 	reQVal    = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 	reHost    = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)
 	reKind    = regexp.MustCompile(`^[a-z]+(:[a-z0-9_-]{1,64})?$`)
+	reOption  = regexp.MustCompile(`^[a-z0-9_-]{1,64}$`)
 	reAsset   = regexp.MustCompile(`^assets/[A-Za-z0-9_-][A-Za-z0-9._/-]{0,127}\.(css|js)$`)
 	reIcon    = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
 	reAdminHT = regexp.MustCompile(`^admin/[A-Za-z0-9_-][A-Za-z0-9._/-]{0,127}\.html$`)
@@ -303,6 +307,9 @@ func (m *Manifest) validate() error {
 		default:
 			return fmt.Errorf("admin page %s: kind must be settings, table or iframe", p.ID)
 		}
+		if p.Menu == "none" && p.Kind != "iframe" {
+			return fmt.Errorf("admin page %s: only iframe pages (editor dialogs) can be outside the menu", p.ID)
+		}
 	}
 	for _, in := range m.Editor {
 		if !reIdent.MatchString(in.ID) || !text(in.Label, 60) || (in.Icon != "" && !reIcon.MatchString(in.Icon)) {
@@ -368,7 +375,15 @@ func (p *Permissions) validate() error {
 	}
 	for _, d := range p.Data {
 		switch {
-		case d == DataPostsRead, d == DataMediaRead, d == DataCommentsRead, d == DataCommentsModify:
+		case d == DataPostsRead, d == DataMediaRead, d == DataCommentsRead, d == DataCommentsModify, d == DataMailAdmins:
+		case strings.HasPrefix(d, DataImportOption):
+			// Imported options are granted one by one: the stash holds the
+			// options of every plugin of the source site (API keys too).
+			if !reOption.MatchString(strings.TrimPrefix(d, DataImportOption)) {
+				return fmt.Errorf("invalid data permission %q", d)
+			}
+		case d == DataImportPrefix+"option":
+			return fmt.Errorf("data permission %q: name the options (import:option:<name>)", d)
 		case strings.HasPrefix(d, DataImportPrefix) && reKind.MatchString(strings.TrimPrefix(d, DataImportPrefix)):
 		default:
 			return fmt.Errorf("unknown data permission %q", d)
@@ -504,6 +519,10 @@ func (p Permissions) Describe() []string {
 		out = append(out, hookLabels[h])
 	}
 	for _, d := range p.Data {
+		if name, ok := strings.CutPrefix(d, DataImportOption); ok {
+			out = append(out, "Read the imported WordPress option "+name)
+			continue
+		}
 		if strings.HasPrefix(d, DataImportPrefix) {
 			out = append(out, "Read imported WordPress data ("+strings.TrimPrefix(d, DataImportPrefix)+")")
 			continue
@@ -533,6 +552,7 @@ var dataLabels = map[string]string{
 	DataMediaRead:      "Read media details (URLs, sizes, captions)",
 	DataCommentsRead:   "Read comments",
 	DataCommentsModify: "Change the status of comments (approve, spam, trash)",
+	DataMailAdmins:     "Send e-mail to the administrators",
 }
 
 // CompareVersions compares two semantic versions (-1, 0, 1); pre-releases

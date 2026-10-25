@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/theinvisible/gopress/internal/auth"
@@ -37,7 +38,7 @@ type Service struct {
 	media   *media.Store
 	uploads uploadLimiter
 	// statusHook is told about moderated comments (plugins).
-	statusHook func(ctx context.Context, ids []int64, action string)
+	statusHook CommentStatusHook
 }
 
 // New creates the service.
@@ -583,11 +584,24 @@ func (e *Editor) InputFrom(ctx context.Context, p *db.Post) *PostInput {
 // ClassicToHTML converts classic WordPress content (wpautop at render
 // time) into the HTML the editor stores.
 func ClassicToHTML(content string) string {
-	return classicPipeline.ClassicToHTML(content)
+	pipe := render.NewPipeline()
+	if f := pluginShortcodes.Load(); f != nil {
+		for _, name := range (*f)() {
+			if _, ok := pipe.Shortcodes[name]; !ok {
+				pipe.Register(name, func(*render.Env, *render.Shortcode) string { return "" })
+			}
+		}
+	}
+	return pipe.ClassicToHTML(content)
 }
 
-// classicPipeline knows the shortcodes whose paragraphs wpautop removes.
-var classicPipeline = render.NewPipeline()
+// pluginShortcodes returns the shortcodes of the active plugins: like the
+// built-in ones, wpautop leaves their paragraphs out.
+var pluginShortcodes atomic.Pointer[func() []string]
+
+// SetPluginShortcodes installs the function listing the shortcodes of the
+// active plugins (the plugin host).
+func SetPluginShortcodes(f func() []string) { pluginShortcodes.Store(&f) }
 
 // EditorContent returns p's content as HTML for the editor.
 func EditorContent(p *db.Post) string {

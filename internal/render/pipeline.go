@@ -24,10 +24,6 @@ func NewPipeline() *Pipeline {
 			"gallery":    GalleryShortcode,
 			"caption":    CaptionShortcode,
 			"wp_caption": CaptionShortcode,
-			// Plugin shortcodes of the source site; rendered by the
-			// plugins once the plugin host exists (M4), hidden until then.
-			"fotogalerie":     func(*Env, *Shortcode) string { return "" },
-			"paypal-donation": func(*Env, *Shortcode) string { return "" },
 		},
 		UseSmilies: true,
 	}

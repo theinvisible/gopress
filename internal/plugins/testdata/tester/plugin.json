@@ -5,7 +5,7 @@
 		"routes": ["/ping"],
 		"legacy_routes": [{"query": {"tester_ping": "1"}, "route": "/ping"}],
 		"hooks": ["the_content", "comment_pre_save", "comment_status_changed"],
-		"data": ["posts:read", "media:read", "comments:moderate", "import:post:tester_item"],
+		"data": ["posts:read", "media:read", "comments:moderate", "import:post:tester_item", "import:option:tester_key", "mail:admins"],
 		"frontend_assets": ["assets/hello.css", "assets/hello.js"]
 	},
 	"shortcodes": [{"name": "hello", "assets": ["assets/hello.css", "assets/hello.js"]}, {"name": "evil"}, {"name": "loop"},
@@ -18,7 +18,8 @@
 		            {"name": "images", "label": "Images", "type": "media_list"}]},
 		{"id": "items", "title": "Tester items", "menu": "plugin", "capability": "edit_posts", "kind": "table",
 		 "columns": [{"name": "name", "label": "Name"}]},
-		{"id": "app", "title": "Tester app", "menu": "tools", "capability": "manage_options", "kind": "iframe", "file": "admin/app.html"}
+		{"id": "app", "title": "Tester app", "menu": "tools", "capability": "manage_options", "kind": "iframe", "file": "admin/app.html"},
+		{"id": "dialog", "title": "Tester dialog", "menu": "none", "capability": "edit_posts", "kind": "iframe", "file": "admin/app.html"}
 	],
 	"editor": [{"id": "insert", "label": "Insert hello", "shortcode": "hello", "fields": [{"name": "name", "label": "Name"}]}],
 	"dashboard": [{"id": "stats", "title": "Tester stats", "capability": "manage_options"}]

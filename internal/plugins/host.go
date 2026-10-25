@@ -18,6 +18,7 @@ import (
 	"github.com/tetratelabs/wazero"
 
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/site"
 )
 
@@ -75,6 +76,14 @@ type Options struct {
 	HTTP *http.Client
 	// ClientIP returns the client address of a request (trusted proxies).
 	ClientIP func(*http.Request) string
+	// Mail queues mail to administrators (mail_admins); nil disables it.
+	Mail Mailer
+}
+
+// Mailer queues mail (internal/mail).
+type Mailer interface {
+	Ready(ctx context.Context) bool
+	Enqueue(ctx context.Context, to, template string, data mail.Data) error
 }
 
 // Host runs the active plugins.
@@ -90,6 +99,7 @@ type Host struct {
 
 	routeLimit      *limiter
 	invalidateLimit *limiter
+	mailLimit       *limiter
 }
 
 // plugin is an active plugin.
@@ -120,7 +130,8 @@ func New(ctx context.Context, opts Options) (*Host, error) {
 		opts.Log = slog.Default()
 	}
 	h := &Host{opts: opts, log: opts.Log, now: time.Now, active: map[string]*plugin{}, http: opts.HTTP,
-		routeLimit: newLimiter(routePerMin, time.Minute), invalidateLimit: newLimiter(1, time.Second)}
+		routeLimit: newLimiter(routePerMin, time.Minute), invalidateLimit: newLimiter(1, time.Second),
+		mailLimit: newLimiter(mailPerHour, time.Hour)}
 	if h.http == nil {
 		h.http = safeClient()
 	}
@@ -238,6 +249,10 @@ var ErrBusy = errors.New("plugin busy")
 // paused after errors or failed to load.
 var ErrUnavailable = errors.New("plugin unavailable")
 
+// ErrNoExport is returned when a plugin does not export the function an
+// optional call needs.
+var ErrNoExport = errors.New("not exported by the plugin")
+
 // get returns the active plugin name.
 func (h *Host) get(name string) *plugin {
 	h.mu.RLock()
@@ -325,10 +340,15 @@ func (p *plugin) call(ctx context.Context, export string, kind callKind, in, out
 			inst.Close(context.Background())
 		}
 		var pe *PluginError
-		if err != nil && !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrBusy) && !errors.As(err, &pe) {
+		if err != nil && !errors.Is(err, ErrUnavailable) && !errors.Is(err, ErrBusy) && !errors.Is(err, ErrNoExport) &&
+			!errors.As(err, &pe) {
 			p.fail(err) // crashes, time and size limits; not errors the plugin reports
 		}
 	}()
+	if !inst.FunctionExists(export) {
+		keep = true
+		return ErrNoExport
+	}
 	rc, output, err := inst.CallWithContext(ctx, export, input)
 	// An error the plugin set itself (pdk.SetError) is in the kernel's
 	// error slot; traps and limits are not.

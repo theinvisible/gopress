@@ -22,6 +22,7 @@ import (
 
 	extism "github.com/extism/go-sdk"
 
+	"github.com/theinvisible/gopress/internal/auth"
 	"github.com/theinvisible/gopress/internal/db"
 )
 
@@ -352,10 +353,34 @@ func (p *plugin) op(ctx context.Context, op string, raw json.RawMessage) (any, e
 		if err != nil {
 			return nil, err
 		}
-		if !p.can(DataImportPrefix + a.Kind) {
+		if a.Kind == "option" {
+			// Only the options granted one by one.
+			all, err := db.StashEntries(ctx, h.opts.DB.R, "wordpress", "option")
+			if err != nil {
+				return nil, err
+			}
+			out := map[string]json.RawMessage{}
+			for k, v := range all {
+				if p.can(DataImportOption + k) {
+					out[k] = v
+				}
+			}
+			return out, nil
+		}
+		if strings.HasPrefix(a.Kind, "option:") || !p.can(DataImportPrefix+a.Kind) {
 			return nil, errDenied
 		}
 		return db.StashEntries(ctx, h.opts.DB.R, "wordpress", a.Kind)
+
+	case "mail_admins":
+		if !p.can(DataMailAdmins) {
+			return nil, errDenied
+		}
+		a, err := args[struct{ Subject, Body string }](raw)
+		if err != nil {
+			return nil, err
+		}
+		return true, p.mailAdmins(ctx, a.Subject, a.Body)
 
 	case "invalidate":
 		// At most once a second per plugin: clearing the cache on every
@@ -457,10 +482,11 @@ func (h *Host) setCommentStatus(ctx context.Context, plugin string, id int64, st
 }
 
 type httpReq struct {
-	Method  string            `json:"method"`
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers"`
-	Body    string            `json:"body"`
+	Method    string            `json:"method"`
+	URL       string            `json:"url"`
+	Headers   map[string]string `json:"headers"`
+	Body      string            `json:"body"`
+	TimeoutMS int               `json:"timeout_ms"` // 100–10000; 0 = httpTimeout
 }
 
 // blockedRequestHeaders are set by the host.
@@ -490,13 +516,22 @@ func (p *plugin) httpRequest(ctx context.Context, a httpReq) (any, error) {
 	if len(a.Body) > maxHTTPBody {
 		return nil, userErr("request body too large")
 	}
+	timeout := httpTimeout
+	if a.TimeoutMS != 0 {
+		if a.TimeoutMS < 100 || a.TimeoutMS > int(httpTimeout/time.Millisecond) {
+			return nil, userErr("timeout_ms must be 100–10000")
+		}
+		timeout = time.Duration(a.TimeoutMS) * time.Millisecond
+	}
 	select {
 	case p.http <- struct{}{}:
 		defer func() { <-p.http }()
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	ctx, cancel := context.WithTimeout(ctx, httpTimeout)
+	// The call's own deadline still applies (a hook cannot outlive its
+	// time limit by waiting for a slow server).
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, method, u.String(), strings.NewReader(a.Body))
 	if err != nil {
@@ -516,7 +551,7 @@ func (p *plugin) httpRequest(ctx context.Context, a httpReq) (any, error) {
 		req.Header.Set("User-Agent", "GoPress/"+p.pkg.Manifest.Name)
 	}
 	client := *p.h.http
-	client.Timeout = httpTimeout
+	client.Timeout = timeout
 	client.Jar = nil
 	client.CheckRedirect = func(r *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
@@ -549,4 +584,52 @@ func (p *plugin) httpRequest(ctx context.Context, a httpReq) (any, error) {
 		body = bytes.ToValidUTF8(body, []byte("�"))
 	}
 	return map[string]any{"status": resp.StatusCode, "headers": hdr, "body": string(body)}, nil
+}
+
+// Mail to administrators.
+const (
+	maxMailSubject = 150
+	maxMailBody    = 10 << 10
+	mailPerHour    = 20
+)
+
+// mailAdmins queues a plain-text message from the plugin to every user
+// who may manage options. The recipients are fixed by the host; the
+// subject is one line and carries the site and plugin name (template
+// plugin_notice).
+func (p *plugin) mailAdmins(ctx context.Context, subject, body string) error {
+	h := p.h
+	if h.opts.Mail == nil || !h.opts.Mail.Ready(ctx) {
+		return userErr("mail is not configured")
+	}
+	subject = strings.Join(strings.Fields(subject), " ")
+	if subject == "" || utf8.RuneCountInString(subject) > maxMailSubject || !utf8.ValidString(subject) {
+		return userErr("the subject must be 1–150 characters")
+	}
+	if body == "" || len(body) > maxMailBody || !utf8.ValidString(body) || strings.ContainsRune(body, 0) {
+		return userErr("the body must be plain text of at most 10 KB")
+	}
+	if !h.mailLimit.allow(p.pkg.Manifest.Name, h.now()) {
+		return userErr("mail limit reached (20 an hour)")
+	}
+	users, err := db.Users(ctx, h.opts.DB.R)
+	if err != nil {
+		return err
+	}
+	sent := 0
+	for i := range users {
+		if !auth.Can(&users[i], auth.CapManageOptions) || users[i].Email == "" {
+			continue
+		}
+		data := map[string]any{"Plugin": p.pkg.Manifest.Title, "Subject": subject, "Body": body}
+		if err := h.opts.Mail.Enqueue(ctx, users[i].Email, "plugin_notice", data); err != nil {
+			h.log.Warn("plugin mail", "plugin", p.pkg.Manifest.Name, "err", err)
+			continue
+		}
+		sent++
+	}
+	d, _ := json.Marshal(map[string]any{"plugin": p.pkg.Manifest.Name, "subject": subject, "recipients": sent})
+	db.InsertAudit(ctx, h.opts.DB.W, &db.AuditEntry{Time: h.now().Unix(), Action: "plugin_mail", ObjectType: "plugin",
+		Detail: string(d)})
+	return nil
 }

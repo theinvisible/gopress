@@ -70,11 +70,24 @@ type Comment struct {
 
 // CommentCheck is the input of the comment_pre_save hook.
 type CommentCheck struct {
-	Comment   Comment `json:"comment"`
-	PostTitle string  `json:"post_title"`
-	PostURL   string  `json:"post_url"`
-	Referrer  string  `json:"referrer,omitempty"`
-	Language  string  `json:"language,omitempty"`
+	Comment      Comment           `json:"comment"`
+	PostTitle    string            `json:"post_title"`
+	PostURL      string            `json:"post_url"`
+	PostModified string            `json:"post_modified,omitempty"` // GMT, RFC 3339
+	PostTerms    []string          `json:"post_terms,omitempty"`    // category and tag names
+	UserRole     string            `json:"user_role,omitempty"`     // of a logged-in commenter
+	Referrer     string            `json:"referrer,omitempty"`
+	Language     string            `json:"language,omitempty"` // the Accept-Language header
+	Headers      map[string]string `json:"headers,omitempty"`  // Accept, Accept-Charset, Accept-Encoding
+}
+
+// CommentStatusChange is the data of the comment_status_changed action
+// (decode it with json.Unmarshal in a HandleAction handler).
+type CommentStatusChange struct {
+	Comment  Comment `json:"comment"`  // after the change
+	Status   string  `json:"status"`   // approve, unapprove, spam, unspam, trash, untrash
+	Previous string  `json:"previous"` // approved, pending, spam or trash
+	By       *User   `json:"by,omitempty"`
 }
 
 // Comment verdicts.

@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-
-	"github.com/extism/go-pdk"
 )
 
 // Handlers are registered in init() (GoPress loads plugins as WASI
@@ -19,6 +17,7 @@ var (
 	routes      []route
 	tables      = map[string]func(AdminRequest) (Table, error){}
 	submits     = map[string]func(AdminRequest) (string, error){}
+	saved       = map[string]func(AdminRequest) (string, error){}
 	apis        = map[string]func(AdminRequest) (any, error){}
 	dashboards  = map[string]func(DashboardRequest) (Render, error){}
 	commentHook func(CommentCheck) (string, error)
@@ -58,6 +57,11 @@ func HandleTable(page string, fn func(AdminRequest) (Table, error)) { tables[pag
 // is a notice shown to the user.
 func HandleSubmit(page string, fn func(AdminRequest) (string, error)) { submits[page] = fn }
 
+// HandleSettingsSaved registers a check that runs after a settings page
+// was saved (read the new values with Settings). The result is a notice;
+// a returned error is shown as a problem (the values stay saved).
+func HandleSettingsSaved(page string, fn func(AdminRequest) (string, error)) { saved[page] = fn }
+
 // HandleAPI registers the bridge calls of an iframe page
 // (gopress.call(method, params) in the page's script).
 func HandleAPI(page string, fn func(AdminRequest) (any, error)) { apis[page] = fn }
@@ -70,142 +74,125 @@ func HandleMigrate(fn func() (string, error)) { migrate = fn }
 
 var errNotImplemented = errors.New("not implemented")
 
-// serve decodes the input, runs fn and writes its output.
-func serve[In, Out any](fn func(In) (Out, error)) int32 {
+// handle decodes the input, runs fn and encodes its output.
+func handle[In, Out any](input []byte, fn func(In) (Out, error)) ([]byte, error) {
 	var in In
-	if err := json.Unmarshal(pdk.Input(), &in); err != nil {
-		pdk.SetError(err)
-		return 1
+	if err := json.Unmarshal(input, &in); err != nil {
+		return nil, err
 	}
 	out, err := fn(in)
 	if err != nil {
-		pdk.SetError(err)
-		return 1
+		return nil, err
 	}
-	b, err := json.Marshal(out)
-	if err != nil {
-		pdk.SetError(err)
-		return 1
-	}
-	pdk.Output(b)
-	return 0
+	return json.Marshal(out)
 }
 
-//go:wasmexport render_shortcode
-func renderShortcode() int32 {
-	return serve(func(in ShortcodeRequest) (Render, error) {
-		if fn := shortcodes[in.Tag]; fn != nil {
-			return fn(in)
-		}
-		return Render{}, errNotImplemented
-	})
-}
-
-//go:wasmexport render_widget
-func renderWidget() int32 {
-	return serve(func(in WidgetRequest) (Render, error) {
-		if fn := widgets[in.Type]; fn != nil {
-			return fn(in)
-		}
-		return Render{}, errNotImplemented
-	})
-}
-
-//go:wasmexport filter
-func filter() int32 {
-	return serve(func(in FilterRequest) (FilterResult, error) {
-		if fn := filters[in.Hook]; fn != nil {
-			return fn(in)
-		}
-		return FilterResult{Value: in.Value}, nil
-	})
-}
-
-//go:wasmexport comment_pre_save
-func commentPreSave() int32 {
-	return serve(func(in CommentCheck) (commentVerdict, error) {
-		if commentHook == nil {
-			return commentVerdict{}, nil
-		}
-		v, err := commentHook(in)
-		return commentVerdict{v}, err
-	})
-}
-
-//go:wasmexport action
-func action() int32 {
-	return serve(func(in actionIn) (struct{}, error) {
-		if fn := actions[in.Action]; fn != nil {
-			return struct{}{}, fn(in.Data)
-		}
-		return struct{}{}, nil
-	})
-}
-
-//go:wasmexport http_route
-func httpRoute() int32 {
-	return serve(func(in Request) (Response, error) {
-		for _, r := range routes {
-			if prefix, ok := strings.CutSuffix(r.path, "/*"); ok {
-				if strings.HasPrefix(in.Path, prefix+"/") {
+// exports are the functions the host calls, by export name.
+var exports = map[string]func([]byte) ([]byte, error){
+	"render_shortcode": func(b []byte) ([]byte, error) {
+		return handle(b, func(in ShortcodeRequest) (Render, error) {
+			if fn := shortcodes[in.Tag]; fn != nil {
+				return fn(in)
+			}
+			return Render{}, errNotImplemented
+		})
+	},
+	"render_widget": func(b []byte) ([]byte, error) {
+		return handle(b, func(in WidgetRequest) (Render, error) {
+			if fn := widgets[in.Type]; fn != nil {
+				return fn(in)
+			}
+			return Render{}, errNotImplemented
+		})
+	},
+	"filter": func(b []byte) ([]byte, error) {
+		return handle(b, func(in FilterRequest) (FilterResult, error) {
+			if fn := filters[in.Hook]; fn != nil {
+				return fn(in)
+			}
+			return FilterResult{Value: in.Value}, nil
+		})
+	},
+	"comment_pre_save": func(b []byte) ([]byte, error) {
+		return handle(b, func(in CommentCheck) (commentVerdict, error) {
+			if commentHook == nil {
+				return commentVerdict{}, nil
+			}
+			v, err := commentHook(in)
+			return commentVerdict{v}, err
+		})
+	},
+	"action": func(b []byte) ([]byte, error) {
+		return handle(b, func(in actionIn) (struct{}, error) {
+			if fn := actions[in.Action]; fn != nil {
+				return struct{}{}, fn(in.Data)
+			}
+			return struct{}{}, nil
+		})
+	},
+	"http_route": func(b []byte) ([]byte, error) {
+		return handle(b, func(in Request) (Response, error) {
+			for _, r := range routes {
+				if prefix, ok := strings.CutSuffix(r.path, "/*"); ok {
+					if strings.HasPrefix(in.Path, prefix+"/") {
+						return r.handle(in), nil
+					}
+				} else if in.Path == r.path {
 					return r.handle(in), nil
 				}
-			} else if in.Path == r.path {
-				return r.handle(in), nil
 			}
-		}
-		return Response{Status: 404, Body: "not found"}, nil
-	})
-}
-
-//go:wasmexport admin_page
-func adminPage() int32 {
-	return serve(func(in AdminRequest) (Table, error) {
-		if fn := tables[in.Page]; fn != nil {
-			return fn(in)
-		}
-		return Table{}, errNotImplemented
-	})
-}
-
-//go:wasmexport admin_submit
-func adminSubmit() int32 {
-	return serve(func(in AdminRequest) (notice, error) {
-		if fn := submits[in.Page]; fn != nil {
-			n, err := fn(in)
+			return Response{Status: 404, Body: "not found"}, nil
+		})
+	},
+	"admin_page": func(b []byte) ([]byte, error) {
+		return handle(b, func(in AdminRequest) (Table, error) {
+			if fn := tables[in.Page]; fn != nil {
+				return fn(in)
+			}
+			return Table{}, errNotImplemented
+		})
+	},
+	"admin_submit": func(b []byte) ([]byte, error) {
+		return handle(b, func(in AdminRequest) (notice, error) {
+			if in.Action == "saved" {
+				if fn := saved[in.Page]; fn != nil {
+					n, err := fn(in)
+					return notice{n}, err
+				}
+				if submits[in.Page] == nil {
+					return notice{}, nil
+				}
+			}
+			if fn := submits[in.Page]; fn != nil {
+				n, err := fn(in)
+				return notice{n}, err
+			}
+			return notice{}, errNotImplemented
+		})
+	},
+	"admin_api": func(b []byte) ([]byte, error) {
+		return handle(b, func(in AdminRequest) (any, error) {
+			if fn := apis[in.Page]; fn != nil {
+				return fn(in)
+			}
+			return nil, errNotImplemented
+		})
+	},
+	"dashboard_widget": func(b []byte) ([]byte, error) {
+		return handle(b, func(in DashboardRequest) (Render, error) {
+			if fn := dashboards[in.ID]; fn != nil {
+				return fn(in)
+			}
+			return Render{}, errNotImplemented
+		})
+	},
+	"migrate_wordpress": func(b []byte) ([]byte, error) {
+		return handle(b, func(struct{}) (notice, error) {
+			if migrate == nil {
+				return notice{}, nil
+			}
+			n, err := migrate()
 			return notice{n}, err
-		}
-		return notice{}, errNotImplemented
-	})
-}
-
-//go:wasmexport admin_api
-func adminAPI() int32 {
-	return serve(func(in AdminRequest) (any, error) {
-		if fn := apis[in.Page]; fn != nil {
-			return fn(in)
-		}
-		return nil, errNotImplemented
-	})
-}
-
-//go:wasmexport dashboard_widget
-func dashboardWidget() int32 {
-	return serve(func(in DashboardRequest) (Render, error) {
-		if fn := dashboards[in.ID]; fn != nil {
-			return fn(in)
-		}
-		return Render{}, errNotImplemented
-	})
-}
-
-//go:wasmexport migrate_wordpress
-func migrateWordPress() int32 {
-	return serve(func(struct{}) (notice, error) {
-		if migrate == nil {
-			return notice{}, nil
-		}
-		n, err := migrate()
-		return notice{n}, err
-	})
+		})
+	},
 }

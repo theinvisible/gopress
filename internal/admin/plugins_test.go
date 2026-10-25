@@ -44,6 +44,7 @@ func TestPluginsScreen(t *testing.T) {
 	db.Stash(ctx, e.d.W, "wordpress", "post:tester_item", "7", map[string]string{"title": "seven"})
 	admin := e.session(auth.RoleAdministrator, db.SessionFull)
 	editor := e.session(auth.RoleEditor, db.SessionFull)
+	subscriber := e.session(auth.RoleSubscriber, db.SessionFull)
 	if rec := e.do("GET", "/admin/plugins/", editor, nil, nil); rec.Code != http.StatusForbidden {
 		t.Errorf("editor sees plugins: %d", rec.Code)
 	}
@@ -103,6 +104,25 @@ func TestPluginsScreen(t *testing.T) {
 	set, _ := e.plugins.Settings(ctx, "tester", "settings")
 	if set["greeting"] != "Servus" || set["count"] != 4.0 || len(set["images"].([]any)) != 2 {
 		t.Errorf("settings: %v", set)
+	}
+	// The plugin checks saved settings; its notice (or problem) is shown.
+	if p := e.do("GET", "/admin/plugin/tester/settings", admin, nil, nil).Body.String(); !strings.Contains(p, "Settings saved. checked by administrator") {
+		t.Error("saved notice of the plugin missing")
+	}
+	post(e, "/admin/plugin/tester/settings", admin, url.Values{"greeting": {"bad"}, "count": {"4"}})
+	if p := e.do("GET", "/admin/plugin/tester/settings", admin, nil, nil).Body.String(); !strings.Contains(p, "the greeting is bad") ||
+		!strings.Contains(p, "notice-error") {
+		t.Error("problem notice of the plugin missing")
+	}
+	// A page outside the menu (editor dialogs) still checks its capability.
+	if strings.Contains(dash, "/admin/plugin/tester/dialog") {
+		t.Error("dialog page in the menu")
+	}
+	if rec := e.do("GET", "/admin/plugin/tester/dialog", editor, nil, nil); rec.Code != http.StatusOK {
+		t.Errorf("dialog page for an editor: %d", rec.Code)
+	}
+	if rec := e.do("GET", "/admin/plugin/tester/dialog", subscriber, nil, nil); rec.Code != http.StatusForbidden {
+		t.Errorf("dialog page for a subscriber: %d", rec.Code)
 	}
 
 	// Table: cells are text, actions reach the plugin.

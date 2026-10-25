@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,6 +94,11 @@ func init() {
 			err = gp.KVSet("_settings", "settings", map[string]any{"greeting": "hacked"})
 		case "site":
 			out, err = gp.Site()
+		case "fetchtimeout":
+			ms, _ := strconv.Atoi(r.Attr("ms", "0"))
+			out, err = gp.Fetch(gp.HTTPRequest{URL: r.Attr("url", ""), TimeoutMS: ms})
+		case "mail":
+			err = gp.MailAdmins(r.Attr("subject", "Hi"), r.Attr("body", "Body"))
 		}
 		if err != nil {
 			return gp.Render{HTML: "error: " + err.Error()}, nil
@@ -107,6 +113,9 @@ func init() {
 		return gp.FilterResult{Value: r.Value + "<p class=\"tester-footer\">filtered</p>"}, nil
 	})
 	gp.HandleComment(func(c gp.CommentCheck) (string, error) {
+		if err := gp.KVSet("events", "last_check", c); err != nil {
+			return "", err
+		}
 		switch {
 		case strings.Contains(c.Comment.Content, "viagra"):
 			return gp.Spam, nil
@@ -128,6 +137,16 @@ func init() {
 	gp.HandleTable("items", func(r gp.AdminRequest) (gp.Table, error) {
 		return gp.Table{Rows: []gp.Row{{ID: "1", Cells: map[string]string{"name": "<b>One</b>"}}}, Total: 1,
 			Actions: []gp.Option{{Value: "delete", Label: "Delete"}}}, nil
+	})
+	gp.HandleSettingsSaved("settings", func(r gp.AdminRequest) (string, error) {
+		st, err := gp.Settings("settings")
+		if err != nil {
+			return "", err
+		}
+		if st["greeting"] == "bad" {
+			return "", errors.New("the greeting is bad")
+		}
+		return fmt.Sprintf("checked by %s", r.User.Login), nil
 	})
 	gp.HandleSubmit("items", func(r gp.AdminRequest) (string, error) {
 		return fmt.Sprintf("%s %v by %s", r.Action, r.IDs, r.User.Login), nil

@@ -10,12 +10,7 @@ package gopress
 import (
 	"encoding/json"
 	"errors"
-
-	"github.com/extism/go-pdk"
 )
-
-//go:wasmimport extism:host/user gopress
-func hostCall(uint64) uint64
 
 type hostResp struct {
 	Result json.RawMessage `json:"result"`
@@ -28,15 +23,10 @@ func call(op string, args any, out any) error {
 	if err != nil {
 		return err
 	}
-	mem := pdk.AllocateBytes(req)
-	defer mem.Free()
-	off := hostCall(mem.Offset())
-	if off == 0 {
-		return errors.New("host call failed")
+	b, err := hostRequest(req)
+	if err != nil {
+		return err
 	}
-	rm := pdk.FindMemory(off)
-	b := rm.ReadBytes()
-	rm.Free()
 	var resp hostResp
 	if err := json.Unmarshal(b, &resp); err != nil {
 		return err
@@ -207,6 +197,9 @@ type HTTPRequest struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers,omitempty"`
 	Body    string            `json:"body,omitempty"`
+	// TimeoutMS ends the request early (100–10000 ms; default and maximum
+	// 10 s, and never beyond the time limit of the call).
+	TimeoutMS int `json:"timeout_ms,omitempty"`
 }
 
 // HTTPResponse is the answer (the body as text).
@@ -234,3 +227,10 @@ func Stash(kind string) (map[string]json.RawMessage, error) {
 // Invalidate clears the page cache (after changing what the plugin
 // renders).
 func Invalidate() error { return call("invalidate", nil, nil) }
+
+// MailAdmins sends a plain-text e-mail to the site's administrators
+// (permission mail:admins; at most 20 an hour). The subject gets the site
+// and plugin name in front.
+func MailAdmins(subject, body string) error {
+	return call("mail_admins", map[string]string{"subject": subject, "body": body}, nil)
+}

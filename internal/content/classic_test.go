@@ -173,8 +173,7 @@ func TestClassicToHTMLRendersTheSame(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer d.Close()
-	pipe := render.NewPipeline()
-	pipe.UseSmilies = true
+	pipe := sitePipeline()
 	checked, differ := 0, 0
 	for _, typ := range []string{db.TypePost, db.TypePage} {
 		posts, _, err := db.AdminPosts(ctx, d.R, db.AdminPostQuery{Type: typ})
@@ -230,8 +229,7 @@ func TestEditorRoundTripRendersTheSame(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer d.Close()
-	pipe := render.NewPipeline()
-	pipe.UseSmilies = true
+	pipe := sitePipeline()
 	differ := 0
 	for _, o := range outs {
 		p, err := db.GetPost(ctx, d.R, o.ID)
@@ -256,4 +254,16 @@ func TestEditorRoundTripRendersTheSame(t *testing.T) {
 	if differ > 0 {
 		t.Fail()
 	}
+}
+
+// sitePipeline is the pipeline with the source site's plugin shortcodes
+// registered (the bundled plugins render them).
+func sitePipeline() *render.Pipeline {
+	SetPluginShortcodes(func() []string { return []string{"fotogalerie", "paypal-donation"} })
+	pipe := render.NewPipeline()
+	pipe.UseSmilies = true
+	for _, name := range []string{"fotogalerie", "paypal-donation"} {
+		pipe.Register(name, func(*render.Env, *render.Shortcode) string { return "" })
+	}
+	return pipe
 }

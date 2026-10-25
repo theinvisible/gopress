@@ -28,6 +28,17 @@ import (
 var _ site.Extensions = (*Host)(nil)
 
 // Shortcodes returns the renderers of the active plugins' shortcodes.
+// ShortcodeNames lists the shortcodes of the active plugins.
+func (h *Host) ShortcodeNames() []string {
+	var out []string
+	for _, p := range h.activePlugins() {
+		for _, sc := range p.pkg.Manifest.Shortcodes {
+			out = append(out, sc.Name)
+		}
+	}
+	return out
+}
+
 func (h *Host) Shortcodes() map[string]render.ShortcodeFunc {
 	out := map[string]render.ShortcodeFunc{}
 	for _, p := range h.activePlugins() {
@@ -392,16 +403,17 @@ func (h *Host) CommentFilter() site.CommentFilter {
 	return func(r *http.Request, c *db.Comment, post *db.Post) string {
 		verdict := ""
 		rank := map[string]int{"": 0, "approve": 1, "hold": 2, "spam": 3, "discard": 4}
-		links, _ := h.opts.Site.Links(r.Context())
-		in := CommentIn{Comment: commentData(c), PostTitle: html.UnescapeString(post.Title), Referrer: r.Referer(),
-			Language: r.Header.Get("Accept-Language")}
-		if links != nil {
-			in.PostURL = links.PostURL(post)
-		}
+		var list []*plugin
 		for _, p := range h.activePlugins() {
-			if !slices.Contains(p.perms.Hooks, HookCommentSave) {
-				continue
+			if slices.Contains(p.perms.Hooks, HookCommentSave) {
+				list = append(list, p)
 			}
+		}
+		if len(list) == 0 {
+			return ""
+		}
+		in := h.commentIn(r, c, post)
+		for _, p := range list {
 			var out CommentOut
 			// A failing or slow check keeps the core's decision (fail open):
 			// a broken spam filter must not block discussions.
@@ -419,9 +431,42 @@ func (h *Host) CommentFilter() site.CommentFilter {
 	}
 }
 
+// commentIn describes a comment about to be stored for comment_pre_save.
+func (h *Host) commentIn(r *http.Request, c *db.Comment, post *db.Post) CommentIn {
+	ctx := r.Context()
+	in := CommentIn{Comment: commentData(c), PostTitle: html.UnescapeString(post.Title), Referrer: r.Referer(),
+		Language: r.Header.Get("Accept-Language"), Headers: map[string]string{}}
+	if !post.ModifiedGMT.IsZero() {
+		in.PostModified = post.ModifiedGMT.UTC().Format(time.RFC3339)
+	}
+	if links, err := h.opts.Site.Links(ctx); err == nil {
+		in.PostURL = links.PostURL(post)
+	}
+	if terms, err := db.PostTerms(ctx, h.opts.DB.R, []int64{post.ID}); err == nil {
+		for _, t := range terms[post.ID] {
+			if t.Taxonomy == "category" || t.Taxonomy == "post_tag" {
+				in.PostTerms = append(in.PostTerms, html.UnescapeString(t.Name))
+			}
+		}
+	}
+	if c.UserID != 0 {
+		if u, err := db.GetUser(ctx, h.opts.DB.R, c.UserID); err == nil {
+			in.UserRole = u.Role
+		}
+	}
+	for _, k := range commentHeaders {
+		if v := r.Header.Get(k); v != "" {
+			in.Headers[k] = truncate(v, 1000)
+		}
+	}
+	return in
+}
+
 // CommentStatusChanged tells plugins with the comment_status_changed hook
 // about moderation (in the background; errors are logged).
-func (h *Host) CommentStatusChanged(ctx context.Context, ids []int64, status string) {
+// previous holds the status of each comment before the change, by the
+// acting editor.
+func (h *Host) CommentStatusChanged(ctx context.Context, ids []int64, previous []string, status string, by *db.User) {
 	var list []*plugin
 	for _, p := range h.activePlugins() {
 		if slices.Contains(p.perms.Hooks, HookCommentStatus) {
@@ -434,13 +479,20 @@ func (h *Host) CommentStatusChanged(ctx context.Context, ids []int64, status str
 	go func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
 		defer cancel()
-		for _, id := range ids {
+		for i, id := range ids {
 			c, err := db.GetComment(ctx, h.opts.DB.R, id)
 			if err != nil {
 				continue
 			}
+			data := CommentStatusData{Comment: commentData(c), Status: status}
+			if i < len(previous) {
+				data.Previous = previous[i]
+			}
+			if by != nil {
+				u := userData(by)
+				data.By = &u
+			}
 			for _, p := range list {
-				data := map[string]any{"comment": commentData(c), "status": status}
 				if err := p.call(ctx, ExportAction, callHook, actionIn(HookCommentStatus, data), nil); err != nil &&
 					!errors.Is(err, ErrUnavailable) {
 					h.log.Warn("plugin comment_status_changed", "plugin", p.pkg.Manifest.Name, "err", err)

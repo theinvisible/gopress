@@ -68,6 +68,18 @@ func (h *Host) Submit(ctx context.Context, name, page string, u *db.User, action
 	return truncate(out.Notice, 500), err
 }
 
+// Saved tells the plugin that a settings page was saved (admin_submit
+// with the action "saved"); the plugin may check the values and answer
+// with a notice. An error the plugin reports is the notice of a problem.
+func (h *Host) Saved(ctx context.Context, name, page string, u *db.User) (string, error) {
+	var out AdminDoOut
+	err := h.call(ctx, name, ExportAdminDo, callRequest, AdminIn{Page: page, User: userData(u), Action: "saved"}, &out)
+	if errors.Is(err, ErrNoExport) {
+		return "", nil
+	}
+	return truncate(out.Notice, 500), err
+}
+
 // API runs a bridge call of an iframe page.
 func (h *Host) API(ctx context.Context, name, page string, u *db.User, method string, params json.RawMessage) (json.RawMessage, error) {
 	var out json.RawMessage
