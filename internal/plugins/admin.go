@@ -200,6 +200,12 @@ func (h *Host) HasImport(ctx context.Context, name string) bool {
 		return false
 	}
 	for _, d := range p.perms.Data {
+		if opt, ok := strings.CutPrefix(d, DataImportOption); ok {
+			if m, err := db.StashEntries(ctx, h.opts.DB.R, "wordpress", "option"); err == nil && m[opt] != nil {
+				return true
+			}
+			continue
+		}
 		if kind, ok := strings.CutPrefix(d, DataImportPrefix); ok {
 			if m, err := db.StashEntries(ctx, h.opts.DB.R, "wordpress", kind); err == nil && len(m) > 0 {
 				return true

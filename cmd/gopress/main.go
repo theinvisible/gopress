@@ -47,6 +47,7 @@ commands:
   user         manage users and reset passwords or two-factor authentication
   mail         show the mail queue and send a test email
   media        regenerate image sizes, remove metadata from old uploads
+  plugin       list, activate or deactivate plugins
   plugin-pack  build a plugin package (.zip) from its source directory
   version      print version information
 `
@@ -75,6 +76,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdMail(rest, stdout, stderr)
 	case "media":
 		return cmdMedia(rest, stdout, stderr)
+	case "plugin":
+		return cmdPlugin(rest, stdout, stderr)
 	case "plugin-pack":
 		return cmdPluginPack(rest, stdout, stderr)
 	case "backup":

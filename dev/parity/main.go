@@ -328,22 +328,15 @@ func text(n *html.Node) string {
 // internals are ignored.
 var ignoredAttrs = map[string]bool{"loading": true, "decoding": true, "fetchpriority": true, "data-wp-strategy": true}
 
-// skipped returns true for subtrees excluded from the comparison: plugin
-// output that GoPress renders in later milestones and spam-protection
-// fields that differ by design.
+// skipped returns true for subtrees excluded from the comparison:
+// spam-protection fields that differ by design.
 func skipped(n *html.Node) bool {
 	if n.Type != html.ElementNode {
 		return false
 	}
 	id, class := attr(n, "id"), attr(n, "class")
 	switch {
-	case strings.HasPrefix(id, "paypal_donations-"): // M4 plugin
-		return true
-	case strings.Contains(class, "paypal-donations"), strings.Contains(class, "fslb-gallery"): // M4 plugins
-		return true
 	case strings.Contains(class, "akismet-fields-container"), id == "akismet_comment_nonce":
-		return true
-	case n.Data == "form" && strings.Contains(attr(n, "action"), "paypal.com"): // M4 plugin
 		return true
 	case n.Data == "input" && strings.HasPrefix(attr(n, "name"), "gp_"):
 		return true
@@ -379,9 +372,28 @@ func normAttr(key, val string) string {
 		f := strings.Fields(val)
 		sort.Strings(f)
 		return strings.Join(f, " ")
+	case "style":
+		// "a: b;" and "a: b" are the same declarations (plugin HTML is
+		// re-serialized by the filter).
+		return strings.TrimRight(val, "; ")
 	}
 	return val
 }
+
+// The photo gallery plugin differs on purpose: its data is in data
+// attributes (WordPress: a JSON script, which is skipped), the importer
+// turned the block into the shortcode (other wrapper class), ids count
+// differently and image sizes follow the image, not the theme's content
+// width. Slides, images, sources and alt texts are compared.
+func galleryIgnored(key string) bool {
+	switch key {
+	case "id", "width", "height", "sizes":
+		return true
+	}
+	return strings.HasPrefix(key, "data-") && key != "data-fslb-index"
+}
+
+var galleryClass = strings.NewReplacer(" fslb-gallery--shortcode", "", " wp-block-foto-slider-lightbox-gallery", "")
 
 // intentional maps GoPress output that differs from WordPress on purpose
 // to the WordPress equivalent before comparing.
@@ -413,11 +425,15 @@ func normalize(n *html.Node) string {
 			return
 		case html.ElementNode:
 			var attrs []string
+			gallery := strings.Contains(attr(n, "class"), "fslb-")
 			for _, a := range n.Attr {
-				if ignoredAttrs[a.Key] {
+				if ignoredAttrs[a.Key] || gallery && galleryIgnored(a.Key) {
 					continue
 				}
 				v := normAttr(a.Key, a.Val)
+				if gallery && a.Key == "class" {
+					v = galleryClass.Replace(v)
+				}
 				if a.Key == "class" && v == "" {
 					continue
 				}

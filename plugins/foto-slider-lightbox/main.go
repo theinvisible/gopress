@@ -254,6 +254,9 @@ func migrate() (string, error) {
 		gp.Progress(n*100/len(items), "Galleries")
 	}
 	gp.Invalidate()
+	if n == 1 {
+		return "1 gallery imported.", nil
+	}
 	return fmt.Sprintf("%d galleries imported.", n), nil
 }
 
