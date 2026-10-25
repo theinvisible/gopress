@@ -89,6 +89,8 @@ These are what the approval screen lists:
 
 An update that asks for more permissions stays inactive until an administrator approves it again.
 
+A spam filter can set `"comment_check_failure": "hold"` at the top level of the manifest. Then a comment whose check fails, times out or meets a paused plugin is held for moderation instead of keeping the core's decision.
+
 ### Form fields
 
 Settings pages, widget forms and editor dialogs share one field format:
