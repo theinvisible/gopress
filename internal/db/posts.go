@@ -239,6 +239,27 @@ func PostMeta(ctx context.Context, q Querier, postID int64, key string) (string,
 	return v, err == nil, err
 }
 
+// PostMetaByKey returns the first value of key for every post that has it.
+func PostMetaByKey(ctx context.Context, q Querier, key string) (map[int64]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT post_id, value FROM post_meta WHERE key = ? ORDER BY rowid`, key)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]string{}
+	for rows.Next() {
+		var id int64
+		var v string
+		if err := rows.Scan(&id, &v); err != nil {
+			return nil, err
+		}
+		if _, ok := out[id]; !ok {
+			out[id] = v
+		}
+	}
+	return out, rows.Err()
+}
+
 // AddSlugRedirect records a former slug of a post.
 func AddSlugRedirect(ctx context.Context, q Querier, oldSlug string, postID int64) error {
 	_, err := q.ExecContext(ctx, `INSERT OR IGNORE INTO slug_redirects (old_slug, post_id) VALUES (?, ?)`, oldSlug, postID)

@@ -30,6 +30,10 @@ type contentIndex struct {
 	users       map[int64]*db.User
 	userByNice  map[string]*db.User
 	multiAuthor bool
+
+	// excerptSrc holds the WordPress excerpt sources of imported block
+	// content (db.ExcerptSourceKey), by post id.
+	excerptSrc map[int64]string
 }
 
 func buildIndex(ctx context.Context, q db.Querier) (*contentIndex, error) {
@@ -131,6 +135,9 @@ func buildIndex(ctx context.Context, q db.Querier) (*contentIndex, error) {
 		u := &users[i]
 		ix.users[u.ID] = u
 		ix.userByNice[u.Nicename] = u
+	}
+	if ix.excerptSrc, err = db.PostMetaByKey(ctx, q, db.ExcerptSourceKey); err != nil {
+		return nil, err
 	}
 	return ix, nil
 }

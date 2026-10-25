@@ -133,7 +133,7 @@ func (rq *request) feed(kind feedKind, obj any, search string) *response {
 		}
 		excerpt := ""
 		if p.Password == "" {
-			excerpt = render.StripTags(rq.st.pipe.Excerpt(rq.env, p.Content, p.ContentFormat))
+			excerpt = render.StripTags(rq.st.pipe.Excerpt(rq.env, rq.excerptSource(p), p.ContentFormat))
 			if strings.TrimSpace(p.Excerpt) != "" {
 				excerpt = p.Excerpt
 			}

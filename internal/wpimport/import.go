@@ -340,6 +340,11 @@ func (im *importer) importPosts(ctx context.Context) error {
 					return err
 				}
 			}
+			if src, ok := excerptSource(original, im.home); ok && src != p.Content {
+				if err := db.AddPostMeta(ctx, im.tx, p.ID, db.ExcerptSourceKey, db.ExcerptMeta(p.Content, src)); err != nil {
+					return err
+				}
+			}
 		} else if err := db.InsertPost(ctx, im.tx, &p); err != nil {
 			return err
 		}

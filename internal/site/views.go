@@ -462,11 +462,23 @@ func (rq *request) entry(p *db.Post, terms []db.Term, mode entryMode) *theme.Pos
 func (rq *request) excerpt(p *db.Post) string {
 	text := p.Excerpt
 	if strings.TrimSpace(text) == "" {
-		text = rq.st.pipe.Excerpt(rq.env, p.Content, p.ContentFormat)
+		text = rq.st.pipe.Excerpt(rq.env, rq.excerptSource(p), p.ContentFormat)
 	}
 	text = render.Texturize(text, nil)
 	text = render.ConvertSmilies(text)
 	return render.Autop(text)
+}
+
+// excerptSource is what the automatic excerpt is made from: the content,
+// or for imported block content (unchanged since the import) the blocks
+// WordPress' excerpt_remove_blocks() keeps.
+func (rq *request) excerptSource(p *db.Post) string {
+	if meta, ok := rq.st.ix.excerptSrc[p.ID]; ok {
+		if src, ok := db.ExcerptFromMeta(meta, p.Content); ok {
+			return src
+		}
+	}
+	return p.Content
 }
 
 func (rq *request) passwordForm(p *db.Post) string {

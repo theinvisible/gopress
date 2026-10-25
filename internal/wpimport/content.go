@@ -353,3 +353,82 @@ func relativizeURLs(content, homeURL string) string {
 	}
 	return content
 }
+
+// excerptBlocks are the blocks excerpt_remove_blocks() keeps; wrappers
+// contribute their inner blocks. core/more is kept as well: WordPress cuts
+// the content at <!--more--> before it removes blocks.
+var (
+	excerptInner = map[string]bool{"core/freeform": true, "core/heading": true, "core/html": true, "core/list": true,
+		"core/media-text": true, "core/paragraph": true, "core/preformatted": true, "core/pullquote": true,
+		"core/quote": true, "core/table": true, "core/verse": true}
+	excerptWrapper = map[string]bool{"core/columns": true, "core/column": true, "core/group": true}
+)
+
+// excerptSource is excerpt_remove_blocks() for block content: the HTML that
+// wp_trim_excerpt() makes the automatic excerpt from. Lists made of list
+// items, code, images and other blocks do not count. ok is false for
+// classic content.
+func excerptSource(content, homeURL string) (string, bool) {
+	if !strings.Contains(content, "<!-- wp:") {
+		return "", false
+	}
+	root, _ := parseBlocks(content)
+	r := blockRenderer{}
+	var sb strings.Builder
+	for _, b := range root.children {
+		switch {
+		case b.name == "":
+			sb.WriteString(b.text) // freeform content between blocks
+		case hiddenBlock(b):
+		case b.name == "core/more":
+			sb.WriteString(r.render(b))
+		case excerptWrapper[b.name] && len(innerBlocks(b)) > 0:
+			sb.WriteString(r.excerptInner(b))
+		case excerptInner[b.name] || excerptWrapper[b.name]:
+			ok := true
+			for _, ib := range innerBlocks(b) {
+				if !excerptInner[ib.name] || len(innerBlocks(ib)) > 0 {
+					ok = false
+				}
+			}
+			if ok {
+				sb.WriteString(r.render(b))
+			}
+		}
+	}
+	return relativizeURLs(strings.TrimSpace(sb.String()), homeURL), true
+}
+
+// excerptInner is _excerpt_render_inner_blocks(): only the inner blocks of
+// a wrapper, text between them is dropped.
+func (r *blockRenderer) excerptInner(b *blockNode) string {
+	var sb strings.Builder
+	for _, ib := range innerBlocks(b) {
+		if hiddenBlock(ib) || !(excerptInner[ib.name] || excerptWrapper[ib.name]) {
+			continue
+		}
+		if len(innerBlocks(ib)) == 0 {
+			sb.WriteString(r.render(ib))
+		} else {
+			sb.WriteString(r.excerptInner(ib))
+		}
+	}
+	return sb.String()
+}
+
+func innerBlocks(b *blockNode) []*blockNode {
+	var out []*blockNode
+	for _, c := range b.children {
+		if c.name != "" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// hiddenBlock: blockVisibility false in the block metadata.
+func hiddenBlock(b *blockNode) bool {
+	md, _ := b.attrs["metadata"].(map[string]any)
+	v, ok := md["blockVisibility"].(bool)
+	return ok && !v
+}
