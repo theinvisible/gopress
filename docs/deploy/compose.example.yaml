@@ -1,0 +1,53 @@
+# Example: GoPress behind Traefik (docker provider, external network
+# "proxy", entrypoint "websecure", certificate resolver "le"). Adjust the
+# names, the host and the subnet; see docs/deploy.md.
+name: gopress
+
+services:
+  gopress:
+    image: ghcr.io/theinvisible/gopress:latest   # better: a fixed version tag
+    container_name: gopress
+    restart: unless-stopped
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    environment:
+      GOPRESS_BASE_URL: https://example.org
+      # Subnet of the "proxy" network (docker network inspect proxy).
+      GOPRESS_TRUSTED_PROXIES: 172.18.0.0/16
+      GOMEMLIMIT: 600MiB
+      TZ: UTC
+    volumes:
+      # install -d -o 65532 -g 65532 -m 0750 /srv/gopress/data /srv/gopress/backups
+      - /srv/gopress/data:/data
+      - /srv/gopress/backups:/backups
+    networks: [proxy]
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "5"}
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      traefik.http.services.gopress.loadbalancer.server.port: "8080"
+      traefik.http.routers.gopress.rule: Host(`example.org`)
+      traefik.http.routers.gopress.entrypoints: websecure
+      traefik.http.routers.gopress.tls.certresolver: le
+      # Other host names of the site redirect to the main one.
+      traefik.http.routers.gopress-alias.rule: Host(`www.example.org`)
+      traefik.http.routers.gopress-alias.entrypoints: websecure
+      traefik.http.routers.gopress-alias.tls.certresolver: le
+      traefik.http.routers.gopress-alias.middlewares: gopress-to-main
+      traefik.http.routers.gopress-alias.service: gopress
+      traefik.http.middlewares.gopress-to-main.redirectregex.regex: ^https?://[^/]+/(.*)
+      traefik.http.middlewares.gopress-to-main.redirectregex.replacement: https://example.org/$${1}
+      traefik.http.middlewares.gopress-to-main.redirectregex.permanent: "true"
+
+networks:
+  proxy:
+    external: true
+
+# Staging: a second service (or project) with its own data directory,
+# GOPRESS_BASE_URL=https://staging.example.org, GOPRESS_NOINDEX=true and
+# GOPRESS_DISABLE_OUTBOUND=true, and its own router names.

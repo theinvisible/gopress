@@ -141,9 +141,26 @@ notice and the count), a plugin being paused, the progress of an import, and not
 The editor shows who else edits the same post and warns when someone saved a newer version. It also
 has a live preview next to the editor.
 
-Behind a reverse proxy, pass `--trusted-proxies` and make sure the proxy sets (overwrites)
-`X-Real-Ip` or appends to `X-Forwarded-For` (Traefik and nginx with `proxy_set_header` do);
-client addresses are used for rate limits and the audit log.
+## Deployment
+
+```sh
+make release        # tests, govulncheck, container image, image checks
+docker run -d -p 8080:8080 -v gopress:/data -e GOPRESS_BASE_URL=https://example.org ghcr.io/theinvisible/gopress
+docker exec <container> /gopress backup --out /backups --keep 14
+```
+
+The image is `FROM scratch`: it holds only the binary, the CA certificates and a non-root user, and
+runs with a read-only root filesystem. Everything that changes lives in `/data`. `gopress backup`
+works while the server runs; `gopress restore` restores a backup into an empty directory.
+
+Behind a reverse proxy, pass `--trusted-proxies` (the proxy's subnet). Proxy headers from anyone
+else are dropped. Staging copies run with `--noindex` and `--disable-outbound`.
+
+- [docs/deploy.md](docs/deploy.md): configuration, the proxy, hardening, backups, updates.
+- [docs/deploy/compose.example.yaml](docs/deploy/compose.example.yaml): a hardened service behind
+  Traefik.
+- [docs/deploy/runbook.md](docs/deploy/runbook.md): moving a WordPress site: staging, comparison with
+  the live site, cutover, rollback.
 
 ## Local test data
 
