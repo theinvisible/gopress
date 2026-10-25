@@ -1,0 +1,21 @@
+{{- /* Dashboard box (shown inside the admin: text, lists and tables
+       only). */ -}}
+{{- if .Totals}}
+<p><strong>Last 12 months:</strong> {{range $i, $t := .Totals}}{{if $i}}, {{end}}{{$t}}{{end}}</p>
+{{- else}}
+<p>No donations in the last 12 months.</p>
+{{- end}}
+{{- if .Recent}}
+<table>
+<thead><tr><th scope="col">Date</th><th scope="col">Name</th><th scope="col">Amount</th></tr></thead>
+<tbody>
+{{- range .Recent}}
+<tr><td>{{.Date}}</td><td>{{.Name}}</td><td>{{.Amount}}</td></tr>
+{{- end}}
+</tbody>
+</table>
+{{- end}}
+{{- if not .IPN}}
+<p><em>Recording new donations is off (Settings › PayPal Donations).</em></p>
+{{- end}}
+<p><a href="/admin/plugin/paypal-donations/donations">All donations</a></p>

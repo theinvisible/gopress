@@ -1,0 +1,6 @@
+{{- /* The widget: the theme's title markup, the text and the form. */ -}}
+{{.TitleHTML}}
+{{- range .Paragraphs}}<p>{{range $i, $l := .}}{{if $i}}<br />
+{{end}}{{$l}}{{end}}</p>
+{{end}}
+{{- template "form.html" .Form}}

@@ -1,0 +1,509 @@
+{
+	"name": "paypal-donations",
+	"version": "2.0.0",
+	"title": "PayPal Donations",
+	"description": "A PayPal donation button as a shortcode ([paypal-donation]) and a widget. With IPN turned on, donations are checked with PayPal and listed in the admin.",
+	"author": "GoPress",
+	"api": 1,
+	"permissions": {
+		"http": [
+			"ipnpb.paypal.com",
+			"ipnpb.sandbox.paypal.com"
+		],
+		"routes": [
+			"/ipn"
+		],
+		"legacy_routes": [
+			{
+				"query": {
+					"ppd_paypal_ipn": "process"
+				},
+				"route": "/ipn"
+			}
+		],
+		"data": [
+			"import:option:paypal_donations_options",
+			"import:post:donation_list",
+			"mail:admins",
+			"notify:admins"
+		]
+	},
+	"shortcodes": [
+		{
+			"name": "paypal-donation"
+		}
+	],
+	"widgets": [
+		{
+			"type": "paypal_donations",
+			"title": "PayPal Donations",
+			"description": "A donation button with an optional text.",
+			"fields": [
+				{
+					"name": "title",
+					"label": "Title",
+					"max_length": 200
+				},
+				{
+					"name": "text",
+					"label": "Text",
+					"type": "textarea",
+					"max_length": 2000
+				},
+				{
+					"name": "purpose",
+					"label": "Purpose",
+					"max_length": 127
+				},
+				{
+					"name": "reference",
+					"label": "Reference",
+					"max_length": 127
+				}
+			]
+		}
+	],
+	"admin": [
+		{
+			"id": "settings",
+			"title": "PayPal Donations",
+			"menu": "settings",
+			"capability": "manage_options",
+			"kind": "settings",
+			"fields": [
+				{
+					"name": "paypal_account",
+					"label": "PayPal account",
+					"help": "The email address or merchant ID of the PayPal account that receives donations.",
+					"required": true,
+					"max_length": 127
+				},
+				{
+					"name": "currency_code",
+					"label": "Currency",
+					"type": "select",
+					"options": [
+						{
+							"value": "AUD",
+							"label": "Australian Dollars (A $)"
+						},
+						{
+							"value": "BRL",
+							"label": "Brazilian Real"
+						},
+						{
+							"value": "CAD",
+							"label": "Canadian Dollars (C $)"
+						},
+						{
+							"value": "CZK",
+							"label": "Czech Koruna"
+						},
+						{
+							"value": "DKK",
+							"label": "Danish Krone"
+						},
+						{
+							"value": "EUR",
+							"label": "Euros (€)"
+						},
+						{
+							"value": "HKD",
+							"label": "Hong Kong Dollar ($)"
+						},
+						{
+							"value": "HUF",
+							"label": "Hungarian Forint"
+						},
+						{
+							"value": "ILS",
+							"label": "Israeli New Shekel"
+						},
+						{
+							"value": "JPY",
+							"label": "Yen (¥)"
+						},
+						{
+							"value": "MYR",
+							"label": "Malaysian Ringgit"
+						},
+						{
+							"value": "MXN",
+							"label": "Mexican Peso"
+						},
+						{
+							"value": "NOK",
+							"label": "Norwegian Krone"
+						},
+						{
+							"value": "NZD",
+							"label": "New Zealand Dollar ($)"
+						},
+						{
+							"value": "PHP",
+							"label": "Philippine Peso"
+						},
+						{
+							"value": "PLN",
+							"label": "Polish Zloty"
+						},
+						{
+							"value": "GBP",
+							"label": "Pounds Sterling (£)"
+						},
+						{
+							"value": "RUB",
+							"label": "Russian Ruble"
+						},
+						{
+							"value": "SGD",
+							"label": "Singapore Dollar ($)"
+						},
+						{
+							"value": "SEK",
+							"label": "Swedish Krona"
+						},
+						{
+							"value": "CHF",
+							"label": "Swiss Franc"
+						},
+						{
+							"value": "TWD",
+							"label": "Taiwan New Dollar"
+						},
+						{
+							"value": "THB",
+							"label": "Thai Baht"
+						},
+						{
+							"value": "TRY",
+							"label": "Turkish Lira"
+						},
+						{
+							"value": "USD",
+							"label": "U.S. Dollars ($)"
+						}
+					],
+					"default": "USD"
+				},
+				{
+					"name": "page_style",
+					"label": "Page style",
+					"help": "Name of a custom payment page style of your PayPal account (optional).",
+					"max_length": 30
+				},
+				{
+					"name": "return_page",
+					"label": "Return page",
+					"type": "url",
+					"help": "Where PayPal sends donors afterwards, e.g. a thank-you page (optional)."
+				},
+				{
+					"name": "amount",
+					"label": "Default amount",
+					"type": "number",
+					"min": 0,
+					"max": 100000,
+					"help": "0 lets donors enter the amount."
+				},
+				{
+					"name": "purpose",
+					"label": "Default purpose",
+					"max_length": 127
+				},
+				{
+					"name": "reference",
+					"label": "Default reference",
+					"max_length": 127
+				},
+				{
+					"name": "button",
+					"label": "Button",
+					"type": "select",
+					"default": "large",
+					"options": [
+						{
+							"value": "small",
+							"label": "Small"
+						},
+						{
+							"value": "large",
+							"label": "Large"
+						},
+						{
+							"value": "cards",
+							"label": "Large with credit cards"
+						},
+						{
+							"value": "custom",
+							"label": "Custom image (below)"
+						}
+					]
+				},
+				{
+					"name": "button_url",
+					"label": "Custom button image",
+					"type": "url",
+					"help": "Used instead of PayPal's button when set."
+				},
+				{
+					"name": "button_localized",
+					"label": "Button language",
+					"type": "select",
+					"default": "en_US",
+					"options": [
+						{
+							"value": "en_AU",
+							"label": "Australia - Australian English"
+						},
+						{
+							"value": "de_DE/AT",
+							"label": "Austria - German"
+						},
+						{
+							"value": "nl_NL/BE",
+							"label": "Belgium - Dutch"
+						},
+						{
+							"value": "fr_XC",
+							"label": "Canada - French"
+						},
+						{
+							"value": "zh_XC",
+							"label": "China - Simplified Chinese"
+						},
+						{
+							"value": "fr_FR/FR",
+							"label": "France - French"
+						},
+						{
+							"value": "de_DE/DE",
+							"label": "Germany - German"
+						},
+						{
+							"value": "it_IT/IT",
+							"label": "Italy - Italian"
+						},
+						{
+							"value": "ja_JP/JP",
+							"label": "Japan - Japanese"
+						},
+						{
+							"value": "es_XC",
+							"label": "Mexico - Spanish"
+						},
+						{
+							"value": "nl_NL/NL",
+							"label": "Netherlands - Dutch"
+						},
+						{
+							"value": "pl_PL/PL",
+							"label": "Poland - Polish"
+						},
+						{
+							"value": "es_ES/ES",
+							"label": "Spain - Spanish"
+						},
+						{
+							"value": "de_DE/CH",
+							"label": "Switzerland - German"
+						},
+						{
+							"value": "fr_FR/CH",
+							"label": "Switzerland - French"
+						},
+						{
+							"value": "en_US",
+							"label": "United States - U.S. English"
+						}
+					]
+				},
+				{
+					"name": "new_tab",
+					"label": "Open PayPal in a new tab",
+					"type": "checkbox"
+				},
+				{
+					"name": "center_button",
+					"label": "Center the button",
+					"type": "checkbox"
+				},
+				{
+					"name": "disable_stats",
+					"label": "Leave out PayPal's tracking pixel",
+					"type": "checkbox"
+				},
+				{
+					"name": "sandbox",
+					"label": "Use the PayPal sandbox (testing)",
+					"type": "checkbox"
+				},
+				{
+					"name": "set_checkout_language",
+					"label": "Set the checkout language",
+					"type": "checkbox"
+				},
+				{
+					"name": "checkout_language",
+					"label": "Checkout language",
+					"type": "select",
+					"default": "",
+					"options": [
+						{
+							"value": "",
+							"label": "None"
+						},
+						{
+							"value": "AU",
+							"label": "Australia"
+						},
+						{
+							"value": "AT",
+							"label": "Austria"
+						},
+						{
+							"value": "BE",
+							"label": "Belgium"
+						},
+						{
+							"value": "BR",
+							"label": "Brazil"
+						},
+						{
+							"value": "CA",
+							"label": "Canada"
+						},
+						{
+							"value": "CN",
+							"label": "China"
+						},
+						{
+							"value": "FR",
+							"label": "France"
+						},
+						{
+							"value": "DE",
+							"label": "Germany"
+						},
+						{
+							"value": "IT",
+							"label": "Italy"
+						},
+						{
+							"value": "NL",
+							"label": "Netherlands"
+						},
+						{
+							"value": "PL",
+							"label": "Poland"
+						},
+						{
+							"value": "PR",
+							"label": "Portugal"
+						},
+						{
+							"value": "RU",
+							"label": "Russia"
+						},
+						{
+							"value": "ES",
+							"label": "Spain"
+						},
+						{
+							"value": "SE",
+							"label": "Sweden"
+						},
+						{
+							"value": "CH",
+							"label": "Switzerland"
+						},
+						{
+							"value": "GB",
+							"label": "United Kingdom"
+						},
+						{
+							"value": "US",
+							"label": "United States"
+						}
+					]
+				},
+				{
+					"name": "return_method",
+					"label": "Return method",
+					"type": "select",
+					"default": "0",
+					"options": [
+						{
+							"value": "0",
+							"label": "GET"
+						},
+						{
+							"value": "1",
+							"label": "GET, without payment variables"
+						},
+						{
+							"value": "2",
+							"label": "POST, with payment variables"
+						}
+					]
+				},
+				{
+					"name": "ipn_enabled",
+					"label": "Record donations (PayPal IPN)",
+					"type": "checkbox",
+					"help": "PayPal reports each donation to this site, which checks it with PayPal and lists it under Donations. Turn on IPN in your PayPal account too."
+				},
+				{
+					"name": "ipn_mail",
+					"label": "Email the administrators about new donations",
+					"type": "checkbox",
+					"default": true
+				}
+			]
+		},
+		{
+			"id": "donations",
+			"title": "Donations",
+			"menu": "plugin",
+			"capability": "manage_options",
+			"kind": "table",
+			"columns": [
+				{
+					"name": "date",
+					"label": "Date"
+				},
+				{
+					"name": "name",
+					"label": "Name"
+				},
+				{
+					"name": "email",
+					"label": "Email"
+				},
+				{
+					"name": "amount",
+					"label": "Amount"
+				},
+				{
+					"name": "purpose",
+					"label": "Purpose"
+				},
+				{
+					"name": "type",
+					"label": "Type"
+				},
+				{
+					"name": "status",
+					"label": "Status"
+				}
+			]
+		}
+	],
+	"dashboard": [
+		{
+			"id": "recent",
+			"title": "Donations",
+			"capability": "manage_options"
+		}
+	]
+}

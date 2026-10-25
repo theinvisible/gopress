@@ -1,0 +1,13 @@
+{{- /* The donation form (shortcode and widget). Themes can replace this
+       file with plugins/paypal-donations/form.html. */ -}}
+<form action="{{.Action}}" method="post"{{if .NewTab}} target="_blank"{{end}}>
+    <div class="paypal-donations"{{if .Center}} style="text-align: center"{{end}}>
+{{- range .Fields}}
+        <input type="hidden" name="{{.Name}}" value="{{.Value}}" />
+{{- end}}
+        <input type="image" style="cursor: pointer;" src="{{.Button}}" name="submit" alt="PayPal - The safer, easier way to pay online." />
+{{- if .Pixel}}
+        <img alt="" src="{{.Pixel}}" width="1" height="1" />
+{{- end}}
+    </div>
+</form>
