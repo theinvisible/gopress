@@ -16,7 +16,7 @@ const pluginPackUsage = `usage: gopress plugin-pack [-o FILE] DIR
 Builds a plugin from its source directory: compiles the Go code with the
 standard toolchain (GOOS=wasip1 GOARCH=wasm, -buildmode=c-shared), checks
 plugin.json and writes NAME-VERSION.zip (or FILE) with plugin.json,
-plugin.wasm, assets/ and admin/. With -wasm FILE an already compiled module
+plugin.wasm, assets/, admin/ and templates/. With -wasm FILE an already compiled module
 is packed instead (plugins written in other languages).
 `
 
@@ -52,9 +52,12 @@ func cmdPluginPack(args []string, stdout, stderr io.Writer) int {
 		}
 		defer os.RemoveAll(tmp)
 		*wasm = filepath.Join(tmp, "plugin.wasm")
-		cmd := exec.Command("go", "build", "-buildmode=c-shared", "-trimpath", "-ldflags=-s -w", "-o", *wasm, ".")
+		// Reproducible: the same sources give the same module (bundled
+		// plugins are committed as zips).
+		cmd := exec.Command("go", "build", "-buildmode=c-shared", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid=",
+			"-o", *wasm, ".")
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm", "CGO_ENABLED=0")
+		cmd.Env = append(os.Environ(), "GOOS=wasip1", "GOARCH=wasm", "CGO_ENABLED=0", "GOFLAGS=")
 		cmd.Stdout, cmd.Stderr = stderr, stderr
 		if err := cmd.Run(); err != nil {
 			fmt.Fprintf(stderr, "plugin-pack: build failed: %v\n", err)

@@ -133,6 +133,20 @@ func newHostEnv(t *testing.T) *hostEnv {
 			w.Write(bytes.Repeat([]byte("z"), maxHTTPResponse+10))
 		case "/slow":
 			time.Sleep(2 * time.Second)
+		case "/cgi-bin/webscr": // PayPal's IPN postback
+			body, _ := io.ReadAll(r.Body)
+			if strings.HasPrefix(string(body), "cmd=_notify-validate&") && strings.Contains(string(body), "txn_id=GOOD") {
+				w.Write([]byte("VERIFIED"))
+			} else {
+				w.Write([]byte("INVALID"))
+			}
+		case "/1.1/comment-check": // Akismet
+			r.ParseForm()
+			if strings.Contains(r.PostForm.Get("comment_content"), "casino") {
+				w.Write([]byte("true"))
+			} else {
+				w.Write([]byte("false"))
+			}
 		default:
 			w.Write([]byte("api says " + r.Method + " " + r.Header.Get("X-Test")))
 		}

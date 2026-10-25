@@ -5,7 +5,7 @@ COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS  := -s -w -X $(PKG)/internal/buildinfo.Version=$(VERSION) -X $(PKG)/internal/buildinfo.Commit=$(COMMIT)
 COMPOSE  := docker compose -f dev/compose.yaml
 
-.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden import serve parity vulncheck editor admin-assets e2e roundtrip plugins hello
+.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden import serve parity vulncheck editor admin-assets e2e roundtrip plugins plugins-check hello
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/gopress
@@ -76,10 +76,19 @@ vulncheck:
 
 # Plugins shipped with GoPress (plugins/<name>, M4) are packed into
 # plugins/bundled/zips, which is committed and embedded in the binary.
-BUNDLED_PLUGINS :=
+BUNDLED_PLUGINS := foto-slider-lightbox paypal-donations akismet
 
 plugins:
-	@for p in $(BUNDLED_PLUGINS); do go run ./cmd/gopress plugin-pack -o plugins/bundled/zips/$$p.zip plugins/$$p || exit 1; done
+	@for p in $(BUNDLED_PLUGINS); do (cd plugins/$$p && go test ./...) || exit 1; \
+		go run ./cmd/gopress plugin-pack -o plugins/bundled/zips/$$p.zip plugins/$$p || exit 1; done
+
+# plugins-check rebuilds the bundled plugins and fails if a committed zip
+# differs from its sources (the builds are reproducible).
+plugins-check:
+	@tmp=$$(mktemp -d); trap 'rm -rf $$tmp' EXIT; \
+	for p in $(BUNDLED_PLUGINS); do go run ./cmd/gopress plugin-pack -o $$tmp/$$p.zip plugins/$$p >/dev/null || exit 1; \
+		cmp -s $$tmp/$$p.zip plugins/bundled/zips/$$p.zip || { echo "plugins/bundled/zips/$$p.zip is out of date: make plugins"; exit 1; }; \
+	done; echo "bundled plugins up to date"
 
 # The example plugin (not bundled): bin/hello.zip to upload.
 hello:
