@@ -126,6 +126,13 @@ func TestRouting(t *testing.T) {
 		{"/2099/", 404, "", ""},
 		{"/feed/", 200, "", "<title>Hello “World”</title>"},
 		{"/2024/02/hello-world/feed/", 200, "", "Comments on: Hello"},
+		// Canonical feed URLs as in WordPress: RSS2 is the default feed.
+		{"/feed/rss2/", 301, "https://example.org/feed/", ""},
+		{"/feed/atom/", 301, "https://example.org/feed/", ""},
+		{"/rss2/", 301, "https://example.org/feed/", ""},
+		{"/comments/feed/rss2/", 301, "https://example.org/comments/feed/", ""},
+		{"/category/news/feed/rss2/", 301, "https://example.org/category/news/feed/", ""},
+		{"/search/hello/feed/rss2/", 200, "", "Search Results"},
 		{"/wp-sitemap.xml", 200, "", "wp-sitemap-posts-post-1.xml"},
 		{"/robots.txt", 200, "", "Sitemap: https://example.org/wp-sitemap.xml"},
 		{"/xmlrpc.php", 410, "", ""},

@@ -88,6 +88,10 @@ func parseRoute(r *http.Request) *route {
 		rt.feed, segs = "feed", segs[:n-1]
 	} else if n >= 2 && segs[n-2] == "feed" && isFeedType(segs[n-1]) {
 		rt.feed, segs = segs[n-1], segs[:n-2]
+	} else if n == 1 && isFeedType(segs[0]) {
+		// /rss2/, /atom/ …: WordPress' rewrite rules take these as the
+		// site feed before any page slug.
+		rt.feed, segs = segs[0], nil
 	}
 	if n := len(segs); n >= 2 && segs[n-2] == "page" {
 		if p, err := strconv.Atoi(segs[n-1]); err == nil && p > 0 {
@@ -229,9 +233,16 @@ func (rq *request) queryRoute(rt *route) *response {
 func (rq *request) pathRoute(rt *route) *response {
 	st := rq.st
 	segs := rt.segs
-	if rt.feed != "" && rt.feed != "feed" && rt.feed != "rss2" {
-		// Atom/RDF/RSS 0.92 are served as RSS2 at the canonical feed URL.
-		return redirect(FeedURL(st.links.URL("/" + strings.Join(segs, "/") + "/")))
+	searchFeed := len(segs) == 2 && segs[0] == "search" && rt.feed == "rss2"
+	if rt.feed != "" && rt.feed != "feed" && !searchFeed {
+		// Like WordPress' canonical redirect, /feed/rss2/ goes to /feed/
+		// (RSS2 is the default feed). Atom/RDF/RSS 0.92 are served as RSS2
+		// at the same URL. Search feeds keep their /feed/rss2/ links.
+		dir := "/"
+		if len(segs) > 0 {
+			dir = "/" + strings.Join(segs, "/") + "/"
+		}
+		return redirect(FeedURL(st.links.URL(dir)))
 	}
 	if len(segs) == 0 {
 		if rt.feed != "" {
