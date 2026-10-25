@@ -113,6 +113,10 @@ func migrate(ctx context.Context, w *sql.DB) error {
 	if err := w.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&current); err != nil {
 		return err
 	}
+	if latest := SchemaVersion(); current > latest {
+		// An older gopress must not run on a schema it does not know.
+		return fmt.Errorf("the database has schema version %d, this gopress knows only up to %d: update gopress or restore a backup made with this version", current, latest)
+	}
 
 	files, err := fs.Glob(migrations, "migrations/*.sql")
 	if err != nil {

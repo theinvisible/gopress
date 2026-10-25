@@ -35,6 +35,47 @@ func TestOpenMigratesIdempotently(t *testing.T) {
 	}
 }
 
+func TestOpenRefusesNewerSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "x.db")
+	d, err := Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.W.Exec(`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`, SchemaVersion()+1, "now"); err != nil {
+		t.Fatal(err)
+	}
+	d.Close()
+	if _, err := Open(context.Background(), path); err == nil || !strings.Contains(err.Error(), "update gopress") {
+		t.Fatalf("newer schema opened: %v", err)
+	}
+}
+
+func TestSnapshot(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	srcPath, dst := filepath.Join(dir, "src.db"), filepath.Join(dir, "copy.db")
+	if err := Snapshot(ctx, filepath.Join(dir, "missing.db"), dst); err == nil {
+		t.Error("snapshot of a missing database")
+	}
+	s, err := Open(ctx, srcPath) // the source stays open, as with a running server
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := s.W.Exec(`INSERT INTO options (name, value) VALUES ('blogname', 'Snap')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := Snapshot(ctx, srcPath, dst); err != nil {
+		t.Fatal(err)
+	}
+	if err := Snapshot(ctx, srcPath, dst); err == nil {
+		t.Error("snapshot overwrote its target")
+	}
+	if v, err := Check(ctx, dst); err != nil || v != SchemaVersion() {
+		t.Fatalf("check: %d %v", v, err)
+	}
+}
+
 func TestPostRoundTripAndQueries(t *testing.T) {
 	ctx := context.Background()
 	d := openTest(t)

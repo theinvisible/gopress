@@ -43,7 +43,8 @@ const usage = `usage: gopress <command> [flags]
 commands:
   serve        run the web server
   import-wp    import a WordPress site (M1)
-  backup       create a backup of the data directory (M5)
+  backup       create a backup of the data directory (also while serving)
+  restore      restore a backup into an empty data directory
   user         manage users and reset passwords or two-factor authentication
   mail         show the mail queue and send a test email
   media        regenerate image sizes, remove metadata from old uploads
@@ -85,8 +86,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "healthcheck":
 		return cmdHealthcheck(rest, stdout, stderr)
 	case "backup":
-		fmt.Fprintf(stderr, "gopress %s: not implemented yet\n", cmd)
-		return 2
+		return cmdBackup(rest, stdout, stderr)
+	case "restore":
+		return cmdRestore(rest, stdout, stderr)
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return 0
