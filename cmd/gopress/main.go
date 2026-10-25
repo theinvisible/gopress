@@ -49,6 +49,7 @@ commands:
   media        regenerate image sizes, remove metadata from old uploads
   plugin       list, activate or deactivate plugins
   plugin-pack  build a plugin package (.zip) from its source directory
+  healthcheck  check that the local server answers (for container health checks)
   version      print version information
 `
 
@@ -62,6 +63,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	cmd, rest := args[0], args[1:]
+	restrictUmask()
 	switch cmd {
 	case "serve":
 		return cmdServe(rest, stderr)
@@ -80,6 +82,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return cmdPlugin(rest, stdout, stderr)
 	case "plugin-pack":
 		return cmdPluginPack(rest, stdout, stderr)
+	case "healthcheck":
+		return cmdHealthcheck(rest, stdout, stderr)
 	case "backup":
 		fmt.Fprintf(stderr, "gopress %s: not implemented yet\n", cmd)
 		return 2

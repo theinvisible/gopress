@@ -1,0 +1,15 @@
+# Allowlist: only what the gopress binary is built from enters the build
+# context. local/ holds personal data and must never reach an image.
+*
+!go.mod
+!go.sum
+!cmd/gopress/
+!internal/
+!plugins/bundled/
+!themes/
+!web/admin/
+!Dockerfile
+**/*_test.go
+**/testdata/
+**/node_modules/
+**/*.db*

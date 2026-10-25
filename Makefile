@@ -5,7 +5,7 @@ COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 LDFLAGS  := -s -w -X $(PKG)/internal/buildinfo.Version=$(VERSION) -X $(PKG)/internal/buildinfo.Commit=$(COMMIT)
 COMPOSE  := docker compose -f dev/compose.yaml
 
-.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden import serve parity vulncheck editor admin-assets e2e roundtrip plugins plugins-check hello
+.PHONY: build run test fmt clean testdata devdb-up devdb-down devdb-reset devdb-counts wpref-up wpref-down golden import serve parity vulncheck editor admin-assets e2e roundtrip plugins plugins-check hello image image-check image-smoke image-push release
 
 build:
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) ./cmd/gopress
@@ -72,7 +72,34 @@ parity: wpref-up serve
 	go run ./dev/parity -site-host "$(SITE_HOST)"
 
 vulncheck:
-	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+# --- container image (see Dockerfile, docs/deploy.md) ---
+
+IMAGE ?= ghcr.io/theinvisible/gopress
+
+image:
+	docker build --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -t $(IMAGE):$(VERSION) -t $(IMAGE):latest .
+
+# The image holds exactly these files: no sources, no local data.
+IMAGE_FILES := data/ etc/ etc/group etc/passwd etc/ssl/ etc/ssl/certs/ etc/ssl/certs/ca-certificates.crt gopress
+
+image-check:
+	@got=$$(docker build -q --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) -o type=tar,dest=- . | tar -t | sed 's#^\./##' | grep -v '^$$' | sort | tr '\n' ' '); \
+	want=$$(printf '%s\n' $(IMAGE_FILES) | sort | tr '\n' ' '); \
+	[ "$$got" = "$$want" ] || { echo "unexpected image contents: $$got"; exit 1; }; echo "image contents ok"
+
+image-smoke:
+	dev/image-smoke.sh $(IMAGE):$(VERSION)
+
+# Everything that must pass before an image is pushed.
+release: test vulncheck plugins-check image image-check image-smoke
+
+# Publishing is a separate, deliberate step (needs docker login).
+image-push:
+	@case "$(VERSION)" in *dirty*) echo "refusing to push a build from a dirty tree"; exit 1;; esac
+	docker push $(IMAGE):$(VERSION)
+	docker push $(IMAGE):latest
 
 # Plugins shipped with GoPress (plugins/<name>, M4) are packed into
 # plugins/bundled/zips, which is committed and embedded in the binary.
