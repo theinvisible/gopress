@@ -14,7 +14,7 @@ import (
 func (rq *request) robots() *response {
 	var b strings.Builder
 	b.WriteString("User-agent: *\n")
-	if rq.st.s.BlogPublic {
+	if rq.st.s.BlogPublic && !rq.st.s.NoIndex {
 		b.WriteString("Disallow: /wp-admin/\nDisallow: /admin/\n\nSitemap: " + rq.st.links.URL("/wp-sitemap.xml") + "\n")
 	} else {
 		b.WriteString("Disallow: /\n")

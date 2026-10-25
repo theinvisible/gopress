@@ -28,7 +28,12 @@ type Options struct {
 	// TrustedProxies are the reverse proxies whose X-Real-Ip and
 	// X-Forwarded-For headers are believed.
 	TrustedProxies []netip.Prefix
-	Log            *slog.Logger
+	// NoIndex keeps search engines out regardless of the reading settings
+	// (staging): robots.txt disallows everything and the NoIndex
+	// middleware marks every response. Pages and sitemaps stay as they
+	// are, so a staging copy can be compared with the live site.
+	NoIndex bool
+	Log     *slog.Logger
 }
 
 // Site is the public website handler.
@@ -103,6 +108,7 @@ func (s *Site) current(ctx context.Context) (*state, error) {
 	if s.opts.BaseURL != "" {
 		settings.Home = strings.TrimRight(s.opts.BaseURL, "/")
 	}
+	settings.NoIndex = s.opts.NoIndex
 	ix, err := buildIndex(ctx, s.db.R)
 	if err != nil {
 		return nil, err

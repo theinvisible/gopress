@@ -26,6 +26,7 @@ type Settings struct {
 	PageForPosts  int64
 	Sticky        []int64
 	BlogPublic    bool
+	NoIndex       bool // set by the server (staging), not an option
 
 	DateFormat, TimeFormat string
 	Loc                    *time.Location

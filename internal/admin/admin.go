@@ -179,7 +179,7 @@ func (a *Admin) securityHeaders(w http.ResponseWriter, r *http.Request) {
 	h := w.Header()
 	httpx.NoStore(w)
 	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+	if httpx.IsHTTPS(r) {
 		scheme = "https"
 	}
 	scripts := scheme + "://" + r.Host + "/admin/static/"

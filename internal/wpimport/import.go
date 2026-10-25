@@ -109,7 +109,7 @@ func Run(ctx context.Context, opts Options) (*Report, error) {
 			}
 		}
 	}
-	if err := os.MkdirAll(opts.DataDir, 0o755); err != nil {
+	if err := os.MkdirAll(opts.DataDir, 0o750); err != nil {
 		return nil, err
 	}
 
@@ -705,7 +705,7 @@ func copyTree(src, dst string) (int, error) {
 			return nil
 		}
 		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
+			return os.MkdirAll(target, 0o750)
 		}
 		if !d.Type().IsRegular() {
 			return nil
@@ -728,7 +728,7 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o640)
 	if err != nil {
 		return err
 	}

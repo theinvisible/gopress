@@ -28,6 +28,24 @@ func safeClient() *http.Client {
 	}}
 }
 
+// ErrOutboundDisabled is returned for every plugin HTTP request when the
+// server runs with outbound connections disabled (staging).
+var ErrOutboundDisabled = errors.New("outbound connections are disabled on this server")
+
+// DisabledHTTP is a client that refuses every request (Options.HTTP).
+func DisabledHTTP() *http.Client {
+	return &http.Client{Transport: refuseTransport{}}
+}
+
+type refuseTransport struct{}
+
+func (refuseTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Body != nil {
+		r.Body.Close()
+	}
+	return nil, ErrOutboundDisabled
+}
+
 var errPrivateAddr = errors.New("connection to a non-public address refused")
 
 func dialControl(network, address string, _ syscall.RawConn) error {

@@ -1,6 +1,10 @@
 package site
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/theinvisible/gopress/internal/httpx"
+)
 
 // SecurityHeaders adds defensive HTTP headers to every response.
 //
@@ -20,9 +24,19 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()")
 		h.Set("Content-Security-Policy", csp)
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
-		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		if httpx.IsHTTPS(r) {
 			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// NoIndex asks search engines not to index anything (staging instances):
+// every response gets an X-Robots-Tag header. Handlers that set their own
+// only ever set a noindex variant.
+func NoIndex(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
 		next.ServeHTTP(w, r)
 	})
 }

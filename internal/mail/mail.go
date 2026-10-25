@@ -45,8 +45,14 @@ type Options struct {
 	// Sink, if set, is a directory that receives every message as an .eml
 	// file instead of sending it (development and end-to-end tests).
 	Sink string
-	Log  *slog.Logger
+	// Disabled keeps every message in the queue instead of sending it
+	// (staging instances must not mail real people).
+	Disabled bool
+	Log      *slog.Logger
 }
+
+// ErrDisabled is returned when sending while mail is disabled.
+var ErrDisabled = errors.New("sending mail is disabled on this server (outbound connections are off)")
 
 // Service queues and delivers mail.
 type Service struct {
@@ -100,6 +106,9 @@ func (s *Service) Config(ctx context.Context) (*Config, error) {
 
 // Ready reports whether mail can be delivered (configured or sink).
 func (s *Service) Ready(ctx context.Context) bool {
+	if s.opts.Disabled {
+		return false
+	}
 	if s.opts.Sink != "" {
 		return true
 	}
@@ -315,6 +324,9 @@ func (s *Service) Flush(ctx context.Context) {
 
 // deliver builds and sends one message (or writes it to the sink).
 func (s *Service) deliver(ctx context.Context, m *db.QueuedMail) error {
+	if s.opts.Disabled {
+		return ErrDisabled
+	}
 	if s.opts.Sink != "" {
 		msg, err := build(s.opts.SiteName(), "gopress@localhost", m.To, m.Subject, m.Body, s.now())
 		if err != nil {

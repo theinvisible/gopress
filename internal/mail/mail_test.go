@@ -220,3 +220,32 @@ func TestExpiredLinkMail(t *testing.T) {
 		t.Errorf("queue keeps %d messages", len(q))
 	}
 }
+
+func TestDisabled(t *testing.T) {
+	ctx := context.Background()
+	d, err := db.Open(ctx, filepath.Join(t.TempDir(), "gopress.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	s := New(d, Options{Secret: []byte("0123456789abcdef0123456789abcdef"), SiteName: func() string { return "Test Site" },
+		Home: func() string { return "https://example.org" }, Disabled: true})
+	s.SaveConfig(ctx, &Config{Host: "mail.example.org", Port: 587, Security: SecurityStartTLS, From: "site@example.org"}, "", false)
+	s.send = func(context.Context, *Config, string, string, []byte) error {
+		t.Error("mail sent although disabled")
+		return nil
+	}
+	if s.Ready(ctx) {
+		t.Error("ready although disabled")
+	}
+	if err := s.SendTest(ctx, "admin@example.org"); !errors.Is(err, ErrDisabled) {
+		t.Errorf("test mail: %v", err)
+	}
+	if err := s.Enqueue(ctx, "user@example.org", "test", nil); err != nil {
+		t.Fatal(err)
+	}
+	s.Flush(ctx)
+	if q, _ := db.MailQueue(ctx, d.R, 10); len(q) != 1 || q[0].Tries != 0 {
+		t.Errorf("queue = %+v", q)
+	}
+}

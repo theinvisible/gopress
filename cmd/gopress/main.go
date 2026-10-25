@@ -26,6 +26,7 @@ import (
 	"github.com/theinvisible/gopress/internal/config"
 	"github.com/theinvisible/gopress/internal/content"
 	"github.com/theinvisible/gopress/internal/db"
+	"github.com/theinvisible/gopress/internal/httpx"
 	"github.com/theinvisible/gopress/internal/live"
 	"github.com/theinvisible/gopress/internal/mail"
 	"github.com/theinvisible/gopress/internal/mcpserver"
@@ -104,9 +105,13 @@ func cmdServe(args []string, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	cfg.RegisterFlags(fs)
 	baseURL := fs.String("base-url", os.Getenv("GOPRESS_BASE_URL"), "public base URL (default: the home option)")
-	cacheMB := fs.Int("cache-mb", 256, "page cache size in MiB (0 disables)")
+	cacheMB := fs.Int("cache-mb", envInt("GOPRESS_CACHE_MB", 256), "page cache size in MiB, 0 disables (env GOPRESS_CACHE_MB)")
 	trustedProxies := fs.String("trusted-proxies", os.Getenv("GOPRESS_TRUSTED_PROXIES"),
 		"comma-separated CIDRs of reverse proxies whose X-Real-Ip/X-Forwarded-For are trusted, e.g. 172.16.0.0/12")
+	noIndex := fs.Bool("noindex", envBool("GOPRESS_NOINDEX"),
+		"keep search engines out: robots.txt disallows all, every response says noindex (staging; env GOPRESS_NOINDEX)")
+	noOutbound := fs.Bool("disable-outbound", envBool("GOPRESS_DISABLE_OUTBOUND"),
+		"no outgoing connections: plugins cannot make HTTP requests and mail stays queued (staging; env GOPRESS_DISABLE_OUTBOUND)")
 	mailSink := fs.String("mail-sink", "", "development: write outgoing mail as .eml files into this directory instead of sending it")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -154,6 +159,7 @@ func cmdServe(args []string, stderr io.Writer) int {
 		Secret:         secret,
 		CacheBytes:     int64(*cacheMB) << 20,
 		TrustedProxies: proxies,
+		NoIndex:        *noIndex,
 		Log:            log,
 	})
 
@@ -176,6 +182,7 @@ func cmdServe(args []string, stderr io.Writer) int {
 		Home:     func() string { return settings().Home },
 		SiteName: func() string { return html.UnescapeString(settings().Name) },
 		Sink:     *mailSink,
+		Disabled: *noOutbound,
 		Log:      log,
 	})
 	authSvc := auth.New(d, auth.Options{
@@ -208,8 +215,13 @@ func cmdServe(args []string, stderr io.Writer) int {
 	defer pluginStore.Close()
 	liveHub := live.NewHub()
 	contentSvc.SetLive(liveHub)
+	var pluginHTTP *http.Client
+	if *noOutbound {
+		pluginHTTP = plugins.DisabledHTTP()
+		log.Warn("outbound connections are disabled: plugins cannot reach other servers and mail stays queued")
+	}
 	pluginHost, err := plugins.New(ctx, plugins.Options{Live: liveHub, DB: d, Store: pluginStore, Site: public, Log: log,
-		CacheDir: filepath.Join(cfg.DataDir, "cache", "wasm"), ClientIP: authSvc.ClientIP, Mail: mailSvc})
+		CacheDir: filepath.Join(cfg.DataDir, "cache", "wasm"), ClientIP: authSvc.ClientIP, Mail: mailSvc, HTTP: pluginHTTP})
 	if err != nil {
 		log.Error("plugins", "err", err)
 		return 1
@@ -232,13 +244,19 @@ func cmdServe(args []string, stderr io.Writer) int {
 	if st := settings(); st.MCPEnabled && !mcpserver.SecureHome(st.Home) {
 		log.Warn("the MCP interface is on but the base URL is not https; it stays off", "base_url", st.Home)
 	}
+	startupWarnings(log, cfg.DataDir, settings().Home, *noIndex)
 	go authSvc.Maintain(ctx)
 	go contentSvc.RunScheduler(ctx)
 	go mailSvc.Run(ctx)
 
+	handler := site.SecurityHeaders(mux)
+	if *noIndex {
+		handler = site.NoIndex(handler)
+	}
+	handler = httpx.TrustedProxies(proxies, handler)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           site.SecurityHeaders(mux),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -278,7 +296,8 @@ func cmdImportWP(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("import-wp", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg.RegisterFlags(fs)
-	fs.StringVar(&opts.DSN, "dsn", "", "WordPress database DSN, e.g. user:pass@tcp(127.0.0.1:3306)/wordpress")
+	fs.StringVar(&opts.DSN, "dsn", os.Getenv("GOPRESS_IMPORT_DSN"),
+		"WordPress database DSN, e.g. user:pass@tcp(127.0.0.1:3306)/wordpress (env GOPRESS_IMPORT_DSN keeps the password out of the process list)")
 	fs.StringVar(&opts.Prefix, "prefix", "wp_", "WordPress table prefix")
 	fs.StringVar(&opts.UploadsDir, "uploads", "", "WordPress wp-content/uploads directory to copy")
 	fs.BoolVar(&opts.Force, "force", false, "replace an existing GoPress database")
@@ -286,7 +305,7 @@ func cmdImportWP(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if opts.DSN == "" {
-		fmt.Fprintln(stderr, "import-wp: --dsn is required")
+		fmt.Fprintln(stderr, "import-wp: --dsn (or GOPRESS_IMPORT_DSN) is required")
 		return 2
 	}
 	opts.DataDir = cfg.DataDir

@@ -27,14 +27,7 @@ func ClientIP(r *http.Request, trusted []netip.Prefix) string {
 		return host
 	}
 	peer = peer.Unmap()
-	ok := false
-	for _, p := range trusted {
-		if p.Contains(peer) {
-			ok = true
-			break
-		}
-	}
-	if !ok {
+	if !fromTrusted(r, trusted) {
 		return peer.String()
 	}
 	if ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-Ip"))); err == nil {
@@ -47,6 +40,48 @@ func ClientIP(r *http.Request, trusted []netip.Prefix) string {
 		}
 	}
 	return peer.String()
+}
+
+// forwarded are the headers a reverse proxy sets about the original request.
+var forwarded = []string{"X-Real-Ip", "X-Forwarded-For", "X-Forwarded-Proto", "X-Forwarded-Host", "Forwarded"}
+
+// TrustedProxies removes the proxy headers from requests that do not come
+// from one of the trusted proxies, so no handler can be fooled by a
+// client that reaches the server directly (e.g. into sending HSTS or
+// building https URLs).
+func TrustedProxies(trusted []netip.Prefix, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !fromTrusted(r, trusted) {
+			for _, h := range forwarded {
+				r.Header.Del(h)
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func fromTrusted(r *http.Request, trusted []netip.Prefix) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	peer, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	peer = peer.Unmap()
+	for _, p := range trusted {
+		if p.Contains(peer) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsHTTPS reports whether the visitor used HTTPS: directly, or through a
+// trusted proxy (see TrustedProxies) that says so.
+func IsHTTPS(r *http.Request) bool {
+	return r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
 }
 
 // NetKey groups IPv6 clients by /64 (one customer network), IPv4 by address.
