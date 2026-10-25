@@ -20,5 +20,6 @@
 				{"value": "discard", "label": "Discard it silently"}]}
 		 ]}
 	],
-	"dashboard": [{"id": "stats", "title": "Akismet Anti-spam", "capability": "moderate_comments"}]
+	"dashboard": [{"id": "stats", "title": "Akismet Anti-spam", "capability": "moderate_comments"}],
+	"comment_check_failure": "hold"
 }

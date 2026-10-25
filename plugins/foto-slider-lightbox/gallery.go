@@ -224,11 +224,22 @@ func (in *galleryInput) clean() error {
 	return nil
 }
 
-// canEdit: editors and administrators edit every gallery, others their
-// own.
+// canEdit: editors and administrators edit every gallery, authors their
+// own. Contributors (no uploads of their own) only pick galleries.
 func canEdit(u gp.User, g Gallery) bool {
-	return u.Role == "administrator" || u.Role == "editor" || (g.Owner != 0 && g.Owner == u.ID)
+	return u.Role == "administrator" || u.Role == "editor" || (u.Role == "author" && g.Owner != 0 && g.Owner == u.ID)
 }
+
+// canCreate: who may make galleries (the roles that may upload images).
+func canCreate(u gp.User) bool {
+	return u.Role == "administrator" || u.Role == "editor" || u.Role == "author"
+}
+
+// Limits against filling the plugin's storage.
+const (
+	maxGalleries        = 2000
+	maxGalleriesPerUser = 200
+)
 
 // fromStash converts an imported fslb_gallery post.
 func fromStash(raw json.RawMessage) (Gallery, bool) {

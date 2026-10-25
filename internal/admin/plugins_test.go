@@ -137,6 +137,11 @@ func TestPluginsScreen(t *testing.T) {
 	if p := e.do("GET", "/admin/plugin/tester/items", editor, nil, nil).Body.String(); !strings.Contains(p, "delete [1] by editor") {
 		t.Error("table action notice")
 	}
+	// "saved" is reserved for the settings check.
+	post(e, "/admin/plugin/tester/items", editor, url.Values{"action": {"saved"}, "ids[]": {"1"}})
+	if p := e.do("GET", "/admin/plugin/tester/items", editor, nil, nil).Body.String(); strings.Contains(p, "saved [1]") {
+		t.Error("reserved action reached the plugin")
+	}
 	if p := e.do("GET", "/admin/plugin/tester/items?msg=n:Session+expired", editor, nil, nil).Body.String(); strings.Contains(p, "Session expired") {
 		t.Error("notice text from the URL")
 	}

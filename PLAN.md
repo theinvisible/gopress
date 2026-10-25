@@ -173,29 +173,30 @@ Plugins are bundled in the binary but can be deactivated and replaced by upload,
 
 **PDK:** `pdk/go` for Go plugins, built with standard Go 1.27 (`GOOS=wasip1 GOARCH=wasm -buildmode=c-shared`, exports via `//go:wasmexport`). TinyGo is only the fallback if binaries get too large. `gopress plugin-pack` builds the zip.
 
-### 6. First plugins (`plugins/…`)
+### 6. Bundled plugins (`plugins/…`, M4)
 
-**foto-slider-lightbox** (port of the existing PHP plugin):
-- **Galleries** in the collection `galleries` (title, image_ids, show_captions). Import of `fslb_gallery` 791 with the same ID.
-- **Admin:** page "Photo galleries" with list, new/edit, image selection via the media picker, drag reorder and caption toggle.
-- **Output:** shortcode `[fotogalerie id=""]`. The markup is taken 1:1 from `includes/render.php`.
-- **Assets:** `view.css`, `view.js` and Swiper are taken over unchanged.
-- **Editor:** insert button with gallery selection.
+The source site's three plugins, ported onto the host and bundled (`plugins/bundled/zips`, reproducible builds, `make plugins` / `make plugins-check`). They are activated like uploads: through the approval screen or `gopress plugin activate --import`.
+
+**foto-slider-lightbox** ("Photo Slider & Lightbox"):
+- **Galleries:** KV `galleries` (title, image ids, captions, owner). Imported from `fslb_gallery` with the same ids.
+- **Output:** `[fotogalerie id captions]` from `templates/gallery.html`. Swiper slider plus lightbox (`view.js` ported; image data in data attributes instead of a JSON script).
+- **Admin:** "Photo Galleries" page in a sandboxed iframe (media picker, drag and keyboard sorting). Authors edit their own galleries, editors all. The editor button opens a dialog page.
 
 **paypal-donations:**
-- **Settings page** with the fields from `Admin.php`: account, currency, page style, return page, amount, purpose, reference, button small/large/custom, button URL, localization, new tab, checkout language, return method, sandbox, disable stats and IPN validation.
-- **Output:** shortcode `[paypal-donation purpose reference amount]` with markup identical to `views/paypal-button.php`, plus the "Donate" widget.
-- **IPN:**
-  - Route `/plugins/paypal-donations/ipn`; the old URL `/?ppd_paypal_ipn=process` is mapped.
-  - Verification via postback to `ipnpb.paypal.com` (HTTP allowlist), then the donation is stored.
-  - Admin list "Donations" with date, name, email, amount, currency, memo and status. Import of the 53 `donation_list` entries.
+- **Settings:** the original options plus "Record donations (IPN)" and admin mail.
+- **Output:** `[paypal-donation]` and the widget, with the original markup, from templates.
+- **IPN** (opt-in): `/plugins/paypal-donations/ipn`, and the old `/?ppd_paypal_ipn=process`.
+  - The postback must answer `VERIFIED`; account, new transaction and status are checked; refunds update the donation.
+  - Records are minimal (no addresses).
+  - Donations list (search, delete), dashboard box, live notice and mail.
+- **Import:** the options and the 53 `donation_list` entries of the older plugin.
 
-**akismet:**
-- **Settings:** API key (imported from `wordpress_api_key`), "Verify key" via `/1.1/verify-key`, option "discard obvious spam".
-- **Hooks:**
-  - `comment_pre_save` → `comment-check`.
-  - `comment_status_changed` → `submit-spam`/`submit-ham`.
-- **Dashboard widget** with counters.
+**akismet** ("Akismet Anti-spam"):
+- **Settings:** a write-only key, checked with `verify-key` on save; the "discard obvious spam" option.
+- **`comment_pre_save` → `comment-check`:** an error or no answer within 3 s holds the comment.
+- **`comment_status_changed` → `submit-spam`/`submit-ham`.**
+- **Dashboard box** with counters.
+- **Import:** key, strictness and spam count.
 
 ## Security (high priority)
 
@@ -242,6 +243,21 @@ GoPress serves a public, internet-facing site. Security follows current best pra
 - HTTP from plugins: HTTPS to approved host names only, public addresses checked after DNS resolution, redirects only to approved hosts, no proxies, size and time limits.
 - Public pages: plugin HTML filtered (no scripts, handlers, iframes, javascript: URLs); scripts only from approved asset files, only on pages that need them; routes get no cookies, answer under a sandbox CSP without cookies or redirects, rate limited.
 - Admin: plugin pages are forms and tables rendered by GoPress or custom pages in a sandboxed iframe (opaque origin, CSP sandbox, no network of its own) that reach the server only through a postMessage bridge with the admin's CSRF token; editor buttons insert escaped shortcodes, never HTML.
+
+**Plugins and live updates (M4)**
+- **Imported options:** granted one by one (the import holds every plugin's options, API keys too).
+- **Settings:** plugins can set their own settings only during the import, validated like the admin form.
+- **Mail from plugins:** only to the administrators. The host picks the recipients and writes the subject line. At most 20 an hour, audited.
+- **Templates:** run inside the plugin's sandbox (time and memory limits); theme overrides are trusted theme files.
+- **Live stream (`/admin/events`):**
+  - Session cookie only, same-origin only, limited streams.
+  - Every event names its receivers (capability, user, post or plugin page); topics are authorized when the stream opens.
+  - The session is checked again every 25 s without counting as activity, so an open tab does not keep an idle session alive. Logout or revocation ends the stream.
+  - Texts are shown with `textContent`.
+- **Bundled plugins:**
+  - **PayPal IPN:** confirmed by PayPal before anything is stored, then checked against the account, transaction and status. Donor records are minimal.
+  - **Akismet:** holds comments when it cannot check them. The key is write-only.
+  - **Gallery:** the lightbox only uses http(s) and same-site URLs.
 
 **Operations (M5)**
 - Run as non-root in a `FROM scratch` image, read-only root filesystem, data volume only.
@@ -317,9 +333,16 @@ Legend: `[ ]` open · `[x]` done · `[~]` in progress
 - [x] Security review of the plugin sandbox and upload (see devlog)
 
 ### M4 – Plugins
-- [ ] foto-slider-lightbox: gallery admin, shortcode, assets, editor button, import of `fslb_gallery`
-- [ ] paypal-donations: settings, shortcode, widget, IPN + verification, donations list, import
-- [ ] akismet: settings + verify key, comment-check, submit-spam/ham, dashboard widget
+- [x] foto-slider-lightbox: gallery admin, shortcode, assets, editor button, import of `fslb_gallery`
+- [x] paypal-donations: settings, shortcode, widget, IPN + verification, donations list, import
+- [x] akismet: settings + verify key, comment-check, submit-spam/ham, dashboard widget
+- [x] Host additions for them:
+  - single imported options (`import:option:<name>`), request timeouts, settings import, `mail_admins`;
+  - richer comment hooks, dialog pages outside the menu, checks after saving settings;
+  - HTML templates with theme overrides.
+- [x] Live updates over Server-Sent Events: moderation notices and badges, plugin paused, import progress, who else edits a post and newer saves, live preview in the editor, live notices and page events for plugins
+- [x] `gopress plugin list|activate|deactivate`, bundled zips with reproducible builds
+- [x] Tests (plugin modules with `pdk/go/fakehost`, host integration, e2e), parity without plugin exceptions, security review (see devlog)
 
 ### M5 – Deployment
 - [ ] Dockerfile (`golang:1.27` build → `FROM scratch`), volume `/data`

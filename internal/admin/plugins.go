@@ -469,7 +469,7 @@ func (a *Admin) pluginPageSubmit(w http.ResponseWriter, r *http.Request, c *reqC
 	case "table":
 		action := r.PostFormValue("action")
 		ids := r.PostForm["ids[]"]
-		if action == "" || len(ids) == 0 || len(ids) > 500 {
+		if action == "" || action == "saved" || len(ids) == 0 || len(ids) > 500 { // "saved" is the settings check
 			return seeOther(w, r, pluginPageURL(name, pg.ID))
 		}
 		n, err := a.plugins.Submit(ctx, name, pg.ID, c.user, action, ids)

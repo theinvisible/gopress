@@ -39,7 +39,8 @@ const (
 	MaxStreams        = 500 // in total
 	MaxStreamsPerUser = 5
 	queueSize         = 32
-	maxEventBytes     = 64 << 10
+	// MaxEventBytes is the largest event (encoded data).
+	MaxEventBytes = 64 << 10
 )
 
 // ErrTooMany is returned when a user or the site has too many streams.
@@ -118,7 +119,7 @@ func (h *Hub) Unsubscribe(s *Sub) {
 // blocks: a full queue drops the event for that subscriber.
 func (h *Hub) Publish(e Event) {
 	data, err := json.Marshal(e.Data)
-	if err != nil || len(data) > maxEventBytes || !validType(e.Type) {
+	if err != nil || len(data) > MaxEventBytes || !validType(e.Type) {
 		return
 	}
 	msg := []byte("event: " + e.Type + "\ndata: " + string(data) + "\n\n")

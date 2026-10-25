@@ -492,7 +492,7 @@ func (h *Host) mediaData(ctx context.Context, ids []int64) ([]map[string]any, er
 	out := []map[string]any{}
 	for _, id := range ids {
 		a, err := db.GetPost(ctx, h.opts.DB.R, id)
-		if err != nil || a.Type != db.TypeAttachment {
+		if err != nil || a.Type != db.TypeAttachment || a.Status == db.StatusTrash || a.Status == db.StatusPrivate {
 			continue
 		}
 		if a.ParentID != 0 {
@@ -629,7 +629,13 @@ func (p *plugin) httpRequest(ctx context.Context, a httpReq) (any, error) {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, userErr("request failed: " + truncate(err.Error(), 200))
+		// The error names the URL: without its query (it may hold secrets).
+		msg := err.Error()
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			msg = ue.Err.Error()
+		}
+		return nil, userErr("request failed: " + truncate(msg, 200))
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPResponse+1))
@@ -771,7 +777,11 @@ func (p *plugin) livePublish(page string, data json.RawMessage) error {
 	if !p.h.eventLimit.allow(p.pkg.Manifest.Name, p.h.now()) {
 		return userErr("event limit reached (120 a minute)")
 	}
-	p.h.publish(live.Event{Type: "plugin.event", Topic: live.PluginTopic(p.pkg.Manifest.Name, page), Capability: pg.Capability,
-		Data: map[string]any{"plugin": p.pkg.Manifest.Name, "page": page, "data": data}})
+	ev := map[string]any{"plugin": p.pkg.Manifest.Name, "page": page, "data": data}
+	// The size as sent (JSON escapes <, > and & to six bytes each).
+	if b, err := json.Marshal(ev); err != nil || len(b) > live.MaxEventBytes {
+		return userErr("data must be JSON of at most 16 KB")
+	}
+	p.h.publish(live.Event{Type: "plugin.event", Topic: live.PluginTopic(p.pkg.Manifest.Name, page), Capability: pg.Capability, Data: ev})
 	return nil
 }

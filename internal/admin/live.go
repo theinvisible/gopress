@@ -56,7 +56,8 @@ func (a *Admin) events(w http.ResponseWriter, r *http.Request, c *reqCtx) error 
 	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" {
 		return errForbidden
 	}
-	topics, err := a.liveTopics(r.Context(), c.user, r.URL.Query().Get("topics"))
+	topicList := r.URL.Query().Get("topics")
+	topics, err := a.liveTopics(r.Context(), c.user, topicList)
 	if err != nil {
 		return err
 	}
@@ -111,8 +112,16 @@ func (a *Admin) events(w http.ResponseWriter, r *http.Request, c *reqCtx) error 
 			// the user changed (role): checked without counting as
 			// activity.
 			next, err := a.auth.Recheck(ctx, cur)
-			if err != nil || next == nil || next.Session.State != db.SessionFull {
+			if err != nil {
+				return nil // the browser reconnects (and is checked again)
+			}
+			if next == nil || next.Session.State != db.SessionFull {
 				write([]byte("event: logout\ndata: {}\n\n"))
+				return nil
+			}
+			// Topics were authorized for the user as they were: a user
+			// who may no longer edit the post loses the stream.
+			if _, err := a.liveTopics(ctx, next.User, topicList); err != nil {
 				return nil
 			}
 			cur = next

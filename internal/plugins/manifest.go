@@ -41,6 +41,11 @@ type Manifest struct {
 	Admin       []AdminPage `json:"admin,omitempty"`
 	Editor      []Insert    `json:"editor,omitempty"`
 	Dashboard   []Dashboard `json:"dashboard,omitempty"`
+	// CommentCheckFailure is the verdict when the plugin's comment_pre_save
+	// fails, times out, is busy or paused: "keep" (default: the core
+	// decides) or "hold" (spam filters: never let an unchecked comment
+	// through).
+	CommentCheckFailure string `json:"comment_check_failure,omitempty"`
 }
 
 // Permissions are what a plugin may do beyond rendering its shortcodes
@@ -235,6 +240,15 @@ func (m *Manifest) validate() error {
 	}
 	if err := m.Permissions.validate(); err != nil {
 		return err
+	}
+	switch m.CommentCheckFailure {
+	case "", "keep":
+	case "hold":
+		if !slices.Contains(m.Permissions.Hooks, HookCommentSave) {
+			return errors.New("comment_check_failure needs the comment_pre_save hook")
+		}
+	default:
+		return errors.New(`comment_check_failure must be "keep" or "hold"`)
 	}
 	assets := m.Permissions.FrontendAssets
 	seen := map[string]bool{}

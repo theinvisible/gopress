@@ -615,3 +615,58 @@ func TestImportSettings(t *testing.T) {
 		t.Errorf("imported settings: %v", set)
 	}
 }
+
+// Regression tests for the M4 security review.
+func TestM4ReviewFindings(t *testing.T) {
+	e := newHostEnv(t)
+	ctx := context.Background()
+	// A spam filter that asks for it holds comments it could not check
+	// (timeout, crash, pause) instead of letting them through.
+	filter := e.h.CommentFilter()
+	post, _ := db.GetPost(ctx, e.d.R, 10)
+	r := httptest.NewRequest("POST", "https://example.org/wp-comments-post.php", nil)
+	e.h.Package("tester").Manifest.CommentCheckFailure = "hold"
+	if v := filter(r, &db.Comment{Content: "slow-check", Status: db.CommentApproved}, post); v != db.CommentPending {
+		t.Errorf("failed check: %q", v)
+	}
+	p := e.h.get("tester")
+	p.mu.Lock()
+	p.paused = time.Now().Add(time.Minute)
+	p.mu.Unlock()
+	if v := filter(r, &db.Comment{Content: "nice"}, post); v != db.CommentPending {
+		t.Errorf("paused filter: %q", v)
+	}
+	p.mu.Lock()
+	p.paused = time.Time{}
+	p.mu.Unlock()
+
+	// Plugins see the real time (wazero's default clock is fixed).
+	if got := e.op(map[string]string{"do": "now"}); !strings.Contains(got, time.Now().UTC().Format("2006-01-02")) {
+		t.Errorf("plugin clock: %s", got)
+	}
+	// … and real randomness: two fresh instances differ.
+	fresh := func() string { // a new instance each time
+		for p := e.h.get("tester"); len(p.idle) > 0; {
+			(<-p.idle).Close(ctx)
+		}
+		return e.op(map[string]string{"do": "random"})
+	}
+	if r1, r2 := fresh(), fresh(); r1 == r2 {
+		t.Errorf("predictable randomness: %s", r1)
+	}
+	// Request errors do not show the URL's query (secrets).
+	got := e.op(map[string]string{"do": "fetchtimeout", "url": "https://api.example.org/slow?key=s3cret", "ms": "100"})
+	if !strings.Contains(got, "request failed") || strings.Contains(got, "s3cret") {
+		t.Errorf("error: %s", got)
+	}
+	// Page events are measured as sent (< becomes six bytes).
+	if got := e.op(map[string]string{"do": "livepub", "big": strings.Repeat("x", 15000)}); !strings.Contains(got, "16 KB") {
+		t.Errorf("escaped event size: %s", got)
+	}
+	// Attachments in the trash are not described.
+	db.InsertPost(ctx, e.d.W, &db.Post{ID: 22, Type: db.TypeAttachment, Status: db.StatusTrash, Title: "trashed pic", MimeType: "image/png"})
+	db.InsertMedia(ctx, e.d.W, &db.Media{PostID: 22, File: "2026/10/trash.png", Mime: "image/png", Width: 1, Height: 1})
+	if ms, _ := e.h.mediaData(ctx, []int64{22}); len(ms) != 0 {
+		t.Errorf("trashed attachment: %v", ms)
+	}
+}

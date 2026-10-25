@@ -130,12 +130,13 @@ func TestStatusChanged(t *testing.T) {
 	send("spam", "approved")
 	send("unspam", "spam")
 	send("approve", "spam")
+	send("unapprove", "spam")  // out of spam, to moderation
 	send("approve", "pending") // no correction
 	send("trash", "approved")  // no correction
-	if len(h.Requests) != 3 {
+	if len(h.Requests) != 4 {
 		t.Fatalf("requests: %d", len(h.Requests))
 	}
-	for i, want := range []string{"submit-spam", "submit-ham", "submit-ham"} {
+	for i, want := range []string{"submit-spam", "submit-ham", "submit-ham", "submit-ham"} {
 		if !strings.HasSuffix(h.Requests[i].URL, "/"+want) {
 			t.Errorf("request %d: %s", i, h.Requests[i].URL)
 		}

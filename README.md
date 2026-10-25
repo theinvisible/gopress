@@ -122,9 +122,24 @@ stays inactive until it is approved again. Plugins add shortcodes, widgets, sett
 custom admin pages (in a sandboxed iframe), dashboard boxes and editor buttons. Their HTML is
 filtered, and a plugin that crashes or hangs is paused instead of affecting the site.
 
+Bundled plugins (activate them under Plugins, or with
+`gopress plugin activate --import NAME…`; the import brings over their WordPress data):
+
+- **Photo Slider & Lightbox:** galleries as a slider with a lightbox, `[fotogalerie id="…"]`.
+- **PayPal Donations:** a donation button as a shortcode and a widget, optionally with a list of donations that PayPal confirmed.
+- **Akismet Anti-spam:** checks new comments with Akismet (needs an API key).
+
 Write plugins in Go with `pdk/go` (or any language with an Extism PDK) and build them with
-`gopress plugin-pack DIR`; `plugins/hello` is the example (`make hello`). See
+`gopress plugin-pack DIR`; `plugins/hello` is the example (`make hello`). Plugins can render HTML
+templates that themes can override, and test with `go test` against a fake host. See
 [docs/plugins.md](docs/plugins.md).
+
+### Live updates
+
+Open admin pages get updates over Server-Sent Events. They see new comments awaiting moderation (a
+notice and the count), a plugin being paused, the progress of an import, and notices from plugins.
+The editor shows who else edits the same post and warns when someone saved a newer version. It also
+has a live preview next to the editor.
 
 Behind a reverse proxy, pass `--trusted-proxies` and make sure the proxy sets (overwrites)
 `X-Real-Ip` or appends to `X-Forwarded-For` (Traefik and nginx with `proxy_set_header` do);

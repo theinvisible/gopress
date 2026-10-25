@@ -118,7 +118,8 @@ func TestBundledPlugins(t *testing.T) {
 	if _, ok, _ := db.KVGet(ctx, e.d.R, "paypal-donations", "donations", "FORGED1"); ok {
 		t.Error("forged notification recorded")
 	}
-	if len(e.mail.sent) == 0 || !strings.Contains(e.mail.sent[0], "New donation: 5.00 EUR from Ann") {
+	if len(e.mail.sent) == 0 || !strings.Contains(e.mail.sent[0], "|New donation: 5.00 EUR|") || !strings.Contains(e.mail.sent[0], "Name: Ann") ||
+		!strings.Contains(e.mail.sent[0], "Date: "+time.Now().UTC().Format("2006-01-02")) {
 		t.Errorf("mail: %v", e.mail.sent)
 	}
 

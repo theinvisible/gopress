@@ -196,6 +196,9 @@ func (h *Host) call(op string, raw json.RawMessage) (any, error) {
 		}
 		return s, nil
 	case "media_get":
+		if len(a.IDs) > 200 {
+			return nil, errors.New("at most 200 ids")
+		}
 		out := []gp.Media{}
 		for _, id := range a.IDs {
 			if m, ok := h.Media[id]; ok {

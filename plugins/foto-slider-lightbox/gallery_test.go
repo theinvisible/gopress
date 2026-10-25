@@ -104,6 +104,7 @@ func call(t *testing.T, page, method string, u gp.User, params any) (json.RawMes
 func TestAPI(t *testing.T) {
 	h := newHost(t)
 	author := gp.User{ID: 7, Login: "au", Role: "author"}
+	contributor := gp.User{ID: 6, Login: "co", Role: "contributor"}
 	other := gp.User{ID: 8, Login: "ot", Role: "author"}
 	editor := gp.User{ID: 9, Login: "ed", Role: "editor"}
 	h.Put("galleries", "791", Gallery{ID: 791, Title: "Imported", Images: []int64{1}})
@@ -125,6 +126,10 @@ func TestAPI(t *testing.T) {
 		if _, err := call(t, "galleries", "save", author, bad); err == nil {
 			t.Errorf("accepted %+v", bad.Title)
 		}
+	}
+	// Contributors only pick galleries.
+	if _, err := call(t, "galleries", "save", contributor, galleryInput{Title: "Mine"}); err == nil {
+		t.Error("a contributor created a gallery")
 	}
 	// Rights: own galleries, editors all; the dialog page only reads.
 	if _, err := call(t, "galleries", "save", other, galleryInput{ID: 792, Title: "Mine now"}); err == nil {
@@ -180,5 +185,21 @@ func TestMigrate(t *testing.T) {
 	}
 	if out.Notice != "2 galleries imported." || len(h.Progress) == 0 {
 		t.Errorf("notice %q, progress %v", out.Notice, h.Progress)
+	}
+}
+
+// More images than the host describes in one call.
+func TestLargeGallery(t *testing.T) {
+	h := newHost(t)
+	var ids []int64
+	for i := int64(100); i < 350; i++ {
+		h.Media[i] = img(i, "")
+		h.Media[i] = func(m gp.Media) gp.Media { m.ID = i; return m }(h.Media[i])
+		ids = append(ids, i)
+	}
+	h.Put("galleries", "9", Gallery{ID: 9, Title: "Big", Images: ids})
+	out := render(t, map[string]string{"id": "9"})
+	if n := strings.Count(out.HTML, `class="fslb-open"`); n != 250 {
+		t.Errorf("slides: %d", n)
 	}
 }

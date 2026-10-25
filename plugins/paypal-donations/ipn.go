@@ -78,18 +78,23 @@ func record(o options, f url.Values) string {
 		return "no valid transaction id, ignored"
 	}
 	status := f.Get("payment_status")
-	// Refunds and reversals refer to the original transaction.
+	// Refunds and reversals refer to the original transaction; one that
+	// arrives first is kept until the payment comes.
 	if parent := f.Get("parent_txn_id"); parent != "" && reTxn.MatchString(parent) {
 		if d, ok, err := loadDonation(parent); err == nil && ok {
+			if !nextStatus(d.Status, status) {
+				return "donation " + parent + " stays " + d.Status
+			}
 			d.Status = status
 			saveDonation(parent, d)
 			return "donation " + parent + " is now " + status
 		}
-		return "refers to an unknown transaction, ignored"
+		gp.KVSet("pending_status", parent, status)
+		return "refers to a transaction not recorded yet; kept for it"
 	}
 	if d, ok, err := loadDonation(txn); err == nil && ok {
-		if d.Status == status {
-			return "already recorded"
+		if d.Status == status || !nextStatus(d.Status, status) {
+			return "already recorded (" + d.Status + ")"
 		}
 		d.Status = status
 		saveDonation(txn, d)
@@ -110,6 +115,11 @@ func record(o options, f url.Values) string {
 	} else {
 		d.Date = d.Received
 	}
+	var later string // a refund that came first
+	if ok, _ := gp.KVGet("pending_status", txn, &later); ok {
+		d.Status = later
+		gp.KVDelete("pending_status", txn)
+	}
 	if err := saveDonation(txn, d); err != nil {
 		return "storing failed: " + err.Error()
 	}
@@ -119,9 +129,26 @@ func record(o options, f url.Values) string {
 	}
 	gp.NotifyAdmins(text, "success", "manage_options")
 	if o.IPNMail {
-		gp.MailAdmins(text, donationMail(d))
+		// The name is in the body: the subject stays short.
+		if err := gp.MailAdmins("New donation: "+d.Money(), donationMail(d)); err != nil {
+			gp.Log("warn", "IPN: mail to the administrators failed: "+err.Error())
+		}
 	}
 	return "donation " + txn + " recorded"
+}
+
+// nextStatus reports whether a donation may go from one PayPal status to
+// another: a refund or reversal is final, except that a cancelled
+// reversal restores the payment. A repeated (or replayed) "Completed"
+// cannot undo a refund.
+func nextStatus(from, to string) bool {
+	switch from {
+	case "Refunded":
+		return false
+	case "Reversed":
+		return to == "Canceled_Reversal"
+	}
+	return true
 }
 
 func donationMail(d Donation) string {
@@ -141,7 +168,9 @@ func donationMail(d Donation) string {
 // merchant id).
 func forAccount(account string, f url.Values) bool {
 	account = strings.TrimSpace(account)
-	for _, k := range []string{"receiver_email", "business", "receiver_id"} {
+	// receiver_email and receiver_id name the account that got the money
+	// (business only repeats the button form).
+	for _, k := range []string{"receiver_email", "receiver_id"} {
 		if v := strings.TrimSpace(f.Get(k)); v != "" && strings.EqualFold(v, account) {
 			return true
 		}
@@ -161,7 +190,9 @@ func warnInvalid(o options) {
 	text := "PayPal did not confirm a payment notification sent to this site. Someone may be sending fake notifications; nothing was recorded."
 	gp.NotifyAdmins(text, "warning", "manage_options")
 	if o.IPNMail {
-		gp.MailAdmins("Unconfirmed payment notification", text)
+		if err := gp.MailAdmins("Unconfirmed payment notification", text); err != nil {
+			gp.Log("warn", "IPN: mail to the administrators failed: "+err.Error())
+		}
 	}
 }
 

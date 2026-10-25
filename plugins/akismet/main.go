@@ -161,7 +161,8 @@ func statusChanged(data json.RawMessage) error {
 	switch {
 	case ch.Status == "spam" && ch.Previous != "spam":
 		method = "submit-spam"
-	case ch.Status == "unspam", ch.Status == "approve" && ch.Previous == "spam":
+	case ch.Previous == "spam" && ch.Status != "spam" && ch.Status != "trash":
+		// Taken out of spam (unspam, approve, unapprove).
 		method = "submit-ham"
 	default:
 		return nil

@@ -155,7 +155,8 @@ func TestIPN(t *testing.T) {
 	if raw, _ := json.Marshal(d); strings.Contains(string(raw), "Secret") {
 		t.Error("address stored")
 	}
-	if len(h.Mails) != 1 || !strings.Contains(h.Mails[0].Subject, "10.00 EUR from Ann Example") || len(h.Notices) != 1 {
+	if len(h.Mails) != 1 || h.Mails[0].Subject != "New donation: 10.00 EUR" || !strings.Contains(h.Mails[0].Body, "Name: Ann Example") ||
+		len(h.Notices) != 1 || !strings.Contains(h.Notices[0].Text, "from Ann Example") {
 		t.Errorf("mails %v, notices %v", h.Mails, h.Notices)
 	}
 	// Repeated: recorded once.
@@ -168,6 +169,26 @@ func TestIPN(t *testing.T) {
 	h.Get("donations", "1AB23456CD789012E", &d)
 	if d.Status != "Refunded" {
 		t.Errorf("refund: %s", d.Status)
+	}
+
+	// A repeated "Completed" (retry or replay) does not undo the refund.
+	ipn(t, h, "POST", payment, verified("VERIFIED"))
+	h.Get("donations", "1AB23456CD789012E", &d)
+	if d.Status != "Refunded" {
+		t.Errorf("refund undone: %s", d.Status)
+	}
+	// A refund that arrives before its payment applies when it comes.
+	ipn(t, h, "POST", "payment_status=Refunded&parent_txn_id=6AB&txn_id=7ZZ&receiver_email=donate%40example.org", verified("VERIFIED"))
+	ipn(t, h, "POST", strings.Replace(payment, "1AB23456CD789012E", "6AB", 1), verified("VERIFIED"))
+	if h.Get("donations", "6AB", &d); d.Status != "Refunded" {
+		t.Errorf("early refund: %s", d.Status)
+	}
+	// The account must be the receiver (business repeats the form).
+	onlyBusiness := strings.Replace(strings.Replace(payment, "1AB23456CD789012E", "8AB", 1), "receiver_email=Donate%40Example.org",
+		"receiver_email=evil%40example.com&business=donate%40example.org", 1)
+	ipn(t, h, "POST", onlyBusiness, verified("VERIFIED"))
+	if h.Get("donations", "8AB", &d) {
+		t.Error("recorded by business only")
 	}
 
 	other := strings.Replace(strings.Replace(payment, "1AB23456CD789012E", "2AB", 1), "Donate%40Example.org", "evil%40example.com", 1)

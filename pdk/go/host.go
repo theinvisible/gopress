@@ -173,9 +173,16 @@ type Media struct {
 // GetMedia describes attachments (of published posts or unattached);
 // needs media:read. Unknown ids are left out.
 func GetMedia(ids ...int64) ([]Media, error) {
-	var m []Media
-	err := call("media_get", map[string]any{"ids": ids}, &m)
-	return m, err
+	var out []Media
+	for len(ids) > 0 { // the host answers at most 200 ids a call
+		n := min(len(ids), 200)
+		var m []Media
+		if err := call("media_get", map[string]any{"ids": ids[:n]}, &m); err != nil {
+			return nil, err
+		}
+		out, ids = append(out, m...), ids[n:]
+	}
+	return out, nil
 }
 
 // GetComment returns a comment; needs comments:read.

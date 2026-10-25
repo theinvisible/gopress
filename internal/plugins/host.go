@@ -3,6 +3,7 @@ package plugins
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -342,8 +343,12 @@ func (p *plugin) call(ctx context.Context, export string, kind callKind, in, out
 	select {
 	case inst = <-p.idle:
 	default:
+		// The real clock and randomness (wazero's defaults are a fixed
+		// date and a fixed seed): plugins date what they store, and
+		// crypto/rand in a plugin must not be predictable.
 		if inst, err = p.compiled.Instance(ctx, extism.PluginInstanceConfig{ModuleConfig: wazero.NewModuleConfig().
-			WithStdout(p.logWriter(slog.LevelInfo)).WithStderr(p.logWriter(slog.LevelWarn))}); err != nil {
+			WithStdout(p.logWriter(slog.LevelInfo)).WithStderr(p.logWriter(slog.LevelWarn)).
+			WithSysWalltime().WithSysNanotime().WithRandSource(rand.Reader)}); err != nil {
 			p.fail(err)
 			return ErrUnavailable
 		}

@@ -159,3 +159,32 @@ func TestPresence(t *testing.T) {
 		t.Error("a page view did not count as activity")
 	}
 }
+
+// Regression (M4 review): a user who may no longer edit the post loses
+// its stream at the next heartbeat.
+func TestLiveTopicsRechecked(t *testing.T) {
+	old := liveHeartbeat
+	liveHeartbeat = 100 * time.Millisecond
+	defer func() { liveHeartbeat = old }()
+	e := newEnv(t)
+	srv := httptest.NewServer(e.h)
+	t.Cleanup(srv.Close)
+	editor := e.session(auth.RoleEditor, db.SessionFull)
+	res, lines := e.stream(srv, editor, "?topics=post:10", nil)
+	if res.StatusCode != 200 {
+		t.Fatalf("stream: %d", res.StatusCode)
+	}
+	waitFor(t, lines, ": ping")
+	db.SetUserRole(context.Background(), e.d.W, e.users[auth.RoleEditor].ID, auth.RoleSubscriber)
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case _, ok := <-lines:
+			if !ok {
+				return // closed
+			}
+		case <-timeout:
+			t.Fatal("stream kept after losing the right to edit the post")
+		}
+	}
+}

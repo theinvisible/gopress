@@ -4,6 +4,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -98,6 +99,12 @@ func init() {
 			err = gp.KVSet("_settings", "settings", map[string]any{"greeting": "hacked"})
 		case "site":
 			out, err = gp.Site()
+		case "now":
+			out = time.Now().UTC().Format(time.RFC3339)
+		case "random":
+			b := make([]byte, 16)
+			rand.Read(b)
+			out = b
 		case "fetchtimeout":
 			ms, _ := strconv.Atoi(r.Attr("ms", "0"))
 			out, err = gp.Fetch(gp.HTTPRequest{URL: r.Attr("url", ""), TimeoutMS: ms})
@@ -106,7 +113,7 @@ func init() {
 		case "notify":
 			err = gp.NotifyAdmins(r.Attr("text", "Hello"), r.Attr("kind", ""), r.Attr("cap", ""))
 		case "livepub":
-			err = gp.LivePublish(r.Attr("page", "app"), map[string]string{"n": r.Attr("n", "1")})
+			err = gp.LivePublish(r.Attr("page", "app"), map[string]string{"n": r.Attr("n", "1"), "big": strings.Repeat("<", len(r.Attr("big", "")))})
 		case "progress":
 			err = gp.Progress(50, "half")
 		case "setsettings":

@@ -415,10 +415,14 @@ func (h *Host) CommentFilter() site.CommentFilter {
 		in := h.commentIn(r, c, post)
 		for _, p := range list {
 			var out CommentOut
-			// A failing or slow check keeps the core's decision (fail open):
-			// a broken spam filter must not block discussions.
+			// A failing, slow or paused check keeps the core's decision,
+			// unless the plugin asks to hold unchecked comments.
 			if err := p.call(r.Context(), ExportComment, callHook, in, &out); err != nil {
-				continue
+				if p.pkg.Manifest.CommentCheckFailure == "hold" {
+					out.Verdict = "hold"
+				} else {
+					continue
+				}
 			}
 			if v := out.Verdict; rank[v] > rank[verdict] {
 				verdict = v

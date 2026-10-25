@@ -196,6 +196,22 @@ func save(r gp.AdminRequest) (any, error) {
 		}
 		g = old
 	} else {
+		if !canCreate(r.User) {
+			return nil, errors.New("you may not create galleries")
+		}
+		all, err := allGalleries()
+		if err != nil {
+			return nil, err
+		}
+		mine := 0
+		for _, x := range all {
+			if x.Owner == r.User.ID {
+				mine++
+			}
+		}
+		if len(all) >= maxGalleries || mine >= maxGalleriesPerUser {
+			return nil, errors.New("there are too many galleries")
+		}
 		id, err := nextID()
 		if err != nil {
 			return nil, err
