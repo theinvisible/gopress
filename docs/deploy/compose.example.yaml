@@ -2,12 +2,13 @@
 # "websecure", certificate resolver "le"). GoPress and Traefik share a
 # network of their own, "gopress-proxy", that no other container joins:
 #   docker network create gopress-proxy && docker network connect gopress-proxy traefik
-# Adjust the names, the host and the subnet; see docs/deploy.md.
+# Adjust the names, the host and the subnet; see docs/deploy.md. Without
+# Traefik, start from compose.example.yaml in the repository root.
 name: gopress
 
 services:
   gopress:
-    image: ghcr.io/theinvisible/gopress:latest   # better: a fixed version tag
+    image: ghcr.io/theinvisible/gopress:0.5.0   # a fixed version, not latest
     container_name: gopress
     restart: unless-stopped
     user: "65532:65532"

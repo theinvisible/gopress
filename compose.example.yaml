@@ -1,0 +1,58 @@
+# GoPress quick start with Docker Compose: copy to compose.yaml, adjust
+# GOPRESS_BASE_URL, then `docker compose up -d`.
+#
+# The port is published on 127.0.0.1 only: put a TLS proxy in front of it
+# (admin logins need https). For Traefik see docs/deploy/compose.example.yaml,
+# for everything else docs/deploy.md.
+#
+# First steps:
+#   mkdir -p backups && sudo chown 65532:65532 backups && chmod 0750 backups
+#   docker compose up -d
+#   docker compose exec gopress /gopress user add --login admin --email you@example.org --role administrator
+#     (asks for a password, prints the one-time setup code for two-factor authentication)
+#   open https://example.org/login
+#
+# Import an existing WordPress site instead (into the empty volume, before
+# the first start; the database password stays out of the process list):
+#   GOPRESS_IMPORT_DSN='user:pass@tcp(db-host:3306)/wordpress' \
+#   docker compose run --rm -e GOPRESS_IMPORT_DSN \
+#     -v /path/to/wp-content/uploads:/wp-uploads:ro gopress import-wp --uploads /wp-uploads
+#   docker compose run --rm gopress plugin activate --import foto-slider-lightbox paypal-donations akismet
+#   docker compose run --rm gopress user setup-code <login>
+#   (see docs/deploy/runbook.md for a complete move with staging)
+#
+# Backups (also while running; e.g. daily from cron):
+#   docker compose exec gopress /gopress backup --out /backups --keep 14
+name: gopress
+
+services:
+  gopress:
+    # A fixed version; see the releases on GitHub for the current one.
+    image: ${GOPRESS_IMAGE:-ghcr.io/theinvisible/gopress:0.5.0}
+    restart: unless-stopped
+    user: "65532:65532"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      GOPRESS_BASE_URL: https://example.org
+      GOMEMLIMIT: 600MiB
+      # The reverse proxy's address, so client addresses and https are
+      # taken from its headers (docs/deploy.md). A proxy on the host
+      # reaches the container from this network's gateway, e.g.:
+      # GOPRESS_TRUSTED_PROXIES: 172.18.0.1/32
+      # Staging copies of a live site:
+      # GOPRESS_NOINDEX: "true"
+      # GOPRESS_DISABLE_OUTBOUND: "true"
+    volumes:
+      - gopress-data:/data
+      - ./backups:/backups
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "5"}
+
+volumes:
+  gopress-data:

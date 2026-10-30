@@ -29,10 +29,10 @@ RUN="docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges
 
 ## 0. Preparation
 
-- **Build and push** on the development machine:
-  `make release && make image-push IMAGE=ghcr.io/…/gopress`.
-- **Registry login on the server:** `docker login ghcr.io`, with a token that may only read packages
-  (`read:packages`).
+- **Image:** a release tag publishes it (see [deploy.md](../deploy.md#image)). Use the fixed version
+  tag as `<image>` in compose, never `latest`, so the cutover runs exactly the accepted version. A
+  public image needs no registry login on the server. For a private one, run `docker login ghcr.io`
+  with a token that may only read packages (`read:packages`).
 - **Database access for the import:** the importer only reads.
   - Best: a database user that may only read, created with the MariaDB root password:
 

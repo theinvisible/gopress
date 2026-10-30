@@ -144,12 +144,14 @@ has a live preview next to the editor.
 ## Deployment
 
 ```sh
-make release        # tests, govulncheck, container image, image checks
-docker run -d --name gopress --read-only --cap-drop ALL --security-opt no-new-privileges \
-  -p 127.0.0.1:8080:8080 -v gopress:/data -v /srv/gopress/backups:/backups \
-  -e GOPRESS_BASE_URL=https://example.org ghcr.io/theinvisible/gopress
-docker exec gopress /gopress backup --out /backups --keep 14
+cp compose.example.yaml compose.yaml   # set GOPRESS_BASE_URL, see the comments for the first steps
+docker compose up -d
+docker compose exec gopress /gopress backup --out /backups --keep 14
 ```
+
+Images are published on `ghcr.io/theinvisible/gopress` by GitHub Actions for every version tag
+(`git tag v0.5.0 && git push origin v0.5.0`), with a build provenance attestation; `make release`
+runs the same checks locally.
 
 The image is `FROM scratch`: it holds only the binary, the CA certificates and a non-root user, and
 runs with a read-only root filesystem. Everything that changes lives in `/data`. `gopress backup`

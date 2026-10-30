@@ -3,19 +3,43 @@
 GoPress ships as one static binary. The container image (`Dockerfile`) holds only that binary, the CA
 certificates and a user entry. Everything that changes lives in one data directory.
 
-- [compose.example.yaml](deploy/compose.example.yaml): a hardened service behind Traefik.
+- [compose.example.yaml](../compose.example.yaml) (repository root): quick start, the port on
+  localhost for a proxy of your choice.
+- [deploy/compose.example.yaml](deploy/compose.example.yaml): a hardened service behind Traefik.
 - [runbook.md](deploy/runbook.md): moving a WordPress site to GoPress: staging, acceptance, cutover,
   rollback.
 
 ## Image
 
+Releases are published by GitHub Actions (`.github/workflows/image.yml`). Pushing a version tag
+starts it:
+
+```sh
+git tag v0.5.0 && git push origin v0.5.0
+```
+
+The workflow then:
+- runs `make release`: tests, govulncheck, plugin check, image, image contents check, smoke test;
+- pushes `ghcr.io/theinvisible/gopress:0.5.0`, `:0.5` and `:latest` with the workflow's own token;
+- adds a signed build provenance attestation. Verify it with:
+
+  ```sh
+  gh attestation verify oci://ghcr.io/theinvisible/gopress:0.5.0 -R theinvisible/gopress
+  ```
+
+**Pulling:** the image is public, so `docker pull` needs no login. A new package on ghcr.io starts
+as private: switch it to public once, under the package's settings on GitHub.
+
+**Manual alternative:**
+
 ```sh
 make release        # tests, govulncheck, plugin check, image, image contents check, smoke test
-make image-push     # docker push $(IMAGE):$(VERSION) and :latest (needs docker login)
+make image-push     # checked rebuild, docker push $(IMAGE):$(VERSION) and :latest (needs docker login)
 ```
 
 - **Image name:** `IMAGE` defaults to `ghcr.io/theinvisible/gopress`. Override it for another registry.
-- **Version:** builds from a dirty tree are tagged `…-dirty` and are never pushed.
+- **Version:** `git describe` (the tag, or the commit). Builds from a dirty tree are tagged `…-dirty`
+  and are never pushed. The image carries the version and commit as OCI labels.
 - **`make image-check`:** fails if the image holds any file besides the binary, the CA bundle,
   `/etc/passwd`, `/etc/group` and `/data`.
 - **`make image-smoke`:** starts the image the way production runs it (see below) and checks:

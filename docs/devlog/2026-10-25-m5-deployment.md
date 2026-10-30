@@ -88,5 +88,15 @@ It found no Critical or High issues. Every finding was fixed, with regression te
 - The e2e suite logs browser page errors but does not fail on them; the jQuery error went unnoticed since M1.
 - The local reference WordPress does not redirect `/feed/rss2/` (the live one does); parity skips that path against it.
 
+## Addendum 2026-10-30: releases from GitHub Actions
+- **Workflow** (`.github/workflows/image.yml`): a version tag `v*` runs `make release` and pushes `:X.Y.Z`, `:X.Y` and `:latest` to ghcr.io with the workflow's `GITHUB_TOKEN`.
+  - Signed build provenance attestation.
+  - Least permissions; actions pinned by commit; no `pull_request` trigger.
+  - Started by hand on a branch, it only builds and checks.
+- **Public image:** the code is public, the image holds no data, and servers pull it without a login.
+- **OCI labels:** source, license, version and commit.
+- **`compose.example.yaml`** in the repository root: a hardened quick start without a proxy, with the first steps (admin, WordPress import, backups) in comments. Tested with the local image: healthy, `user add`, backup into `./backups`.
+
 ## Next
+- Push, tag the first release, switch the package to public.
 - Staging setup by the site owner, then the comparison and acceptance against staging, then the cutover.

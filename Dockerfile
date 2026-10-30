@@ -25,6 +25,14 @@ RUN mkdir -p /out/etc /out/root/data && \
     chmod 0750 /out/root/data
 
 FROM scratch
+ARG VERSION=dev
+ARG COMMIT=unknown
+LABEL org.opencontainers.image.title="GoPress" \
+      org.opencontainers.image.description="Single-binary WordPress alternative in Go" \
+      org.opencontainers.image.source="https://github.com/theinvisible/gopress" \
+      org.opencontainers.image.licenses="GPL-2.0-or-later" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${COMMIT}"
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/etc/passwd /out/etc/group /etc/
 COPY --from=build --chown=65532:65532 /out/root/ /
